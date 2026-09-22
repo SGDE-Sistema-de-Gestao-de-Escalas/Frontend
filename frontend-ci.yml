@@ -1,0 +1,35 @@
+name: Frontend CI
+
+# Corre em cada push/PR para main e develop.
+# Ajusta os nomes dos branches ao que a equipa realmente usar.
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          # O projeto usa Vite 6.3.5, que exige Node 18, 20 ou >=22.
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependências (versões exatas do lockfile)
+        run: npm ci
+
+      - name: Build de produção
+        # Isto sozinho já apanha a maioria dos erros de TypeScript e
+        # imports partidos, mesmo sem testes automatizados escritos.
+        run: npm run build
+
+      # Se/quando tiverem testes (Vitest, por exemplo), acrescentam aqui:
+      # - name: Correr testes
+      #   run: npm test
