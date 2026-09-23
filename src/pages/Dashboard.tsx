@@ -1,16 +1,49 @@
-import { assistants, schools } from "../api/mockData";
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useSchool } from "../context/SchoolContext";
+import DashboardSection from "../components/dashboard/DashboardSection";
+import AssistantDayModal from "../components/dashboard/AssistantDayModal";
+import QuickAbsenceModal from "../components/dashboard/QuickAbsenceModal";
 
 export default function Dashboard() {
+  const [selectedAssistantId, setSelectedAssistantId] = useState<number | null>(
+    null
+  );
+  const [absenceFor, setAbsenceFor] = useState<string | null>(null);
+  const { currentSchoolId } = useSchool();
+  const navigate = useNavigate();
+
   return (
-    <section className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Resumo operacional do agrupamento.</p>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-lg border border-border bg-card p-5"><p className="text-sm text-muted-foreground">Assistentes</p><p className="mt-2 text-3xl font-semibold text-foreground">{assistants.length}</p></div>
-        <div className="rounded-lg border border-border bg-card p-5"><p className="text-sm text-muted-foreground">Escolas ativas</p><p className="mt-2 text-3xl font-semibold text-foreground">{schools.filter((school) => school.active).length}</p></div>
-      </div>
-    </section>
+    <>
+      <DashboardSection
+        onSelectAssistant={(id) => setSelectedAssistantId(id)}
+        currentSchoolId={currentSchoolId}
+      />
+
+      {/* Assistant Day Drawer Modal */}
+      {selectedAssistantId !== null && (
+        <AssistantDayModal
+          assistantId={selectedAssistantId}
+          onClose={() => setSelectedAssistantId(null)}
+          onViewProfile={() => {
+            setSelectedAssistantId(null);
+            navigate("/profile");
+          }}
+          onMarkAbsence={(name) => {
+            setSelectedAssistantId(null);
+            setAbsenceFor(name);
+          }}
+        />
+      )}
+
+      {/* Quick Absence Modal */}
+      {absenceFor !== null && (
+        <QuickAbsenceModal
+          assistantName={absenceFor}
+          onClose={() => setAbsenceFor(null)}
+          currentSchoolId={currentSchoolId}
+        />
+      )}
+    </>
   );
 }

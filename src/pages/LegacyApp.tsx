@@ -6501,8 +6501,8 @@ function SidebarContent({
   );
 }
 
-function AdminLayout({ onSwitchRole, onLogout }: { onSwitchRole: () => void; onLogout: () => void }) {
-  const [page, setPage] = useState<AdminPage>("dashboard");
+function AdminLayout({ onSwitchRole, onLogout, initialPage = "dashboard" }: { onSwitchRole: () => void; onLogout: () => void; initialPage?: AdminPage }) {
+  const [page, setPage] = useState<AdminPage>(initialPage);
   const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
   const [showNotifs, setShowNotifs] = useState(false);
   const [selectedAssistantId, setSelectedAssistantId] = useState<number | null>(null);
@@ -7496,8 +7496,8 @@ const STAFF_PAGE_LABELS: Record<StaffPage, string> = {
   "account":          "A Minha Conta",
 };
 
-function StaffLayout({ onSwitchRole, onLogout }: { onSwitchRole: () => void; onLogout: () => void }) {
-  const [page, setPage] = useState<StaffPage>("schedule");
+function StaffLayout({ onSwitchRole, onLogout, initialPage = "schedule" }: { onSwitchRole: () => void; onLogout: () => void; initialPage?: StaffPage }) {
+  const [page, setPage] = useState<StaffPage>(initialPage);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [dark, setDark] = useDarkMode();
 
@@ -7667,6 +7667,7 @@ function StaffLayout({ onSwitchRole, onLogout }: { onSwitchRole: () => void; onL
         {/* Page content */}
         <div className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6">
           {page === "schedule"        && <StaffScheduleSection />}
+          {page === "register-absence" && <RegisterAbsence />}
           {page === "absence-detail"  && <StaffAbsenceDetail />}
           {page === "account"         && <AccountProfilePage role="staff" />}
         </div>
@@ -8042,8 +8043,14 @@ function LoginPage({ onLogin }: { onLogin: (role: Role) => void }) {
 
 // ─── App Root ─────────────────────────────────────────────────────────────────
 
-export default function App() {
-  const [role, setRole] = useState<Role | null>(null);
+export type LegacyAppProps = {
+  role?: Role;
+  adminPage?: AdminPage;
+  staffPage?: StaffPage;
+};
+
+export default function App({ role: requestedRole, adminPage = "dashboard", staffPage = "schedule" }: LegacyAppProps = {}) {
+  const [role, setRole] = useState<Role | null>(requestedRole ?? null);
 
   if (!role) {
     return (
@@ -8056,9 +8063,9 @@ export default function App() {
   return (
     <div className="h-screen w-full" style={{ fontFamily: "var(--font-body)" }}>
       {role === "admin" ? (
-        <AdminLayout onSwitchRole={() => setRole("staff")} onLogout={() => setRole(null)} />
+        <AdminLayout initialPage={adminPage} onSwitchRole={() => setRole("staff")} onLogout={() => setRole(null)} />
       ) : (
-        <StaffLayout onSwitchRole={() => setRole("admin")} onLogout={() => setRole(null)} />
+        <StaffLayout initialPage={staffPage} onSwitchRole={() => setRole("admin")} onLogout={() => setRole(null)} />
       )}
     </div>
   );

@@ -1,28 +1,22 @@
-import { Calendar, ClipboardList, Home, Users } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import React from "react";
+import SidebarContent from "./SidebarContent";
 
-const links = [
-  { to: "/dashboard", label: "Dashboard", icon: Home },
-  { to: "/schedules", label: "Escalas", icon: Calendar },
-  { to: "/assistants", label: "Assistentes", icon: Users },
-  { to: "/absences", label: "Ausências", icon: ClipboardList },
-];
+interface SidebarProps {
+  currentPage?: string;
+  onNavigate?: (pageId: string) => void;
+  className?: string;
+}
 
-export default function Sidebar() {
+export default function Sidebar({
+  currentPage = "dashboard",
+  onNavigate,
+  className = "",
+}: SidebarProps) {
   return (
-    <aside className="hidden w-60 flex-shrink-0 border-r border-border bg-card md:block">
-      <div className="border-b border-border px-5 py-4">
-        <p className="text-lg font-semibold text-foreground">SGDE</p>
-        <p className="text-xs text-muted-foreground">Gestão de Escalas</p>
-      </div>
-      <nav className="space-y-1 p-3">
-        {links.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} className={({ isActive }) => `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${isActive ? "bg-accent/10 text-accent" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
-            <Icon size={16} />
-            {label}
-          </NavLink>
-        ))}
-      </nav>
+    <aside
+      className={`hidden lg:flex w-64 flex-shrink-0 bg-sidebar border-r border-sidebar-border flex-col h-full ${className}`}
+    >
+      <SidebarContent currentPage={currentPage} onNavigate={onNavigate} />
     </aside>
   );
 }

@@ -1,3 +1,39 @@
+export type Role = "admin" | "staff";
+
+export type AdminPage =
+  | "dashboard"
+  | "config"
+  | "profile"
+  | "absences"
+  | "add-assistant"
+  | "assistants"
+  | "reports"
+  | "account"
+  | "platform-settings"
+  | "gantt";
+
+export type StaffPage =
+  | "schedule"
+  | "register-absence"
+  | "account"
+  | "absence-detail";
+
+export type StaffViewMode = "day" | "week" | "month";
+
+export type ConfigTab = "security" | "windows" | "holidays" | "activity-types";
+
+export type BlockState =
+  | "work"
+  | "surveillance"
+  | "lunch"
+  | "absent"
+  | "off"
+  | "cleaning"
+  | "collection"
+  | "delivery";
+
+export type ScheduleMatrix = Record<number, BlockState[]>;
+
 export interface School {
   id: number;
   name: string;
@@ -41,18 +77,6 @@ export interface AbsenceType {
   requires_document: boolean;
 }
 
-export type BlockState =
-  | "work"
-  | "surveillance"
-  | "lunch"
-  | "absent"
-  | "off"
-  | "cleaning"
-  | "collection"
-  | "delivery";
-
-export type ScheduleMatrix = Record<number, BlockState[]>;
-
 export interface Schedule {
   id: number;
   assistantId: number;
@@ -61,4 +85,89 @@ export interface Schedule {
   start: string;
   end: string;
   activity: BlockState;
+}
+
+export type NotifType = "alert" | "absence" | "expiry" | "info";
+
+export interface Notification {
+  id: number;
+  type: NotifType;
+  title: string;
+  body: string;
+  time: string;
+  read: boolean;
+}
+
+export interface ActivityType {
+  id: string;
+  label: string;
+  color: string;
+  builtIn: boolean;
+}
+
+export interface ScheduleRule {
+  id: number;
+  activityTypeId: string;
+  periodStart: string;
+  periodEnd: string;
+  min: number;
+  type: "mandatory" | "optional";
+  start: string;
+  end: string | null;
+  assistantIds: number[];
+}
+
+export interface MyAbsence {
+  id: number;
+  dates: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  docs?: string;
+  adminNote?: string;
+  start?: string;
+  end?: string;
+  days?: number;
+  submitted?: string;
+  type?: string;
+}
+
+export interface SwapRequest {
+  id: number;
+  from: string;
+  fromInit: string;
+  to: string;
+  toInit: string;
+  date: string;
+  fromBlock: string;
+  toBlock: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  submitted: string;
+}
+
+export interface Holiday {
+  id: number;
+  name: string;
+  date: string;
+  type: "nacional" | "municipal";
+  impact: "baixo" | "médio" | "alto";
+}
+
+export interface AuditLogEntry {
+  id: number;
+  ts: string;
+  user: string;
+  action: string;
+  entity: string;
+  detail: string;
+  type: "approve" | "system" | "edit" | "create" | "alert" | "reject";
+}
+
+export interface DateInfo {
+  day: string;
+  date: string;
+  full: string;
+  isToday: boolean;
+  isWeekend: boolean;
+  offset: number;
 }
