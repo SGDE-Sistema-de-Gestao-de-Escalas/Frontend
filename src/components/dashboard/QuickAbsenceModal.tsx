@@ -7,6 +7,7 @@ import {
 } from "../../api/mockData";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { BLOCK_STYLES } from "./blockStyles";
+import TimePicker from "../common/TimePicker";
 
 interface QuickAbsenceModalProps {
   assistantName: string | null;
@@ -137,11 +138,10 @@ export default function QuickAbsenceModal({
                   onChange={(e) => setStart(e.target.value)}
                   className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                 />
-                <input
-                  type="time"
+                <TimePicker
                   value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  onChange={setStartTime}
+                  className="w-full"
                 />
               </div>
               <div className="space-y-1.5">
@@ -154,11 +154,10 @@ export default function QuickAbsenceModal({
                   onChange={(e) => setEnd(e.target.value)}
                   className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                 />
-                <input
-                  type="time"
+                <TimePicker
                   value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  onChange={setEndTime}
+                  className="w-full"
                 />
               </div>
             </div>

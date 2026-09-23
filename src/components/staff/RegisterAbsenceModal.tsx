@@ -5,15 +5,15 @@ import { Card } from "../ui/card";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 
-interface RegistarFaltaModalProps {
+interface RegisterAbsenceModalProps {
   onClose: () => void;
   onSave: (a: Omit<MyAbsence, "id" | "docs" | "adminNote">) => void;
 }
 
-export default function RegistarFaltaModal({
+export default function RegisterAbsenceModal({
   onClose,
   onSave,
-}: RegistarFaltaModalProps) {
+}: RegisterAbsenceModalProps) {
   const [step, setStep] = useState(1);
   const [startDate, setStartDate] = useState("");
   const [startTime, setStartTime] = useState("08:00");
@@ -23,9 +23,9 @@ export default function RegistarFaltaModal({
   const [otherReason, setOtherReason] = useState("");
   const [note, setNote] = useState("");
   const [fileName, setFileName] = useState("");
-  const [done, setDone] = useState(false);
+  const [isDone, setIsDone] = useState(false);
 
-  const days =
+  const absenceDays =
     startDate && endDate
       ? Math.max(
           1,
@@ -36,16 +36,16 @@ export default function RegistarFaltaModal({
         )
       : 0;
 
-  function submit() {
+  function handleSubmit() {
     onSave({
       start: startDate,
       end: endDate,
-      days,
+      days: absenceDays,
       reason: reason === "Outro" ? otherReason : reason,
       status: "pending",
       note,
     });
-    setDone(true);
+    setIsDone(true);
   }
 
   return (
@@ -57,7 +57,7 @@ export default function RegistarFaltaModal({
           <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
             <div>
               <h3 className="font-semibold text-foreground">Justificar Falta</h3>
-              {!done && (
+              {!isDone && (
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Passo {step} de 3
                 </p>
@@ -73,7 +73,7 @@ export default function RegistarFaltaModal({
           </div>
 
           {/* Step dots */}
-          {!done && (
+          {!isDone && (
             <div className="px-5 pt-4 flex items-center gap-1.5">
               {[1, 2, 3].map((s) => (
                 <div key={s} className="flex items-center gap-1.5">
@@ -102,7 +102,7 @@ export default function RegistarFaltaModal({
 
           {/* Body */}
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
-            {done ? (
+            {isDone ? (
               <div className="text-center py-4 space-y-3">
                 <div className="w-14 h-14 rounded-full bg-[#0E7C59]/10 flex items-center justify-center mx-auto">
                   <CheckCircle size={28} className="text-[#0E7C59]" />
@@ -156,11 +156,11 @@ export default function RegistarFaltaModal({
                     />
                   </div>
                 </div>
-                {days > 0 && (
+                {absenceDays > 0 && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/5 border border-accent/20">
                     <Calendar size={13} className="text-accent" />
                     <span className="text-xs text-accent font-medium">
-                      {days} dia(s) de ausência
+                      {absenceDays} dia(s) de ausência
                     </span>
                   </div>
                 )}
@@ -264,7 +264,7 @@ export default function RegistarFaltaModal({
                       label: "Período",
                       value: `${startDate} ${startTime} → ${endDate} ${endTime}`,
                     },
-                    { label: "Duração", value: `${days} dia(s)` },
+                    { label: "Duração", value: `${absenceDays} dia(s)` },
                     {
                       label: "Motivo",
                       value: reason === "Outro" ? otherReason : reason,
@@ -294,7 +294,7 @@ export default function RegistarFaltaModal({
                   </button>
                   <button
                     type="button"
-                    onClick={submit}
+                    onClick={handleSubmit}
                     className="flex-1 py-2.5 rounded-lg bg-[#0E7C59] text-white text-sm font-medium hover:bg-[#0A6349] transition-colors"
                   >
                     Justificar Falta

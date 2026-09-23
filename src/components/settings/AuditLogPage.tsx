@@ -4,9 +4,9 @@ import { AUDIT_LOG } from "../../api/mockData";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 
-export default function AuditoriaPage() {
-  const [filterType, setFilterType] = useState<string>("all");
-  const [search, setSearch] = useState("");
+export default function AuditLogPage() {
+  const [selectedFilterType, setSelectedFilterType] = useState<string>("all");
+  const [searchTerm, setSearchTerm] = useState("");
 
   const typeStyles: Record<string, { badgeClass: string; dot: string }> = {
     approve: {
@@ -44,12 +44,12 @@ export default function AuditoriaPage() {
     alert: "Alerta",
   };
 
-  const filtered = AUDIT_LOG.filter((l) => {
-    if (filterType !== "all" && l.type !== filterType) return false;
+  const filteredLogs = AUDIT_LOG.filter((l) => {
+    if (selectedFilterType !== "all" && l.type !== selectedFilterType) return false;
     if (
-      search &&
-      !l.detail.toLowerCase().includes(search.toLowerCase()) &&
-      !l.user.toLowerCase().includes(search.toLowerCase())
+      searchTerm &&
+      !l.detail.toLowerCase().includes(searchTerm.toLowerCase()) &&
+      !l.user.toLowerCase().includes(searchTerm.toLowerCase())
     )
       return false;
     return true;
@@ -69,8 +69,8 @@ export default function AuditoriaPage() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Pesquisar por acção ou utilizador..."
           className="flex-1 px-3 py-2 text-sm rounded-lg border border-border bg-card focus:outline-none focus:ring-1 focus:ring-ring"
         />
@@ -80,9 +80,9 @@ export default function AuditoriaPage() {
               <button
                 key={t}
                 type="button"
-                onClick={() => setFilterType(t)}
+                onClick={() => setSelectedFilterType(t)}
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  filterType === t
+                  selectedFilterType === t
                     ? "bg-accent text-white"
                     : "border border-border text-muted-foreground hover:text-foreground"
                 }`}
@@ -118,7 +118,7 @@ export default function AuditoriaPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((log) => (
+              {filteredLogs.map((log) => (
                 <tr
                   key={log.id}
                   className="border-b border-border/50 hover:bg-muted/20 transition-colors"
@@ -179,7 +179,7 @@ export default function AuditoriaPage() {
         </div>
         <div className="px-4 py-2.5 border-t border-border bg-muted/10 flex items-center justify-between">
           <span className="text-xs text-muted-foreground">
-            {filtered.length} entradas
+            {filteredLogs.length} entradas
           </span>
           <button
             type="button"

@@ -20,7 +20,7 @@ import { Badge } from "../ui/badge";
 import { assistants as ASSISTANTS } from "../../api/mockData";
 import DatePicker from "../common/DatePicker";
 
-export default function SimuladorPage() {
+export default function SimulatorPage() {
   const [selectedAssistant, setSelectedAssistant] = useState<number | null>(
     null
   );

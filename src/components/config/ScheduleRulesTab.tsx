@@ -16,6 +16,7 @@ import type { ScheduleRule } from "../../types";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import TimePicker from "../common/TimePicker";
 
 export default function ScheduleRulesTab() {
   const allAssistantIds = ASSISTANTS.map((a) => a.id);
@@ -25,71 +26,71 @@ export default function ScheduleRulesTab() {
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   // Form state
-  const [fActivity, setFActivity] = useState("");
-  const [fStart, setFStart] = useState("07:30");
-  const [fEnd, setFEnd] = useState("13:00");
-  const [fMin, setFMin] = useState("3");
-  const [fType, setFType] = useState<"mandatory" | "optional">("mandatory");
-  const [fVigStart, setFVigStart] = useState("2026-02-01");
-  const [fVigEnd, setFVigEnd] = useState("");
-  const [fAssistants, setFAssistants] = useState<number[]>(allAssistantIds);
-  const [fStep, setFStep] = useState<"form" | "conflict" | "done">("form");
+  const [formActivityId, setFormActivityId] = useState("");
+  const [formPeriodStart, setFormPeriodStart] = useState("07:30");
+  const [formPeriodEnd, setFormPeriodEnd] = useState("13:00");
+  const [formMinStaff, setFormMinStaff] = useState("3");
+  const [formRuleType, setFormRuleType] = useState<"mandatory" | "optional">("mandatory");
+  const [formValidityStart, setFormValidityStart] = useState("2026-02-01");
+  const [formValidityEnd, setFormValidityEnd] = useState("");
+  const [formAssistantIds, setFormAssistantIds] = useState<number[]>(allAssistantIds);
+  const [formStep, setFormStep] = useState<"form" | "conflict" | "done">("form");
 
   const isEditing = editingRuleId !== null;
   const selectedActivity = DEFAULT_ACTIVITY_TYPES.find(
-    (a) => a.id === fActivity
+    (a) => a.id === formActivityId
   );
   const conflictingRule = !isEditing
     ? rules.find(
         (r) =>
-          r.activityTypeId === fActivity &&
-          r.periodStart === fStart &&
+          r.activityTypeId === formActivityId &&
+          r.periodStart === formPeriodStart &&
           r.end === null
       )
     : null;
 
   function openAdd() {
     setEditingRuleId(null);
-    setFActivity("work");
-    setFStart("07:30");
-    setFEnd("13:00");
-    setFMin("3");
-    setFType("mandatory");
-    setFVigStart("2026-02-01");
-    setFVigEnd("");
-    setFAssistants(allAssistantIds);
-    setFStep("form");
+    setFormActivityId("work");
+    setFormPeriodStart("07:30");
+    setFormPeriodEnd("13:00");
+    setFormMinStaff("3");
+    setFormRuleType("mandatory");
+    setFormValidityStart("2026-02-01");
+    setFormValidityEnd("");
+    setFormAssistantIds(allAssistantIds);
+    setFormStep("form");
     setShowAdd(true);
   }
 
   function openEdit(rule: ScheduleRule) {
     setEditingRuleId(rule.id);
-    setFActivity(rule.activityTypeId);
-    setFStart(rule.periodStart);
-    setFEnd(rule.periodEnd);
-    setFMin(String(rule.min));
-    setFType(rule.type);
-    setFVigStart(rule.start.split(" ").reverse().join("-"));
-    setFVigEnd(rule.end ?? "");
-    setFAssistants(rule.assistantIds);
-    setFStep("form");
+    setFormActivityId(rule.activityTypeId);
+    setFormPeriodStart(rule.periodStart);
+    setFormPeriodEnd(rule.periodEnd);
+    setFormMinStaff(String(rule.min));
+    setFormRuleType(rule.type);
+    setFormValidityStart(rule.start.split(" ").reverse().join("-"));
+    setFormValidityEnd(rule.end ?? "");
+    setFormAssistantIds(rule.assistantIds);
+    setFormStep("form");
     setShowAdd(true);
   }
 
   function toggleAssistant(id: number) {
-    setFAssistants((prev) =>
+    setFormAssistantIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   }
 
   function toggleAllAssistants() {
-    const allSelected = fAssistants.length === ASSISTANTS.length;
-    setFAssistants(allSelected ? [] : ASSISTANTS.map((a) => a.id));
+    const allSelected = formAssistantIds.length === ASSISTANTS.length;
+    setFormAssistantIds(allSelected ? [] : ASSISTANTS.map((a) => a.id));
   }
 
   function submitRule() {
     if (!isEditing && conflictingRule) {
-      setFStep("conflict");
+      setFormStep("conflict");
       return;
     }
     if (isEditing) {
@@ -98,18 +99,18 @@ export default function ScheduleRulesTab() {
           r.id === editingRuleId
             ? {
                 ...r,
-                activityTypeId: fActivity,
-                periodStart: fStart,
-                periodEnd: fEnd,
-                min: Number(fMin),
-                type: fType,
-                end: fVigEnd || null,
-                assistantIds: fAssistants,
+                activityTypeId: formActivityId,
+                periodStart: formPeriodStart,
+                periodEnd: formPeriodEnd,
+                min: Number(formMinStaff),
+                type: formRuleType,
+                end: formValidityEnd || null,
+                assistantIds: formAssistantIds,
               }
             : r
         )
       );
-      setFStep("done");
+      setFormStep("done");
     } else {
       confirmCreate();
     }
@@ -120,17 +121,17 @@ export default function ScheduleRulesTab() {
       ...prev,
       {
         id: Date.now(),
-        activityTypeId: fActivity,
-        periodStart: fStart,
-        periodEnd: fEnd,
-        min: Number(fMin),
-        type: fType,
-        start: fVigStart,
-        end: fVigEnd || null,
-        assistantIds: fAssistants,
+        activityTypeId: formActivityId,
+        periodStart: formPeriodStart,
+        periodEnd: formPeriodEnd,
+        min: Number(formMinStaff),
+        type: formRuleType,
+        start: formValidityStart,
+        end: formValidityEnd || null,
+        assistantIds: formAssistantIds,
       },
     ]);
-    setFStep("done");
+    setFormStep("done");
   }
 
   return (
@@ -320,11 +321,11 @@ export default function ScheduleRulesTab() {
         <DialogContent className="w-full max-w-lg p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
           <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10">
             <DialogTitle className="font-semibold text-foreground text-sm">
-              {fStep === "form"
+              {formStep === "form"
                 ? isEditing
                   ? "Editar Regra de Horário"
                   : "Nova Regra de Horário"
-                : fStep === "conflict"
+                : formStep === "conflict"
                 ? "Sobreposição detetada"
                 : isEditing
                 ? "Regra atualizada"
@@ -332,15 +333,15 @@ export default function ScheduleRulesTab() {
             </DialogTitle>
           </DialogHeader>
 
-          {fStep === "form" && (
+          {formStep === "form" && (
             <div className="p-5 space-y-4">
               <div>
                 <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                   Tipo de Atividade *
                 </label>
                 <select
-                  value={fActivity}
-                  onChange={(e) => setFActivity(e.target.value)}
+                  value={formActivityId}
+                  onChange={(e) => setFormActivityId(e.target.value)}
                   className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                 >
                   {DEFAULT_ACTIVITY_TYPES.map((a) => (
@@ -356,22 +357,20 @@ export default function ScheduleRulesTab() {
                   <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                     Hora Início
                   </label>
-                  <input
-                    type="time"
-                    value={fStart}
-                    onChange={(e) => setFStart(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  <TimePicker
+                    value={formPeriodStart}
+                    onChange={setFormPeriodStart}
+                    className="w-full"
                   />
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                     Hora Fim
                   </label>
-                  <input
-                    type="time"
-                    value={fEnd}
-                    onChange={(e) => setFEnd(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  <TimePicker
+                    value={formPeriodEnd}
+                    onChange={setFormPeriodEnd}
+                    className="w-full"
                   />
                 </div>
               </div>
@@ -385,8 +384,8 @@ export default function ScheduleRulesTab() {
                     type="number"
                     min="1"
                     max="12"
-                    value={fMin}
-                    onChange={(e) => setFMin(e.target.value)}
+                    value={formMinStaff}
+                    onChange={(e) => setFormMinStaff(e.target.value)}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </div>
@@ -395,9 +394,9 @@ export default function ScheduleRulesTab() {
                     Obrigatoriedade
                   </label>
                   <select
-                    value={fType}
+                    value={formRuleType}
                     onChange={(e) =>
-                      setFType(e.target.value as "mandatory" | "optional")
+                      setFormRuleType(e.target.value as "mandatory" | "optional")
                     }
                     className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                   >
@@ -410,7 +409,7 @@ export default function ScheduleRulesTab() {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs text-muted-foreground font-medium">
-                    Assistentes aplicáveis ({fAssistants.length}/
+                    Assistentes aplicáveis ({formAssistantIds.length}/
                     {ASSISTANTS.length})
                   </label>
                   <button
@@ -418,14 +417,14 @@ export default function ScheduleRulesTab() {
                     onClick={toggleAllAssistants}
                     className="text-xs text-primary hover:underline"
                   >
-                    {fAssistants.length === ASSISTANTS.length
+                    {formAssistantIds.length === ASSISTANTS.length
                       ? "Desmarcar todos"
                       : "Selecionar todos"}
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-2 border border-border rounded-lg bg-muted/10">
                   {ASSISTANTS.map((a) => {
-                    const isSelected = fAssistants.includes(a.id);
+                    const isSelected = formAssistantIds.includes(a.id);
                     return (
                       <button
                         key={a.id}
@@ -463,7 +462,7 @@ export default function ScheduleRulesTab() {
             </div>
           )}
 
-          {fStep === "conflict" && conflictingRule && (
+          {formStep === "conflict" && conflictingRule && (
             <div className="p-5 space-y-4">
               <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
                 <AlertTriangle
@@ -473,7 +472,7 @@ export default function ScheduleRulesTab() {
                 <div className="text-xs text-muted-foreground space-y-1">
                   <p className="font-semibold text-foreground">
                     Já existe uma regra ativa para {selectedActivity?.label} às{" "}
-                    {fStart}.
+                    {formPeriodStart}.
                   </p>
                   <p>
                     A regra anterior será encerrada na data de início da nova
@@ -491,7 +490,7 @@ export default function ScheduleRulesTab() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFStep("form")}
+                  onClick={() => setFormStep("form")}
                   className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Voltar
@@ -500,7 +499,7 @@ export default function ScheduleRulesTab() {
             </div>
           )}
 
-          {fStep === "done" && (
+          {formStep === "done" && (
             <div className="p-8 text-center space-y-3">
               <div className="w-12 h-12 rounded-full bg-[#0E7C59]/10 flex items-center justify-center mx-auto">
                 <CheckCircle size={24} className="text-[#0E7C59]" />
@@ -522,4 +521,3 @@ export default function ScheduleRulesTab() {
     </div>
   );
 }
-

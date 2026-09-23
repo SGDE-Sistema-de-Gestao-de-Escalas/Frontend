@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Clock, Layers, Shield, Umbrella } from "lucide-react";
 import type { ConfigTab } from "../../types";
-import FeriadosPage from "../settings/FeriadosPage";
+import HolidaysPage from "../settings/HolidaysPage";
 import ActivityTypesTab from "./ActivityTypesTab";
 import ScheduleRulesTab from "./ScheduleRulesTab";
 import WindowsTab from "./WindowsTab";
@@ -55,7 +55,7 @@ export default function ConfigEngine() {
 
       {activeTab === "security" && <ScheduleRulesTab />}
       {activeTab === "windows" && <WindowsTab />}
-      {activeTab === "holidays" && <FeriadosPage />}
+      {activeTab === "holidays" && <HolidaysPage />}
       {activeTab === "activity-types" && <ActivityTypesTab />}
     </div>
   );

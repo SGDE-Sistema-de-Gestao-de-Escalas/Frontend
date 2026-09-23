@@ -13,21 +13,21 @@ import type { SwapRequest } from "../../types";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 
-export default function TrocasTurnoPage() {
+export default function ShiftSwapsPage() {
   const [swaps, setSwaps] = useState<SwapRequest[]>(SWAP_REQUESTS);
-  const [filter, setFilter] = useState<
+  const [statusFilter, setStatusFilter] = useState<
     "all" | "pending" | "approved" | "rejected"
   >("pending");
-  const [selected, setSelected] = useState<number | null>(1);
+  const [selectedSwapId, setSelectedSwapId] = useState<number | null>(1);
 
-  const filtered = swaps.filter((s) => filter === "all" || s.status === filter);
-  const selectedSwap = swaps.find((s) => s.id === selected);
+  const filteredSwaps = swaps.filter((s) => statusFilter === "all" || s.status === statusFilter);
+  const selectedSwap = swaps.find((s) => s.id === selectedSwapId);
 
-  function handle(id: number, action: "approved" | "rejected") {
+  function handleSwapDecision(id: number, action: "approved" | "rejected") {
     setSwaps((prev) =>
       prev.map((s) => (s.id === id ? { ...s, status: action } : s))
     );
-    setSelected(null);
+    setSelectedSwapId(null);
   }
 
   return (
@@ -48,7 +48,7 @@ export default function TrocasTurnoPage() {
         {/* Inbox */}
         <div
           className={`lg:col-span-2 flex flex-col border border-border rounded-lg overflow-hidden bg-card ${
-            selected ? "hidden lg:flex" : "flex"
+            selectedSwapId ? "hidden lg:flex" : "flex"
           }`}
         >
           <div className="px-3 py-2 border-b border-border bg-muted/20 flex items-center gap-1 flex-wrap">
@@ -56,9 +56,9 @@ export default function TrocasTurnoPage() {
               <button
                 key={f}
                 type="button"
-                onClick={() => setFilter(f)}
+                onClick={() => setStatusFilter(f)}
                 className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  filter === f
+                  statusFilter === f
                     ? "bg-accent text-white"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
@@ -79,18 +79,18 @@ export default function TrocasTurnoPage() {
             ))}
           </div>
           <div className="flex-1 overflow-y-auto">
-            {filtered.length === 0 && (
+            {filteredSwaps.length === 0 && (
               <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
                 Sem pedidos
               </div>
             )}
-            {filtered.map((swap) => (
+            {filteredSwaps.map((swap) => (
               <button
                 key={swap.id}
                 type="button"
-                onClick={() => setSelected(swap.id)}
+                onClick={() => setSelectedSwapId(swap.id)}
                 className={`w-full text-left px-3 py-3 border-b border-border/50 transition-colors hover:bg-muted/30 ${
-                  selected === swap.id
+                  selectedSwapId === swap.id
                     ? "bg-accent/5 border-l-2 border-l-accent"
                     : ""
                 }`}
@@ -139,7 +139,7 @@ export default function TrocasTurnoPage() {
 
         {/* Detail */}
         <div
-          className={`lg:col-span-3 ${selected ? "block" : "hidden lg:block"}`}
+          className={`lg:col-span-3 ${selectedSwapId ? "block" : "hidden lg:block"}`}
         >
           {!selectedSwap ? (
             <Card className="h-full flex items-center justify-center">
@@ -158,7 +158,7 @@ export default function TrocasTurnoPage() {
               <div className="px-5 py-4 border-b border-border flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setSelected(null)}
+                  onClick={() => setSelectedSwapId(null)}
                   className="lg:hidden p-1 rounded hover:bg-muted mr-1"
                 >
                   <ChevronLeft size={16} className="text-muted-foreground" />
@@ -251,7 +251,7 @@ export default function TrocasTurnoPage() {
                 <div className="px-5 py-4 border-t border-border flex gap-3">
                   <button
                     type="button"
-                    onClick={() => handle(selectedSwap.id, "approved")}
+                    onClick={() => handleSwapDecision(selectedSwap.id, "approved")}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0E7C59] text-white text-sm font-medium hover:bg-[#0A6349] transition-colors"
                   >
                     <Check size={14} />
@@ -259,7 +259,7 @@ export default function TrocasTurnoPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handle(selectedSwap.id, "rejected")}
+                    onClick={() => handleSwapDecision(selectedSwap.id, "rejected")}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#C8291A]/30 text-[#C8291A] text-sm font-medium hover:bg-[#FEF2F2] transition-colors"
                   >
                     <X size={14} />

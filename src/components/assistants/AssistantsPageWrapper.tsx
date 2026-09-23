@@ -2,15 +2,15 @@ import React, { useState } from "react";
 import AssistantsListPage from "./AssistantsListPage";
 import AddEditAssistant from "./AddEditAssistant";
 
-interface AssistantesPageWrapperProps {
+interface AssistantsPageWrapperProps {
   onViewProfile: () => void;
   initialAdd?: boolean;
 }
 
-export default function AssistantesPageWrapper({
+export default function AssistantsPageWrapper({
   onViewProfile,
   initialAdd = false,
-}: AssistantesPageWrapperProps) {
+}: AssistantsPageWrapperProps) {
   const [showCreate, setShowCreate] = useState(initialAdd);
 
   if (showCreate) {
