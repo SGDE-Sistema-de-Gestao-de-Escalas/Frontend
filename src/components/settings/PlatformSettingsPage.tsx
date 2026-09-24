@@ -21,7 +21,7 @@ import type { School, AbsenceType } from "../../types";
 import Modal from "../common/Modal";
 
 export default function PlatformSettingsPage() {
-  const [tab, setTab] = useState<"schools" | "absence-types">("schools");
+  const [activeTab, setActiveTab] = useState<"schools" | "absence-types">("schools");
 
   // ── Schools state ─────────────────────────────────────────────────────────
   const [schoolsList, setSchoolsList] = useState<School[]>(
@@ -98,33 +98,38 @@ export default function PlatformSettingsPage() {
   const [absenceTypesList, setAbsenceTypesList] = useState<AbsenceType[]>(
     INITIAL_ABSENCE_TYPES.map((t) => ({ ...t }))
   );
-  const [showATForm, setShowATForm] = useState(false);
-  const [atEditId, setAtEditId] = useState<number | null>(null);
-  const [atDeleteConfirm, setAtDeleteConfirm] = useState<number | null>(null);
-  const [atName, setAtName] = useState("");
-  const [atRequiresDoc, setAtRequiresDoc] = useState(false);
+  const [showAbsenceTypeForm, setShowAbsenceTypeForm] = useState(false);
+  const [absenceTypeEditId, setAbsenceTypeEditId] = useState<number | null>(null);
+  const [absenceTypeDeleteConfirm, setAbsenceTypeDeleteConfirm] = useState<number | null>(null);
+  const [absenceTypeName, setAbsenceTypeName] = useState("");
+  const [absenceTypeRequiresDoc, setAbsenceTypeRequiresDoc] = useState(false);
 
-  function openAddAT() {
-    setAtName("");
-    setAtRequiresDoc(false);
-    setAtEditId(null);
-    setShowATForm(true);
+  function openAddAbsenceType() {
+    setAbsenceTypeName("");
+    setAbsenceTypeRequiresDoc(false);
+    setAbsenceTypeEditId(null);
+    setShowAbsenceTypeForm(true);
   }
 
-  function openEditAT(t: AbsenceType) {
-    setAtName(t.name);
-    setAtRequiresDoc(t.requires_document);
-    setAtEditId(t.id);
-    setShowATForm(true);
+  function openEditAbsenceType(t: AbsenceType) {
+    setAbsenceTypeName(t.name);
+    setAbsenceTypeRequiresDoc(t.requiresDocument ?? t.requires_document ?? false);
+    setAbsenceTypeEditId(t.id);
+    setShowAbsenceTypeForm(true);
   }
 
-  function handleSaveAT() {
-    if (!atName.trim()) return;
-    if (atEditId !== null) {
+  function handleSaveAbsenceType() {
+    if (!absenceTypeName.trim()) return;
+    if (absenceTypeEditId !== null) {
       setAbsenceTypesList((p) =>
         p.map((t) =>
-          t.id === atEditId
-            ? { ...t, name: atName, requires_document: atRequiresDoc }
+          t.id === absenceTypeEditId
+            ? {
+                ...t,
+                name: absenceTypeName,
+                requiresDocument: absenceTypeRequiresDoc,
+                requires_document: absenceTypeRequiresDoc,
+              }
             : t
         )
       );
@@ -133,17 +138,18 @@ export default function PlatformSettingsPage() {
         ...p,
         {
           id: p.length > 0 ? Math.max(...p.map((t) => t.id)) + 1 : 1,
-          name: atName,
-          requires_document: atRequiresDoc,
+          name: absenceTypeName,
+          requiresDocument: absenceTypeRequiresDoc,
+          requires_document: absenceTypeRequiresDoc,
         },
       ]);
     }
-    setShowATForm(false);
+    setShowAbsenceTypeForm(false);
   }
 
-  function deleteAT(id: number) {
+  function deleteAbsenceType(id: number) {
     setAbsenceTypesList((p) => p.filter((t) => t.id !== id));
-    setAtDeleteConfirm(null);
+    setAbsenceTypeDeleteConfirm(null);
   }
 
   const TABS = [
@@ -217,9 +223,9 @@ export default function PlatformSettingsPage() {
           <button
             key={t.id}
             type="button"
-            onClick={() => setTab(t.id)}
+            onClick={() => setActiveTab(t.id)}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              tab === t.id
+              activeTab === t.id
                 ? "border-accent text-accent"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
@@ -231,7 +237,7 @@ export default function PlatformSettingsPage() {
       </div>
 
       {/* Tab: Escolas */}
-      {tab === "schools" && (
+      {activeTab === "schools" && (
         <>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-foreground">
@@ -428,7 +434,7 @@ export default function PlatformSettingsPage() {
       )}
 
       {/* Tab: Tipos de Falta */}
-      {tab === "absence-types" && (
+      {activeTab === "absence-types" && (
         <>
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -441,7 +447,7 @@ export default function PlatformSettingsPage() {
             </div>
             <button
               type="button"
-              onClick={openAddAT}
+              onClick={openAddAbsenceType}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent text-white text-xs font-medium hover:bg-accent/90 transition-colors"
             >
               <Plus size={13} />
@@ -460,7 +466,7 @@ export default function PlatformSettingsPage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground">{t.name}</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {t.requires_document ? (
+                    {(t.requiresDocument ?? t.requires_document) ? (
                       <span className="flex items-center gap-1">
                         <Paperclip size={10} />
                         Requer documento comprovativo
@@ -470,18 +476,18 @@ export default function PlatformSettingsPage() {
                     )}
                   </p>
                 </div>
-                {atDeleteConfirm === t.id ? (
+                {absenceTypeDeleteConfirm === t.id ? (
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       type="button"
-                      onClick={() => deleteAT(t.id)}
+                      onClick={() => deleteAbsenceType(t.id)}
                       className="px-2 py-1 rounded bg-destructive text-white text-[10px] font-medium"
                     >
                       Confirmar
                     </button>
                     <button
                       type="button"
-                      onClick={() => setAtDeleteConfirm(null)}
+                      onClick={() => setAbsenceTypeDeleteConfirm(null)}
                       className="px-2 py-1 rounded border border-border text-[10px] text-muted-foreground"
                     >
                       Cancelar
@@ -491,7 +497,7 @@ export default function PlatformSettingsPage() {
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       type="button"
-                      onClick={() => openEditAT(t)}
+                      onClick={() => openEditAbsenceType(t)}
                       className="p-1.5 rounded hover:bg-muted transition-colors"
                       title="Editar"
                     >
@@ -499,7 +505,7 @@ export default function PlatformSettingsPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setAtDeleteConfirm(t.id)}
+                      onClick={() => setAbsenceTypeDeleteConfirm(t.id)}
                       className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
                       title="Eliminar"
                     >
@@ -513,15 +519,15 @@ export default function PlatformSettingsPage() {
               </div>
             ))}
           </div>
-          {showATForm && (
+          {showAbsenceTypeForm && (
             <Modal
               title={
-                atEditId !== null
+                absenceTypeEditId !== null
                   ? "Editar Tipo de Falta"
                   : "Novo Tipo de Falta"
               }
               subtitle="Parametrização do tipo de ausência"
-              onClose={() => setShowATForm(false)}
+              onClose={() => setShowAbsenceTypeForm(false)}
             >
               <div className="space-y-4">
                 <div>
@@ -530,8 +536,8 @@ export default function PlatformSettingsPage() {
                   </label>
                   <input
                     type="text"
-                    value={atName}
-                    onChange={(e) => setAtName(e.target.value)}
+                    value={absenceTypeName}
+                    onChange={(e) => setAbsenceTypeName(e.target.value)}
                     placeholder="Ex: Consulta Médica"
                     className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                   />
@@ -547,14 +553,14 @@ export default function PlatformSettingsPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setAtRequiresDoc((v) => !v)}
+                    onClick={() => setAbsenceTypeRequiresDoc((v) => !v)}
                     className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${
-                      atRequiresDoc ? "bg-accent" : "bg-muted"
+                      absenceTypeRequiresDoc ? "bg-accent" : "bg-muted"
                     }`}
                   >
                     <span
                       className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                        atRequiresDoc ? "translate-x-5" : "translate-x-0.5"
+                        absenceTypeRequiresDoc ? "translate-x-5" : "translate-x-0.5"
                       }`}
                     />
                   </button>
@@ -562,15 +568,15 @@ export default function PlatformSettingsPage() {
                 <div className="flex gap-3 pt-2">
                   <button
                     type="button"
-                    onClick={handleSaveAT}
-                    disabled={!atName.trim()}
+                    onClick={handleSaveAbsenceType}
+                    disabled={!absenceTypeName.trim()}
                     className="flex-1 py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 disabled:opacity-40 transition-colors"
                   >
-                    {atEditId !== null ? "Guardar Alterações" : "Criar Tipo"}
+                    {absenceTypeEditId !== null ? "Guardar Alterações" : "Criar Tipo"}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowATForm(false)}
+                    onClick={() => setShowAbsenceTypeForm(false)}
                     className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Cancelar

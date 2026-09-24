@@ -90,7 +90,7 @@ export default function DatePicker({
     : "";
 
   return (
-    <div ref={ref} className={`relative ${className}`}>
+    <div ref={ref} className={`relative ${open ? "z-[70]" : "z-auto"} ${className}`}>
       <button
         type="button"
         onClick={() => {
@@ -125,7 +125,7 @@ export default function DatePicker({
       </button>
 
       {open && (
-        <div className="absolute z-50 top-full mt-1.5 left-0 bg-card border border-border rounded-xl shadow-xl p-3 w-64">
+        <div className="absolute z-[9999] top-full mt-1.5 left-0 bg-card border border-border rounded-xl shadow-2xl p-3 w-64 ring-1 ring-black/5">
           {/* Month navigation */}
           <div className="flex items-center justify-between mb-3">
             <button

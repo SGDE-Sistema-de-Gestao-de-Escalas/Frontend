@@ -21,18 +21,18 @@ import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import {
   REPORTS_COVERAGE,
-  REPORTS_ALERTAS,
+  REPORTS_ALERTS,
   REPORTS_ABSENCE_TYPES,
-  REPORTS_AUSENCIAS,
+  REPORTS_ABSENCES,
   assistants as ASSISTANTS,
 } from "../../api/mockData";
 
-export default function RelatoriosPage() {
-  const totalAbsenceDays = REPORTS_AUSENCIAS.reduce((s, r) => s + r.days, 0);
-  const pendingCount = REPORTS_AUSENCIAS.filter(
+export default function ReportsPage() {
+  const totalAbsenceDays = REPORTS_ABSENCES.reduce((s, r) => s + r.days, 0);
+  const pendingCount = REPORTS_ABSENCES.filter(
     (r) => r.status === "pending"
   ).length;
-  const coverageAlerts = REPORTS_ALERTAS.reduce((s, r) => s + r.alerts, 0);
+  const coverageAlerts = REPORTS_ALERTS.reduce((s, r) => s + r.alerts, 0);
   const activeExceptions = ASSISTANTS.filter(
     (a) => a.exception !== null
   ).length;
@@ -56,7 +56,7 @@ export default function RelatoriosPage() {
       label: "Dias Ausentes — Jan",
       value: String(totalAbsenceDays),
       sub: `${
-        REPORTS_AUSENCIAS.filter((r) => r.days > 0).length
+        REPORTS_ABSENCES.filter((r) => r.days > 0).length
       } assistentes afetados`,
       icon: <UserX size={16} />,
       variant: "muted" as const,
@@ -213,7 +213,7 @@ export default function RelatoriosPage() {
           </p>
           <div style={{ height: 190 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={REPORTS_ALERTAS} barCategoryGap="40%">
+              <BarChart data={REPORTS_ALERTS} barCategoryGap="40%">
                 <XAxis
                   dataKey="month"
                   tick={{ fontSize: 10, fill: "#5A6478" }}
@@ -235,7 +235,7 @@ export default function RelatoriosPage() {
                   formatter={(v: any) => [v, "Alertas"]}
                 />
                 <Bar key="bar-alerts" dataKey="alerts" radius={[4, 4, 0, 0]}>
-                  {REPORTS_ALERTAS.map((e, i) => (
+                  {REPORTS_ALERTS.map((e, i) => (
                     <Cell
                       key={`alert-${i}`}
                       fill={
@@ -357,7 +357,7 @@ export default function RelatoriosPage() {
                 </tr>
               </thead>
               <tbody>
-                {REPORTS_AUSENCIAS.map((r, i) => (
+                {REPORTS_ABSENCES.map((r, i) => (
                   <tr
                     key={i}
                     className="border-b border-border/50 hover:bg-muted/20 transition-colors"
@@ -413,16 +413,16 @@ export default function RelatoriosPage() {
                       <Badge
                         variant="outline"
                         className={
-                          r.cobertura === "impacto alto"
+                          r.coverage === "impacto alto"
                             ? "bg-destructive/10 text-destructive border-destructive/20"
-                            : r.cobertura === "impacto médio"
+                            : r.coverage === "impacto médio"
                             ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
-                            : r.cobertura === "impacto baixo"
+                            : r.coverage === "impacto baixo"
                             ? "bg-muted text-muted-foreground border-border"
                             : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
                         }
                       >
-                        {r.cobertura}
+                        {r.coverage}
                       </Badge>
                     </td>
                   </tr>

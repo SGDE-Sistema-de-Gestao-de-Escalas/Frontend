@@ -11,9 +11,9 @@ import AssistantDayModal from "../dashboard/AssistantDayModal";
 import QuickAbsenceModal from "../dashboard/QuickAbsenceModal";
 import ConfigEngine from "../config/ConfigEngine";
 import AssistantProfile from "../assistants/AssistantProfile";
-import AssistantesPageWrapper from "../assistants/AssistantesPageWrapper";
+import AssistantsPageWrapper from "../assistants/AssistantsPageWrapper";
 import AbsenceManagement from "../absences/AbsenceManagement";
-import RelatoriosPage from "../reports/RelatoriosPage";
+import ReportsPage from "../reports/ReportsPage";
 import GanttPage from "../gantt/GanttPage";
 import AccountProfilePage from "../settings/AccountProfilePage";
 import PlatformSettingsPage from "../settings/PlatformSettingsPage";
@@ -128,17 +128,17 @@ export default function AdminLayout({
               )}
               {activePage === "absences" && <AbsenceManagement />}
               {activePage === "assistants" && (
-                <AssistantesPageWrapper
+                <AssistantsPageWrapper
                   onViewProfile={() => handleNavigate("profile")}
                 />
               )}
               {activePage === "add-assistant" && (
-                <AssistantesPageWrapper
+                <AssistantsPageWrapper
                   onViewProfile={() => handleNavigate("profile")}
                   initialAdd
                 />
               )}
-              {activePage === "reports" && <RelatoriosPage />}
+              {activePage === "reports" && <ReportsPage />}
               {activePage === "gantt" && <GanttPage />}
               {activePage === "account" && <AccountProfilePage role="admin" />}
               {activePage === "platform-settings" && <PlatformSettingsPage />}

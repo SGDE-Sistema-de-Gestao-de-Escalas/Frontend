@@ -16,128 +16,157 @@ import type { Absence } from "../../types";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import DatePicker from "../common/DatePicker";
+import TimePicker from "../common/TimePicker";
 
 export default function AbsenceManagement() {
   const [absencesList, setAbsencesList] = useState<Absence[]>(initialAbsences);
-  const [selected, setSelected] = useState<number | null>(1);
-  const [filter, setFilter] = useState<"all" | "pending" | "justified" | "unjustified">("pending");
+  const [selectedId, setSelectedId] = useState<number | null>(1);
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "justified" | "unjustified">("pending");
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
-  const [infoSent, setInfoSent] = useState<number[]>([]);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [documentationRequestedIds, setDocumentationRequestedIds] = useState<number[]>([]);
 
-  const [fAssistant, setFAssistant] = useState("");
-  const [fStart, setFStart] = useState("");
-  const [fEnd, setFEnd] = useState("");
-  const [fReason, setFReason] = useState(ABSENCE_TYPES_MOCK[0]?.name ?? "Doença");
-  const [fNote, setFNote] = useState("");
-  const [fStatus, setFStatus] = useState<"" | "justified" | "unjustified">("");
-  const [fDocName, setFDocName] = useState("");
+  const [formAssistant, setFormAssistant] = useState("");
+  const [formStartDate, setFormStartDate] = useState("");
+  const [formStartTime, setFormStartTime] = useState("08:00");
+  const [formEndDate, setFormEndDate] = useState("");
+  const [formEndTime, setFormEndTime] = useState("17:00");
+  const [formReason, setFormReason] = useState(ABSENCE_TYPES_MOCK[0]?.name ?? "Doença");
+  const [formNote, setFormNote] = useState("");
+  const [formStatus, setFormStatus] = useState<"" | "justified" | "unjustified">("");
+  const [formDocumentName, setFormDocumentName] = useState("");
 
-  const filtered = absencesList.filter((a) => filter === "all" || a.status === filter);
-  const sel = absencesList.find((a) => a.id === selected);
+  const filteredAbsences = absencesList.filter(
+    (a) => statusFilter === "all" || a.status === statusFilter
+  );
+  const selectedAbsence = absencesList.find((a) => a.id === selectedId);
 
-  function openAdd() {
+  function handleOpenAdd() {
     setEditId(null);
-    setFAssistant("");
-    setFStart("");
-    setFEnd("");
-    setFReason(ABSENCE_TYPES_MOCK[0]?.name ?? "Doença");
-    setFNote("");
-    setFStatus("");
-    setFDocName("");
+    setFormAssistant("");
+    setFormStartDate("");
+    setFormStartTime("08:00");
+    setFormEndDate("");
+    setFormEndTime("17:00");
+    setFormReason(ABSENCE_TYPES_MOCK[0]?.name ?? "Doença");
+    setFormNote("");
+    setFormStatus("");
+    setFormDocumentName("");
     setShowForm(true);
   }
 
-  function openEdit(a: Absence) {
-    setEditId(a.id);
-    setFAssistant(a.assistant);
-    setFStart(a.start);
-    setFEnd(a.end);
-    setFReason(a.reason);
-    setFNote(a.note);
-    setFStatus(a.status === "pending" ? "" : (a.status as "justified" | "unjustified"));
-    setFDocName(a.documentPath ?? "");
+  function handleOpenEdit(absence: Absence) {
+    setEditId(absence.id);
+    setFormAssistant(absence.assistant);
+    setFormStartDate(absence.start);
+    setFormStartTime(absence.startTime ?? "08:00");
+    setFormEndDate(absence.end);
+    setFormEndTime(absence.endTime ?? "17:00");
+    setFormReason(absence.reason);
+    setFormNote(absence.note);
+    setFormStatus(
+      absence.status === "pending"
+        ? ""
+        : (absence.status as "justified" | "unjustified")
+    );
+    setFormDocumentName(absence.documentPath ?? "");
     setShowForm(true);
   }
 
   function handleSave() {
-    if (!fAssistant || !fStart || !fEnd) return;
-    const assistant = ASSISTANTS.find((a) => a.name === fAssistant);
-    const status = fStatus !== "" ? fStatus : "pending";
+    if (!formAssistant || !formStartDate || !formEndDate) return;
+    const assistant = ASSISTANTS.find((a) => a.name === formAssistant);
+    const status = formStatus !== "" ? formStatus : "pending";
     if (editId !== null) {
       setAbsencesList((prev) =>
         prev.map((a) =>
           a.id === editId
             ? {
                 ...a,
-                assistant: fAssistant,
+                assistant: formAssistant,
                 initials: assistant?.initials ?? a.initials,
-                start: fStart,
-                end: fEnd,
-                reason: fReason,
-                note: fNote,
+                start: formStartDate,
+                end: formEndDate,
+                startTime: formStartTime,
+                endTime: formEndTime,
+                reason: formReason,
+                note: formNote,
                 status,
-                documentPath: fDocName || null,
+                documentPath: formDocumentName || null,
               }
             : a
         )
       );
-      if (selected === editId) setSelected(editId);
+      if (selectedId === editId) setSelectedId(editId);
     } else {
-      const newId = absencesList.length > 0 ? Math.max(...absencesList.map((a) => a.id)) + 1 : 1;
+      const newId =
+        absencesList.length > 0
+          ? Math.max(...absencesList.map((a) => a.id)) + 1
+          : 1;
       setAbsencesList((prev) => [
         ...prev,
         {
           id: newId,
-          assistant: fAssistant,
+          assistant: formAssistant,
           initials: assistant?.initials ?? "??",
-          start: fStart,
-          end: fEnd,
+          start: formStartDate,
+          end: formEndDate,
+          startTime: formStartTime,
+          endTime: formEndTime,
           days: 1,
-          reason: fReason,
+          reason: formReason,
           status,
           submitted: "27 Jan 2026",
-          note: fNote,
-          documentPath: fDocName || null,
+          note: formNote,
+          documentPath: formDocumentName || null,
           conflict: false,
           conflictDetail: "",
         },
       ]);
-      setSelected(newId);
+      setSelectedId(newId);
     }
     setShowForm(false);
   }
 
   function handleDelete(id: number) {
     setAbsencesList((prev) => prev.filter((a) => a.id !== id));
-    if (selected === id) setSelected(null);
-    setDeleteConfirm(null);
+    if (selectedId === id) setSelectedId(null);
+    setDeleteConfirmId(null);
   }
 
-  function justify(id: number, v: "justified" | "unjustified") {
+  function handleJustify(id: number, justificationStatus: "justified" | "unjustified") {
     setAbsencesList((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: v } : a))
+      prev.map((a) => (a.id === id ? { ...a, status: justificationStatus } : a))
     );
   }
 
-  const statusBadge = (s: string) => {
-    if (s === "justified") {
+  const renderStatusBadge = (status: string) => {
+    if (status === "justified") {
       return (
-        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+        <Badge
+          variant="outline"
+          className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+        >
           Justificada
         </Badge>
       );
     }
-    if (s === "unjustified") {
+    if (status === "unjustified") {
       return (
-        <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
+        <Badge
+          variant="outline"
+          className="bg-destructive/10 text-destructive border-destructive/20"
+        >
           Injustificada
         </Badge>
       );
     }
     return (
-      <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+      <Badge
+        variant="outline"
+        className="bg-amber-500/10 text-amber-600 border-amber-500/20"
+      >
         Pendente
       </Badge>
     );
@@ -153,7 +182,7 @@ export default function AbsenceManagement() {
           </p>
         </div>
         <button
-          onClick={openAdd}
+          onClick={handleOpenAdd}
           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
         >
           <Plus size={14} />
@@ -182,14 +211,14 @@ export default function AbsenceManagement() {
                 </button>
               </div>
               <div className="p-5 space-y-4 overflow-y-auto">
-                {/* Assistente */}
+                {/* Assistant */}
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5">
                     Assistente *
                   </label>
                   <select
-                    value={fAssistant}
-                    onChange={(e) => setFAssistant(e.target.value)}
+                    value={formAssistant}
+                    onChange={(e) => setFormAssistant(e.target.value)}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     <option value="">Selecionar...</option>
@@ -200,37 +229,57 @@ export default function AbsenceManagement() {
                     ))}
                   </select>
                 </div>
-                {/* Datas */}
+                {/* Dates & Times */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1.5">
+                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                       Data de Início *
                     </label>
                     <DatePicker
-                      value={fStart}
-                      onChange={setFStart}
+                      value={formStartDate}
+                      onChange={setFormStartDate}
                       className="w-full"
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1.5">
+                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                      Hora Inicial *
+                    </label>
+                    <TimePicker
+                      value={formStartTime}
+                      onChange={setFormStartTime}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                       Data de Fim *
                     </label>
                     <DatePicker
-                      value={fEnd}
-                      onChange={setFEnd}
+                      value={formEndDate}
+                      onChange={setFormEndDate}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                      Hora Final *
+                    </label>
+                    <TimePicker
+                      value={formEndTime}
+                      onChange={setFormEndTime}
                       className="w-full"
                     />
                   </div>
                 </div>
-                {/* Tipo */}
+                {/* Reason */}
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5">
                     Tipo de Falta
                   </label>
                   <select
-                    value={fReason}
-                    onChange={(e) => setFReason(e.target.value)}
+                    value={formReason}
+                    onChange={(e) => setFormReason(e.target.value)}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     {ABSENCE_TYPES_MOCK.map((t) => (
@@ -240,25 +289,25 @@ export default function AbsenceManagement() {
                     ))}
                   </select>
                 </div>
-                {/* Notas */}
+                {/* Notes */}
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5">
                     Notas
                   </label>
                   <textarea
-                    value={fNote}
-                    onChange={(e) => setFNote(e.target.value)}
+                    value={formNote}
+                    onChange={(e) => setFormNote(e.target.value)}
                     rows={2}
                     placeholder="Observações sobre a ausência..."
                     className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring resize-none"
                   />
                 </div>
-                {/* Separador opcional */}
+                {/* Optional separator */}
                 <div className="border-t border-border pt-3">
                   <p className="text-xs text-muted-foreground mb-3">
                     Informação opcional — pode ser preenchida agora ou mais tarde
                   </p>
-                  {/* Documento */}
+                  {/* Document */}
                   <div className="mb-3">
                     <label className="text-xs text-muted-foreground block mb-1.5">
                       Documento de Justificação
@@ -266,19 +315,19 @@ export default function AbsenceManagement() {
                     <div className="flex items-center gap-2">
                       <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-input-background text-xs text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
                         <Paperclip size={13} />
-                        {fDocName ? fDocName : "Anexar ficheiro..."}
+                        {formDocumentName ? formDocumentName : "Anexar ficheiro..."}
                         <input
                           type="file"
                           className="hidden"
                           onChange={(e) =>
-                            setFDocName(e.target.files?.[0]?.name ?? "")
+                            setFormDocumentName(e.target.files?.[0]?.name ?? "")
                           }
                           accept=".pdf,.jpg,.jpeg,.png"
                         />
                       </label>
-                      {fDocName && (
+                      {formDocumentName && (
                         <button
-                          onClick={() => setFDocName("")}
+                          onClick={() => setFormDocumentName("")}
                           className="p-1 rounded hover:bg-muted"
                         >
                           <X size={12} className="text-muted-foreground" />
@@ -286,7 +335,7 @@ export default function AbsenceManagement() {
                       )}
                     </div>
                   </div>
-                  {/* Estado */}
+                  {/* Status */}
                   <div>
                     <label className="text-xs text-muted-foreground block mb-1.5">
                       Classificar Falta
@@ -312,9 +361,9 @@ export default function AbsenceManagement() {
                         <button
                           key={opt.value}
                           type="button"
-                          onClick={() => setFStatus(opt.value)}
+                          onClick={() => setFormStatus(opt.value)}
                           className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                            fStatus === opt.value
+                            formStatus === opt.value
                               ? opt.value === "justified"
                                 ? "bg-[#0E7C59] text-white border-[#0E7C59]"
                                 : opt.value === "unjustified"
@@ -334,7 +383,7 @@ export default function AbsenceManagement() {
                 <button
                   type="button"
                   onClick={handleSave}
-                  disabled={!fAssistant || !fStart || !fEnd}
+                  disabled={!formAssistant || !formStartDate || !formEndDate}
                   className="flex-1 py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 disabled:opacity-40 transition-colors"
                 >
                   {editId !== null ? "Guardar Alterações" : "Registar"}
@@ -353,14 +402,14 @@ export default function AbsenceManagement() {
       )}
 
       {/* Delete confirmation modal */}
-      {deleteConfirm !== null &&
+      {deleteConfirmId !== null &&
         (() => {
-          const a = absencesList.find((x) => x.id === deleteConfirm);
+          const targetAbsence = absencesList.find((x) => x.id === deleteConfirmId);
           return (
             <>
               <div
                 className="fixed inset-0 z-40 bg-black/30"
-                onClick={() => setDeleteConfirm(null)}
+                onClick={() => setDeleteConfirmId(null)}
               />
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                 <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-6 text-center">
@@ -373,21 +422,21 @@ export default function AbsenceManagement() {
                   <p className="text-sm text-muted-foreground mb-5">
                     A ausência de{" "}
                     <span className="font-medium text-foreground">
-                      {a?.assistant}
+                      {targetAbsence?.assistant}
                     </span>{" "}
-                    ({a?.start} – {a?.end}) será permanentemente eliminada.
+                    ({targetAbsence?.start} – {targetAbsence?.end}) será permanentemente eliminada.
                   </p>
                   <div className="flex gap-3">
                     <button
                       type="button"
-                      onClick={() => setDeleteConfirm(null)}
+                      onClick={() => setDeleteConfirmId(null)}
                       className="flex-1 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
                     >
                       Cancelar
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDelete(deleteConfirm)}
+                      onClick={() => handleDelete(deleteConfirmId)}
                       className="flex-1 py-2.5 rounded-lg bg-destructive text-white text-sm font-medium hover:bg-destructive/90 transition-colors"
                     >
                       Eliminar
@@ -406,7 +455,7 @@ export default function AbsenceManagement() {
         {/* List */}
         <div
           className={`lg:col-span-2 flex flex-col border border-border rounded-lg overflow-hidden bg-card ${
-            selected ? "hidden lg:flex" : "flex"
+            selectedId ? "hidden lg:flex" : "flex"
           }`}
         >
           <div className="px-3 py-2 border-b border-border bg-muted/20 flex items-center gap-1 flex-wrap">
@@ -421,9 +470,9 @@ export default function AbsenceManagement() {
               <button
                 key={f.id}
                 type="button"
-                onClick={() => setFilter(f.id)}
+                onClick={() => setStatusFilter(f.id)}
                 className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  filter === f.id
+                  statusFilter === f.id
                     ? "bg-accent text-white"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
@@ -438,16 +487,16 @@ export default function AbsenceManagement() {
             ))}
           </div>
           <div className="flex-1 overflow-y-auto">
-            {filtered.length === 0 && (
+            {filteredAbsences.length === 0 && (
               <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
                 Sem ausências
               </div>
             )}
-            {filtered.map((absence) => (
+            {filteredAbsences.map((absence) => (
               <div
                 key={absence.id}
                 className={`w-full text-left px-3 py-3 border-b border-border/50 transition-colors hover:bg-muted/30 group ${
-                  selected === absence.id
+                  selectedId === absence.id
                     ? "bg-accent/5 border-l-2 border-l-accent"
                     : ""
                 }`}
@@ -455,7 +504,7 @@ export default function AbsenceManagement() {
                 <button
                   type="button"
                   className="w-full text-left"
-                  onClick={() => setSelected(absence.id)}
+                  onClick={() => setSelectedId(absence.id)}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -477,14 +526,14 @@ export default function AbsenceManagement() {
                     {absence.start} – {absence.end} · {absence.days}d ·{" "}
                     {absence.reason}
                   </p>
-                  <div className="mt-1.5">{statusBadge(absence.status)}</div>
+                  <div className="mt-1.5">{renderStatusBadge(absence.status)}</div>
                 </button>
                 <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      openEdit(absence);
+                      handleOpenEdit(absence);
                     }}
                     className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-muted-foreground hover:text-foreground border border-border hover:bg-muted transition-colors"
                   >
@@ -495,7 +544,7 @@ export default function AbsenceManagement() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setDeleteConfirm(absence.id);
+                      setDeleteConfirmId(absence.id);
                     }}
                     className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-muted-foreground hover:text-destructive border border-border hover:border-destructive/30 hover:bg-destructive/5 transition-colors"
                   >
@@ -510,9 +559,9 @@ export default function AbsenceManagement() {
 
         {/* Detail */}
         <div
-          className={`lg:col-span-3 ${selected ? "block" : "hidden lg:block"}`}
+          className={`lg:col-span-3 ${selectedId ? "block" : "hidden lg:block"}`}
         >
-          {!sel ? (
+          {!selectedAbsence ? (
             <Card className="h-full flex items-center justify-center">
               <div className="text-center">
                 <Inbox
@@ -529,29 +578,33 @@ export default function AbsenceManagement() {
               <div className="px-5 py-4 border-b border-border flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setSelected(null)}
+                  onClick={() => setSelectedId(null)}
                   className="lg:hidden p-1 rounded hover:bg-muted mr-1"
                 >
                   <ChevronLeft size={16} className="text-muted-foreground" />
                 </button>
                 <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                   <span className="text-xs font-bold text-primary font-mono">
-                    {sel.initials}
+                    {selectedAbsence.initials}
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-foreground text-sm">
-                    {sel.assistant}
+                    {selectedAbsence.assistant}
                   </h3>
                   <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                    {sel.start} – {sel.end} · {sel.days} dias · {sel.reason}
+                    {selectedAbsence.start} – {selectedAbsence.end}
+                    {selectedAbsence.startTime
+                      ? ` (${selectedAbsence.startTime}–${selectedAbsence.endTime || "17:00"})`
+                      : ""}{" "}
+                    · {selectedAbsence.days} dias · {selectedAbsence.reason}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  {statusBadge(sel.status)}
+                  {renderStatusBadge(selectedAbsence.status)}
                   <button
                     type="button"
-                    onClick={() => openEdit(sel)}
+                    onClick={() => handleOpenEdit(selectedAbsence)}
                     className="p-1.5 rounded hover:bg-muted transition-colors"
                     title="Editar"
                   >
@@ -559,7 +612,7 @@ export default function AbsenceManagement() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setDeleteConfirm(sel.id)}
+                    onClick={() => setDeleteConfirmId(selectedAbsence.id)}
                     className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
                     title="Eliminar"
                   >
@@ -571,7 +624,7 @@ export default function AbsenceManagement() {
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                {sel.conflict ? (
+                {selectedAbsence.conflict ? (
                   <div className="flex items-start gap-3 p-3.5 rounded-lg bg-[#FEF2F2] border border-[#C8291A]/20">
                     <AlertTriangle
                       size={15}
@@ -582,11 +635,11 @@ export default function AbsenceManagement() {
                         Conflito com regras de cobertura
                       </p>
                       <p className="text-xs text-[#C8291A]">
-                        {sel.conflictDetail}
+                        {selectedAbsence.conflictDetail}
                       </p>
                     </div>
                   </div>
-                ) : sel.status === "pending" ? (
+                ) : selectedAbsence.status === "pending" ? (
                   <div className="flex items-start gap-3 p-3.5 rounded-lg bg-[#F0FDF4] border border-[#0E7C59]/20">
                     <CheckCircle
                       size={15}
@@ -599,10 +652,17 @@ export default function AbsenceManagement() {
                 ) : null}
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: "Período", value: `${sel.start} – ${sel.end}` },
-                    { label: "Duração", value: `${sel.days} dia(s)` },
-                    { label: "Motivo", value: sel.reason },
-                    { label: "Submetido", value: sel.submitted },
+                    {
+                      label: "Período",
+                      value: `${selectedAbsence.start} – ${selectedAbsence.end}${
+                        selectedAbsence.startTime
+                          ? ` (${selectedAbsence.startTime} – ${selectedAbsence.endTime || "17:00"})`
+                          : ""
+                      }`,
+                    },
+                    { label: "Duração", value: `${selectedAbsence.days} dia(s)` },
+                    { label: "Motivo", value: selectedAbsence.reason },
+                    { label: "Submetido", value: selectedAbsence.submitted },
                   ].map((f) => (
                     <div key={f.label} className="bg-muted/20 rounded-lg p-3">
                       <p className="text-[10px] text-muted-foreground mb-0.5">
@@ -614,22 +674,22 @@ export default function AbsenceManagement() {
                     </div>
                   ))}
                 </div>
-                {sel.note && (
+                {selectedAbsence.note && (
                   <div className="bg-muted/20 rounded-lg p-3">
                     <p className="text-[10px] text-muted-foreground mb-0.5">
                       Observações
                     </p>
-                    <p className="text-sm text-foreground">{sel.note}</p>
+                    <p className="text-sm text-foreground">{selectedAbsence.note}</p>
                   </div>
                 )}
-                {sel.documentPath && (
+                {selectedAbsence.documentPath && (
                   <div className="flex items-center gap-2.5 p-3 rounded-lg border border-border bg-muted/10">
                     <Paperclip
                       size={13}
                       className="text-muted-foreground flex-shrink-0"
                     />
                     <p className="text-xs text-foreground font-mono flex-1 truncate">
-                      {sel.documentPath}
+                      {selectedAbsence.documentPath}
                     </p>
                     <button
                       type="button"
@@ -647,7 +707,7 @@ export default function AbsenceManagement() {
                     Envia um pedido ao assistente para submeter documentação
                     comprovativa.
                   </p>
-                  {infoSent.includes(sel.id) ? (
+                  {documentationRequestedIds.includes(selectedAbsence.id) ? (
                     <div className="flex items-center gap-1.5 text-xs text-[#0E7C59]">
                       <CheckCircle size={12} />
                       Pedido enviado
@@ -655,7 +715,7 @@ export default function AbsenceManagement() {
                   ) : (
                     <button
                       type="button"
-                      onClick={() => setInfoSent((p) => [...p, sel.id])}
+                      onClick={() => setDocumentationRequestedIds((p) => [...p, selectedAbsence.id])}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
                     >
                       <Paperclip size={12} />
@@ -664,11 +724,11 @@ export default function AbsenceManagement() {
                   )}
                 </div>
               </div>
-              {sel.status === "pending" && (
+              {selectedAbsence.status === "pending" && (
                 <div className="px-5 py-4 border-t border-border flex gap-3">
                   <button
                     type="button"
-                    onClick={() => justify(sel.id, "justified")}
+                    onClick={() => handleJustify(selectedAbsence.id, "justified")}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0E7C59] text-white text-sm font-medium hover:bg-[#0A6349] transition-colors"
                   >
                     <Check size={14} />
@@ -676,7 +736,7 @@ export default function AbsenceManagement() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => justify(sel.id, "unjustified")}
+                    onClick={() => handleJustify(selectedAbsence.id, "unjustified")}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#C8291A]/30 text-[#C8291A] text-sm font-medium hover:bg-[#FEF2F2] transition-colors"
                   >
                     <X size={14} />
@@ -691,4 +751,3 @@ export default function AbsenceManagement() {
     </div>
   );
 }
-

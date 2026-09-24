@@ -1,8 +1,8 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import AssistantesPageWrapper from "../components/assistants/AssistantesPageWrapper";
+import AssistantsPageWrapper from "../components/assistants/AssistantsPageWrapper";
 
 export default function Assistants() {
   const navigate = useNavigate();
-  return <AssistantesPageWrapper onViewProfile={() => navigate("/profile")} />;
+  return <AssistantsPageWrapper onViewProfile={() => navigate("/profile")} />;
 }

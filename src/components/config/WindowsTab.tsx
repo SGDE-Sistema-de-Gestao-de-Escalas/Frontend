@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { AlertTriangle, Clock, Pencil, Plus, Trash2 } from "lucide-react";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import TimePicker from "../common/TimePicker";
+import { useSchool } from "../../context/SchoolContext";
 
 export default function WindowsTab() {
   const DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
@@ -80,6 +82,8 @@ export default function WindowsTab() {
     });
   }
 
+  const { updateOperatingHours } = useSchool();
+
   function handleSave() {
     const overlaps = windows.some(
       (w) =>
@@ -91,6 +95,15 @@ export default function WindowsTab() {
       setOverlapWarn(true);
       return;
     }
+    const startH = parseInt(formOpen.split(":")[0], 10) || 7;
+    const endH = parseInt(formClose.split(":")[0], 10) || 21;
+    updateOperatingHours({
+      open: formOpen,
+      close: formClose,
+      startHour: startH,
+      endHour: endH,
+    });
+
     if (editId) {
       setWindows((p) =>
         p.map((w) =>
@@ -117,6 +130,15 @@ export default function WindowsTab() {
   }
 
   function forceClose() {
+    const startH = parseInt(formOpen.split(":")[0], 10) || 7;
+    const endH = parseInt(formClose.split(":")[0], 10) || 21;
+    updateOperatingHours({
+      open: formOpen,
+      close: formClose,
+      startHour: startH,
+      endHour: endH,
+    });
+
     setWindows((p) =>
       p.map((w) =>
         w.end === null && w.days.some((d, i) => d && formDays[i])
@@ -232,24 +254,24 @@ export default function WindowsTab() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                    Abertura
+                    Abertura (00h–23h)
                   </label>
-                  <input
-                    type="time"
+                  <TimePicker
                     value={formOpen}
-                    onChange={(e) => setFormOpen(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    onChange={setFormOpen}
+                    unrestricted
+                    className="w-full"
                   />
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                    Fecho
+                    Fecho (00h–23h)
                   </label>
-                  <input
-                    type="time"
+                  <TimePicker
                     value={formClose}
-                    onChange={(e) => setFormClose(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    onChange={setFormClose}
+                    unrestricted
+                    className="w-full"
                   />
                 </div>
               </div>
@@ -262,22 +284,20 @@ export default function WindowsTab() {
                     <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                       Início
                     </label>
-                    <input
-                      type="time"
+                    <TimePicker
                       value={formLunchStart}
-                      onChange={(e) => setFormLunchStart(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      onChange={setFormLunchStart}
+                      className="w-full"
                     />
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                       Fim
                     </label>
-                    <input
-                      type="time"
+                    <TimePicker
                       value={formLunchEnd}
-                      onChange={(e) => setFormLunchEnd(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      onChange={setFormLunchEnd}
+                      className="w-full"
                     />
                   </div>
                   <div>

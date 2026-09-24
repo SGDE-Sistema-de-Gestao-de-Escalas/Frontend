@@ -14,17 +14,17 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { BLOCK_STYLES } from "./blockStyles";
 
-interface RecalcularModalProps {
+interface RecalculateModalProps {
   open: boolean;
   onClose: () => void;
   currentSchoolId?: number;
 }
 
-export default function RecalcularModal({
+export default function RecalculateModal({
   open,
   onClose,
   currentSchoolId = 1,
-}: RecalcularModalProps) {
+}: RecalculateModalProps) {
   const [startDate, setStartDate] = useState("2026-01-27");
   const [endDate, setEndDate] = useState("2026-01-31");
   const [strategy, setStrategy] = useState("auto");

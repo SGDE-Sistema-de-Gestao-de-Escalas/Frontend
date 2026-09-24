@@ -34,6 +34,12 @@ export type BlockState =
 
 export type ScheduleMatrix = Record<number, BlockState[]>;
 
+export interface SchoolCluster {
+  id: number;
+  name: string;
+  code: string;
+}
+
 export interface School {
   id: number;
   name: string;
@@ -47,7 +53,8 @@ export interface Assistant {
   id: number;
   name: string;
   initials: string;
-  mecanografico: string;
+  staffNumber: string;
+  mecanografico?: string;
   exception: string | null;
   schoolId: number;
   availableForTransfer: boolean;
@@ -61,6 +68,8 @@ export interface Absence {
   initials: string;
   start: string;
   end: string;
+  startTime?: string;
+  endTime?: string;
   days: number;
   reason: string;
   status: AbsenceStatus;
@@ -74,7 +83,8 @@ export interface Absence {
 export interface AbsenceType {
   id: number;
   name: string;
-  requires_document: boolean;
+  requiresDocument: boolean;
+  requires_document?: boolean;
 }
 
 export interface Schedule {
@@ -87,11 +97,12 @@ export interface Schedule {
   activity: BlockState;
 }
 
-export type NotifType = "alert" | "absence" | "expiry" | "info";
+export type NotificationType = "alert" | "absence" | "expiry" | "info";
+export type NotifType = NotificationType;
 
 export interface Notification {
   id: number;
-  type: NotifType;
+  type: NotificationType;
   title: string;
   body: string;
   time: string;
@@ -119,14 +130,15 @@ export interface ScheduleRule {
 
 export interface MyAbsence {
   id: number;
-  dates: string;
+  start: string;
+  end: string;
+  days: number;
   reason: string;
-  status: "pending" | "approved" | "rejected";
-  docs?: string;
+  status: "pending" | "justified" | "unjustified" | "approved" | "rejected";
+  note: string;
+  docs: string[];
   adminNote?: string;
-  start?: string;
-  end?: string;
-  days?: number;
+  dates?: string;
   submitted?: string;
   type?: string;
 }
@@ -149,8 +161,8 @@ export interface Holiday {
   id: number;
   name: string;
   date: string;
-  type: "nacional" | "municipal";
-  impact: "baixo" | "médio" | "alto";
+  type: "national" | "municipal" | "nacional";
+  impact: "low" | "medium" | "high" | "baixo" | "médio" | "alto";
 }
 
 export interface AuditLogEntry {
@@ -164,10 +176,10 @@ export interface AuditLogEntry {
 }
 
 export interface DateInfo {
-  day: string;
-  date: string;
-  full: string;
-  isToday: boolean;
-  isWeekend: boolean;
-  offset: number;
+  dayName: string;
+  dayShort: string;
+  dateStr: string;
+  day: number;
+  monthLabel: string;
+  dow: number;
 }

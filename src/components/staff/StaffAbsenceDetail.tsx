@@ -13,7 +13,7 @@ import {
 import type { MyAbsence } from "../../types";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
-import RegistarFaltaModal from "./RegistarFaltaModal";
+import RegisterAbsenceModal from "./RegisterAbsenceModal";
 
 const INITIAL_MY_ABSENCES: MyAbsence[] = [
   {
@@ -75,12 +75,12 @@ const INITIAL_MY_ABSENCES: MyAbsence[] = [
 
 export default function StaffAbsenceDetail() {
   const [absences, setAbsences] = useState<MyAbsence[]>(INITIAL_MY_ABSENCES);
-  const [detailId, setDetailId] = useState<number | null>(null);
+  const [selectedDetailId, setSelectedDetailId] = useState<number | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [justification, setJustification] = useState("");
   const [docName, setDocName] = useState("");
 
-  const detail = absences.find((a) => a.id === detailId);
+  const selectedAbsenceDetail = absences.find((a) => a.id === selectedDetailId);
 
   function addAbsence(a: Omit<MyAbsence, "id" | "docs" | "adminNote">) {
     setAbsences((prev) => [
@@ -89,7 +89,7 @@ export default function StaffAbsenceDetail() {
     ]);
   }
 
-  const statusBadge = (s: string) => {
+  const renderStatusBadge = (s: string) => {
     if (s === "justified") {
       return (
         <Badge
@@ -121,13 +121,13 @@ export default function StaffAbsenceDetail() {
   };
 
   // Detail view
-  if (detail) {
+  if (selectedAbsenceDetail) {
     return (
       <div>
         <button
           type="button"
           onClick={() => {
-            setDetailId(null);
+            setSelectedDetailId(null);
             setJustification("");
             setDocName("");
           }}
@@ -144,25 +144,25 @@ export default function StaffAbsenceDetail() {
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div>
                   <h2 className="text-lg font-semibold text-foreground">
-                    {detail.reason}
+                    {selectedAbsenceDetail.reason}
                   </h2>
                   <p className="text-sm text-muted-foreground font-mono mt-0.5">
-                    {detail.start} – {detail.end} · {detail.days} dia(s)
+                    {selectedAbsenceDetail.start} – {selectedAbsenceDetail.end} · {selectedAbsenceDetail.days} dia(s)
                   </p>
                 </div>
-                {statusBadge(detail.status)}
+                {renderStatusBadge(selectedAbsenceDetail.status)}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: "Período", value: `${detail.start} – ${detail.end}` },
-                  { label: "Duração", value: `${detail.days} dia(s)` },
-                  { label: "Motivo", value: detail.reason },
+                  { label: "Período", value: `${selectedAbsenceDetail.start} – ${selectedAbsenceDetail.end}` },
+                  { label: "Duração", value: `${selectedAbsenceDetail.days} dia(s)` },
+                  { label: "Motivo", value: selectedAbsenceDetail.reason },
                   {
                     label: "Estado",
                     value:
-                      detail.status === "justified"
+                      selectedAbsenceDetail.status === "justified"
                         ? "Justificada"
-                        : detail.status === "unjustified"
+                        : selectedAbsenceDetail.status === "unjustified"
                         ? "Injustificada"
                         : "Pendente",
                   },
@@ -177,18 +177,18 @@ export default function StaffAbsenceDetail() {
                   </div>
                 ))}
               </div>
-              {detail.note && (
+              {selectedAbsenceDetail.note && (
                 <div className="mt-3 bg-muted/20 rounded-lg p-3">
                   <p className="text-[10px] text-muted-foreground mb-0.5">
                     Nota
                   </p>
-                  <p className="text-sm text-foreground">{detail.note}</p>
+                  <p className="text-sm text-foreground">{selectedAbsenceDetail.note}</p>
                 </div>
               )}
             </Card>
 
             {/* Admin note */}
-            {detail.adminNote && (
+            {selectedAbsenceDetail.adminNote && (
               <Card className="p-4 border-accent/20 bg-accent/5">
                 <div className="flex items-start gap-2.5">
                   <Info
@@ -200,7 +200,7 @@ export default function StaffAbsenceDetail() {
                       Nota do Gestor
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {detail.adminNote}
+                      {selectedAbsenceDetail.adminNote}
                     </p>
                   </div>
                 </div>
@@ -252,13 +252,13 @@ export default function StaffAbsenceDetail() {
               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
                 Documentos Anexados
               </h4>
-              {detail.docs.length === 0 ? (
+              {selectedAbsenceDetail.docs.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   Nenhum documento ainda.
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {detail.docs.map((d, i) => (
+                  {selectedAbsenceDetail.docs.map((d, i) => (
                     <div
                       key={i}
                       className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/20"
@@ -314,7 +314,7 @@ export default function StaffAbsenceDetail() {
       </div>
 
       {showModal && (
-        <RegistarFaltaModal
+        <RegisterAbsenceModal
           onClose={() => setShowModal(false)}
           onSave={(a) => {
             addAbsence(a);
@@ -357,7 +357,7 @@ export default function StaffAbsenceDetail() {
             {absences.map((a) => (
               <tr
                 key={a.id}
-                onClick={() => setDetailId(a.id)}
+                onClick={() => setSelectedDetailId(a.id)}
                 className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer group"
               >
                 <td className="px-4 py-3 font-medium text-foreground group-hover:text-accent transition-colors">
@@ -369,7 +369,7 @@ export default function StaffAbsenceDetail() {
                 <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                   {a.days}d
                 </td>
-                <td className="px-4 py-3">{statusBadge(a.status)}</td>
+                <td className="px-4 py-3">{renderStatusBadge(a.status)}</td>
                 <td className="px-4 py-3">
                   {a.docs.length > 0 ? (
                     <div className="flex items-center gap-1 text-xs text-accent">

@@ -1,7 +1,6 @@
 import React from "react";
-import RelatoriosPage from "../components/reports/RelatoriosPage";
+import ReportsPage from "../components/reports/ReportsPage";
 
 export default function Reports() {
-  return <RelatoriosPage />;
+  return <ReportsPage />;
 }
-

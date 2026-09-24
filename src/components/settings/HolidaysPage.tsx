@@ -6,12 +6,12 @@ import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 
-export default function FeriadosPage() {
+export default function HolidaysPage() {
   const [holidays, setHolidays] = useState<Holiday[]>(HOLIDAYS);
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDate, setNewDate] = useState("");
-  const [newType, setNewType] = useState<"nacional" | "municipal">("nacional");
+  const [newType, setNewType] = useState<"national" | "municipal">("national");
 
   function addHoliday() {
     if (!newName || !newDate) return;
@@ -22,7 +22,7 @@ export default function FeriadosPage() {
         name: newName,
         date: newDate,
         type: newType,
-        impact: "médio",
+        impact: "medium",
       },
     ]);
     setShowAdd(false);
@@ -99,11 +99,11 @@ export default function FeriadosPage() {
                     <select
                       value={newType}
                       onChange={(e) =>
-                        setNewType(e.target.value as "nacional" | "municipal")
+                        setNewType(e.target.value as "national" | "municipal")
                       }
                       className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                     >
-                      <option value="nacional">Nacional</option>
+                      <option value="national">Nacional</option>
                       <option value="municipal">Municipal</option>
                     </select>
                   </div>
@@ -160,11 +160,11 @@ export default function FeriadosPage() {
                       <td className="px-4 py-3">
                         <Badge
                           variant={
-                            h.type === "nacional" ? "default" : "secondary"
+                            h.type === "national" ? "default" : "secondary"
                           }
                           className="text-[10px]"
                         >
-                          {h.type.charAt(0).toUpperCase() + h.type.slice(1)}
+                          {h.type === "national" ? "Nacional" : "Municipal"}
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-right">

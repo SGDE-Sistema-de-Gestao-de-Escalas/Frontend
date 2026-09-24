@@ -10,7 +10,7 @@ import { useSchool } from "../../context/SchoolContext";
 import AlertBanner from "./AlertBanner";
 import MatrixGrid from "./MatrixGrid";
 import MonthDashboardView from "./MonthDashboardView";
-import RecalcularModal from "./RecalcularModal";
+import RecalculateModal from "./RecalculateModal";
 import WeekMatrixView from "./WeekMatrixView";
 
 export type DashViewMode = "day" | "week" | "month";
@@ -193,7 +193,7 @@ export default function DashboardSection({
         />
       )}
 
-      <RecalcularModal
+      <RecalculateModal
         open={showRecalcModal}
         onClose={() => setShowRecalcModal(false)}
         currentSchoolId={currentSchoolId}
