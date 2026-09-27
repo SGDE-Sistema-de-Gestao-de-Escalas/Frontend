@@ -8,13 +8,13 @@ import {
   Eye,
   Layers,
   RefreshCw,
-  Settings,
   Shield,
   User,
   Users,
 } from "lucide-react";
 import type { Role } from "../../types";
 import { useAuth } from "../../context/AuthContext";
+import authService from "../../api/services/auth.service";
 
 interface LoginPageProps {
   onLogin?: (role: Role) => void;
@@ -31,23 +31,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
-
-  const DEMO_ACCOUNTS = [
-    {
-      email: "admin@sgde.pt",
-      password: "admin123",
-      role: "admin" as Role,
-      name: "Miguel Silva",
-      label: "Gestor",
-    },
-    {
-      email: "assistente@sgde.pt",
-      password: "staff123",
-      role: "staff" as Role,
-      name: "Fábio Lopes",
-      label: "Assistente",
-    },
-  ];
+  const [rememberMe, setRememberMe] = useState(true);
 
   function handleAuthSuccess(role: Role) {
     if (onLogin) {
@@ -57,30 +41,35 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     }
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
-    setTimeout(() => {
-      const account = DEMO_ACCOUNTS.find(
-        (a) => a.email === email && a.password === password
-      );
-      if (account) {
-        handleAuthSuccess(account.role);
-      } else {
-        setError("Email ou password incorretos.");
-        setLoading(false);
-      }
-    }, 600);
-  }
 
-  function quickLogin(role: Role) {
-    const account = DEMO_ACCOUNTS.find((a) => a.role === role)!;
-    setEmail(account.email);
-    setPassword(account.password);
-    setError("");
-    setLoading(true);
-    setTimeout(() => handleAuthSuccess(role), 400);
+    try {
+      // 1. Pedido real à API Laravel Sanctum (/api/login)
+      const resolvedRole = await auth.loginWithCredentials(
+        { email, password },
+        rememberMe
+      );
+      handleAuthSuccess(resolvedRole);
+    } catch (err: any) {
+      // 2. Extrai a mensagem de erro retornada pela API
+      if (err?.response?.data) {
+        const data = err.response.data;
+        const apiErrorMessage =
+          data?.errors?.email?.[0] ||
+          data?.errors?.password?.[0] ||
+          data?.message ||
+          "Email ou password incorretos.";
+        setError(apiErrorMessage);
+      } else {
+        setError(
+          "Não foi possível contactar o servidor em http://localhost:8000/api."
+        );
+      }
+      setLoading(false);
+    }
   }
 
   /* Pinx-style decorative pattern for the right panel */
@@ -245,7 +234,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
-                      className="w-3.5 h-3.5 rounded border-border accent-primary"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-border accent-primary cursor-pointer"
                     />
                     <span className="text-sm text-muted-foreground">Lembrar</span>
                   </label>
@@ -274,7 +265,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 </button>
               </form>
 
-              {/* Divider */}
               <div className="flex items-center gap-3 my-5">
                 <div className="flex-1 h-px bg-border" />
                 <span className="text-xs text-muted-foreground">Ou</span>
@@ -338,51 +328,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                   Entrar com Microsoft
                 </button>
               </div>
-
-              {/* Demo quick access */}
-              <div className="mt-6 pt-5 border-t border-border">
-                <p className="text-[10px] text-muted-foreground text-center uppercase tracking-wider mb-3 font-semibold">
-                  Acesso rápido · Demo
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => quickLogin("admin")}
-                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-border hover:border-primary/40 hover:bg-primary/5 transition-colors group text-center"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                      <Settings
-                        size={14}
-                        className="text-muted-foreground group-hover:text-primary transition-colors"
-                      />
-                    </div>
-                    <span className="text-xs font-medium text-foreground">
-                      Gestor Admin
-                    </span>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      admin@sgde.pt
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => quickLogin("staff")}
-                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-border hover:border-primary/40 hover:bg-primary/5 transition-colors group text-center"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                      <User
-                        size={14}
-                        className="text-muted-foreground group-hover:text-primary transition-colors"
-                      />
-                    </div>
-                    <span className="text-xs font-medium text-foreground">
-                      Assistente
-                    </span>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      assistente@sgde.pt
-                    </span>
-                  </button>
-                </div>
-              </div>
             </>
           )}
 
@@ -390,13 +335,17 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           {view === "forgot" && (
             <>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   setLoading(true);
-                  setTimeout(() => {
+                  try {
+                    await authService.forgotPassword(resetEmail);
+                  } catch {
+                    // Fail silently or still show sent screen for privacy/security
+                  } finally {
                     setLoading(false);
                     setView("forgot-sent");
-                  }, 800);
+                  }
                 }}
                 className="space-y-4"
               >
@@ -438,22 +387,18 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
           {/* ── FORGOT SENT ── */}
           {view === "forgot-sent" && (
-            <div className="space-y-4">
-              <div className="bg-muted/50 rounded-xl px-4 py-3 text-xs font-mono text-muted-foreground text-center">
-                {resetEmail}
-              </div>
-              <p className="text-xs text-muted-foreground text-center">
-                O link é válido durante{" "}
-                <strong className="text-foreground">30 minutos</strong>.
-                Verifique também a pasta de spam.
+            <div className="space-y-4 text-center">
+              <p className="text-xs text-muted-foreground">
+                Se o email estiver registado no agrupamento, receberá instruções
+                em instantes.
               </p>
               <button
                 type="button"
                 onClick={() => {
                   setView("login");
-                  setResetEmail("");
+                  setError("");
                 }}
-                className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors shadow-xs"
+                className="w-full py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-muted/40 transition-colors"
               >
                 Voltar ao login
               </button>
@@ -462,45 +407,59 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         </div>
       </div>
 
-      {/* ── Right panel: decorative Pinx pattern ── */}
-      <div className="hidden lg:block flex-1 bg-primary relative overflow-hidden">
+      {/* ── Right panel: visual branding ── */}
+      <div className="hidden lg:flex flex-1 relative bg-gradient-to-br from-primary via-primary/90 to-primary/80 flex-col justify-between p-12 text-primary-foreground overflow-hidden">
         <PinxPattern />
-        {/* Centered branding overlay */}
-        <div className="relative z-10 flex flex-col items-center justify-center h-full text-center px-12">
-          <div className="w-16 h-16 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center mb-6 border border-white/20">
-            <Layers size={28} className="text-white" />
+
+        {/* Top badge */}
+        <div className="relative z-10 flex items-center justify-between">
+          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/15">
+            <Shield size={14} className="text-white" />
+            <span className="text-xs font-medium text-white">
+              SGDE · Gestão de Escalas
+            </span>
           </div>
-          <h2 className="text-3xl font-bold text-white mb-3 leading-tight">
-            Sistema de Gestão
-            <br />
-            Dinâmica de Escalas
-          </h2>
-          <p className="text-white/70 text-sm max-w-xs leading-relaxed">
-            Controlo de cobertura, gestão de ausências e conformidade em tempo
-            real para equipas de assistentes.
+          <span className="text-xs text-white/60 font-mono">v0.0.1</span>
+        </div>
+
+        {/* Middle illustration / testimonial */}
+        <div className="relative z-10 max-w-md my-auto">
+          <div className="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center mb-6 border border-white/20">
+            <Calendar size={24} className="text-white" />
+          </div>
+          <blockquote className="text-2xl font-semibold leading-snug mb-4 text-white">
+            "Organização inteligente de horários e equipas para agrupamentos
+            escolares."
+          </blockquote>
+          <p className="text-sm text-white/75 leading-relaxed">
+            Plataforma centralizada para gestão de matrizes semanais,
+            ausências, reforços e horários de assistentes operacionais.
           </p>
-          <div className="mt-10 grid grid-cols-2 gap-3 w-full max-w-xs">
+
+          {/* Feature pills */}
+          <div className="flex flex-wrap gap-2 mt-6">
             {[
-              { icon: <Calendar size={14} />, text: "Escalas automáticas" },
-              { icon: <Shield size={14} />, text: "Cobertura mínima" },
-              { icon: <Users size={14} />, text: "Gestão de equipa" },
-              { icon: <BarChart2 size={14} />, text: "Relatórios" },
-            ].map((f, i) => (
+              { icon: <BarChart2 size={12} />, label: "Matriz Dinâmica" },
+              { icon: <Users size={12} />, label: "Controlo de Lotação" },
+              { icon: <Shield size={12} />, label: "Motor de Regras" },
+            ].map((p, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2.5 bg-white/10 rounded-xl px-3 py-2.5 border border-white/10"
+                className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-lg text-xs font-medium border border-white/15 text-white/90"
               >
-                <span className="text-white/70">{f.icon}</span>
-                <span className="text-white/90 text-xs font-medium">{f.text}</span>
+                {p.icon}
+                {p.label}
               </div>
             ))}
           </div>
-          <p className="absolute bottom-6 text-white/30 text-xs">
-            © 2026 SGDE · v2.0
-          </p>
+        </div>
+
+        {/* Bottom footer */}
+        <div className="relative z-10 flex items-center justify-between text-xs text-white/50 border-t border-white/10 pt-4">
+          <span>Agrupamento de Escolas</span>
+          <span>Ano Letivo 2026/2027</span>
         </div>
       </div>
     </div>
   );
 }
-

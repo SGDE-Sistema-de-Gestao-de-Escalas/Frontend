@@ -17,7 +17,7 @@ interface AuthContextType {
   role: Role | null;
   user: UserProfile;
   login: (role: Role) => void;
-  loginWithCredentials: (credentials: LoginCredentials) => Promise<Role>;
+  loginWithCredentials: (credentials: LoginCredentials, remember?: boolean) => Promise<Role>;
   logout: () => Promise<void>;
   switchRole: () => void;
   isAuthenticated: boolean;
@@ -82,10 +82,11 @@ export function AuthProvider({
   );
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check existing session token on application load
+  // Check existing session token on application load (localStorage or sessionStorage)
   useEffect(() => {
     async function checkCurrentSession() {
-      const token = localStorage.getItem("auth_token");
+      const token =
+        localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
       if (token) {
         try {
           const authUser = await authService.getMe();
@@ -95,6 +96,7 @@ export function AuthProvider({
         } catch {
           // Token is invalid or backend unreachable; clear token
           localStorage.removeItem("auth_token");
+          sessionStorage.removeItem("auth_token");
         }
       }
       setIsLoading(false);
@@ -103,9 +105,19 @@ export function AuthProvider({
     checkCurrentSession();
   }, []);
 
-  async function loginWithCredentials(credentials: LoginCredentials): Promise<Role> {
+  async function loginWithCredentials(
+    credentials: LoginCredentials,
+    remember: boolean = true
+  ): Promise<Role> {
     const response = await authService.login(credentials);
-    localStorage.setItem("auth_token", response.token);
+    if (remember) {
+      localStorage.setItem("auth_token", response.token);
+      sessionStorage.removeItem("auth_token");
+    } else {
+      sessionStorage.setItem("auth_token", response.token);
+      localStorage.removeItem("auth_token");
+    }
+
     const profile = mapAuthUserToProfile(response.user);
     setUserProfile(profile);
     setRole(profile.role);
@@ -119,13 +131,16 @@ export function AuthProvider({
 
   async function logout() {
     try {
-      if (localStorage.getItem("auth_token")) {
+      const token =
+        localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+      if (token) {
         await authService.logout();
       }
     } catch {
       // Ignore network errors on logout
     } finally {
       localStorage.removeItem("auth_token");
+      sessionStorage.removeItem("auth_token");
       setRole(null);
     }
   }
