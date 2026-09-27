@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import type { Role } from "../types";
 import authService, { AuthUser, LoginCredentials } from "../api/services/auth.service";
 
@@ -24,10 +24,18 @@ interface AuthContextType {
   isLoading: boolean;
 }
 
+const GUEST_USER: UserProfile = {
+  name: "Utilizador",
+  initials: "U",
+  role: "admin",
+  roleLabel: "Não autenticado",
+  email: "",
+};
+
 const ADMIN_USER: UserProfile = {
   id: 1,
-  name: "Miguel Silva",
-  initials: "MS",
+  name: "Administrador",
+  initials: "AD",
   role: "admin",
   roleLabel: "Administrador",
   email: "admin@sgde.pt",
@@ -35,8 +43,8 @@ const ADMIN_USER: UserProfile = {
 
 const STAFF_USER: UserProfile = {
   id: 2,
-  name: "Ana Costa",
-  initials: "AC",
+  name: "Assistente",
+  initials: "AS",
   role: "staff",
   roleLabel: "Assistente",
   email: "assistente@sgde.pt",
@@ -71,14 +79,18 @@ function mapAuthUserToProfile(authUser: AuthUser): UserProfile {
 
 export function AuthProvider({
   children,
-  initialRole = "admin",
+  initialRole = null,
 }: {
   children: React.ReactNode;
   initialRole?: Role | null;
 }) {
   const [role, setRole] = useState<Role | null>(initialRole);
-  const [userProfile, setUserProfile] = useState<UserProfile>(
-    initialRole === "admin" ? ADMIN_USER : STAFF_USER
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(
+    initialRole === "admin"
+      ? ADMIN_USER
+      : initialRole === "staff"
+      ? STAFF_USER
+      : null
   );
   const [isLoading, setIsLoading] = useState(true);
 
@@ -97,7 +109,12 @@ export function AuthProvider({
           // Token is invalid or backend unreachable; clear token
           localStorage.removeItem("auth_token");
           sessionStorage.removeItem("auth_token");
+          setRole(null);
+          setUserProfile(null);
         }
+      } else {
+        setRole(null);
+        setUserProfile(null);
       }
       setIsLoading(false);
     }
@@ -142,6 +159,7 @@ export function AuthProvider({
       localStorage.removeItem("auth_token");
       sessionStorage.removeItem("auth_token");
       setRole(null);
+      setUserProfile(null);
     }
   }
 
@@ -157,7 +175,7 @@ export function AuthProvider({
     <AuthContext.Provider
       value={{
         role,
-        user: userProfile,
+        user: userProfile || GUEST_USER,
         login,
         loginWithCredentials,
         logout,

@@ -1,5 +1,6 @@
 import React from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import MainLayout from "../components/layout/MainLayout";
 import Login from "../pages/Login";
@@ -15,14 +16,51 @@ import Account from "../pages/Account";
 import StaffSchedule from "../pages/StaffSchedule";
 import StaffAbsences from "../pages/StaffAbsences";
 import StaffRegisterAbsence from "../pages/StaffRegisterAbsence";
-import LegacyApp from "../pages/LegacyApp";
 
 function ProtectedLayout() {
-  const { role } = useAuth();
-  if (!role) {
-    return <Navigate to="/login" replace />;
+  const { role, isLoading } = useAuth();
+  const location = useLocation();
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <RefreshCw className="animate-spin text-primary" size={28} />
+          <p className="text-xs text-muted-foreground">A carregar...</p>
+        </div>
+      </div>
+    );
   }
+
+  if (!role) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
   return <MainLayout />;
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { role } = useAuth();
+  if (role === "staff") {
+    return <Navigate to="/staff/schedule" replace />;
+  }
+  return <>{children}</>;
+}
+
+function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
+  const { role, isLoading } = useAuth();
+  if (isLoading) {
+    return null;
+  }
+  if (role) {
+    return (
+      <Navigate
+        to={role === "staff" ? "/staff/schedule" : "/dashboard"}
+        replace
+      />
+    );
+  }
+  return <>{children}</>;
 }
 
 export default function AppRouter() {
@@ -30,10 +68,17 @@ export default function AppRouter() {
 
   return (
     <Routes>
-      {/* Auth */}
-      <Route path="/login" element={<Login />} />
+      {/* Auth: se já estiver autenticado, redireciona para a aplicação */}
+      <Route
+        path="/login"
+        element={
+          <PublicOnlyRoute>
+            <Login />
+          </PublicOnlyRoute>
+        }
+      />
 
-      {/* Main app layout routes */}
+      {/* Rotas protegidas (exigem autenticação real) */}
       <Route element={<ProtectedLayout />}>
         <Route
           path="/"
@@ -44,19 +89,82 @@ export default function AppRouter() {
             />
           }
         />
-        {/* Admin Routes */}
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/schedules" element={<Dashboard />} />
-        <Route path="/assistants" element={<Assistants />} />
-        <Route path="/absences" element={<Absences />} />
-        <Route path="/reports" element={<Reports />} />
-        <Route path="/config" element={<Config />} />
-        <Route path="/gantt" element={<Gantt />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/platform-settings" element={<PlatformSettings />} />
+        {/* Rotas exclusivas de Administrador */}
+        <Route
+          path="/dashboard"
+          element={
+            <AdminRoute>
+              <Dashboard />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/schedules"
+          element={
+            <AdminRoute>
+              <Dashboard />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/assistants"
+          element={
+            <AdminRoute>
+              <Assistants />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/absences"
+          element={
+            <AdminRoute>
+              <Absences />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <AdminRoute>
+              <Reports />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/config"
+          element={
+            <AdminRoute>
+              <Config />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/gantt"
+          element={
+            <AdminRoute>
+              <Gantt />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <AdminRoute>
+              <Profile />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/platform-settings"
+          element={
+            <AdminRoute>
+              <PlatformSettings />
+            </AdminRoute>
+          }
+        />
         <Route path="/account" element={<Account />} />
 
-        {/* Staff Routes */}
+        {/* Rotas de Assistente (Staff) */}
         <Route path="/staff/schedule" element={<StaffSchedule />} />
         <Route path="/staff/absences" element={<StaffAbsences />} />
         <Route path="/staff/absence" element={<StaffAbsences />} />
@@ -66,10 +174,6 @@ export default function AppRouter() {
         />
         <Route path="/staff/account" element={<Account />} />
       </Route>
-
-      {/* Legacy route preserved for 1:1 diff and comparison */}
-      <Route path="/legacy" element={<LegacyApp role="admin" />} />
-      <Route path="/legacy/staff" element={<LegacyApp role="staff" />} />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
