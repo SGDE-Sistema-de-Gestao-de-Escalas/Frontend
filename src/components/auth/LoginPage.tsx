@@ -231,6 +231,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                   </label>
                   <button
                     type="button"
+                    tabIndex={-1}
                     onClick={() => {
                       setView("forgot");
                       setResetEmail(email);
