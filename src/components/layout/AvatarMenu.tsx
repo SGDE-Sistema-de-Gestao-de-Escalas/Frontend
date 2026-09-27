@@ -67,7 +67,7 @@ export default function AvatarMenu({
           {handleAccount && (
             <DropdownMenuItem
               onClick={handleAccount}
-              className="cursor-pointer px-4 py-2 text-sm text-foreground hover:bg-muted focus:bg-muted transition-colors"
+              className="cursor-pointer px-4 py-2 text-sm text-foreground transition-colors"
             >
               <User size={15} className="mr-2 text-muted-foreground" />
               A Minha Conta
@@ -77,7 +77,7 @@ export default function AvatarMenu({
           {handlePlatformSettings && (
             <DropdownMenuItem
               onClick={handlePlatformSettings}
-              className="cursor-pointer px-4 py-2 text-sm text-foreground hover:bg-muted focus:bg-muted transition-colors"
+              className="cursor-pointer px-4 py-2 text-sm text-foreground transition-colors"
             >
               <Settings size={15} className="mr-2 text-muted-foreground" />
               Configurações da Plataforma
@@ -86,7 +86,7 @@ export default function AvatarMenu({
 
           <DropdownMenuItem
             onClick={handleSwitchRole}
-            className="cursor-pointer px-4 py-2 text-sm text-foreground hover:bg-muted focus:bg-muted transition-colors"
+            className="cursor-pointer px-4 py-2 text-sm text-foreground transition-colors"
           >
             <Users size={15} className="mr-2 text-muted-foreground" />
             {user.role === "admin" ? "Ver como Assistente" : "Vista Admin"}
@@ -98,7 +98,7 @@ export default function AvatarMenu({
         <div className="py-1">
           <DropdownMenuItem
             onClick={handleLogout}
-            className="cursor-pointer px-4 py-2 text-sm text-destructive hover:bg-destructive/10 focus:bg-destructive/10 transition-colors"
+            className="cursor-pointer px-4 py-2 text-sm text-destructive  transition-colors"
           >
             <LogOut size={15} className="mr-2 text-destructive" />
             Terminar Sessão
