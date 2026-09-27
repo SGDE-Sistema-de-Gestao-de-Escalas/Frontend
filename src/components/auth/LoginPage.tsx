@@ -5,6 +5,7 @@ import {
   CheckCircle,
   ChevronLeft,
   Eye,
+  Mail,
   RefreshCw,
   Shield,
   Users,
@@ -147,13 +148,20 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <div className="w-full max-w-[340px]">
           {/* Logo mark com o icon oficial da marca */}
           <div className="mb-8">
-            <div className="w-14 h-14 rounded-2xl bg-muted/40 border border-border/80 shadow-xs flex items-center justify-center mb-6 p-2.5">
-              <img
-                src={appIcon}
-                alt="SGDE"
-                className="w-full h-full object-contain"
-              />
-            </div>
+            {/* Top icon: SGDE brand icon for login/forgot, or success check badge for forgot-sent */}
+            {view === "forgot-sent" ? (
+              <div className="w-14 h-14 rounded-2xl bg-[#2baf82]/10 border border-[#2baf82]/25 shadow-xs flex items-center justify-center mb-6 text-[#2baf82]">
+                <CheckCircle size={28} className="stroke-[2.2]" />
+              </div>
+            ) : (
+              <div className="w-14 h-14 rounded-2xl bg-muted/40 border border-border/80 shadow-xs flex items-center justify-center mb-6 p-2.5">
+                <img
+                  src={appIcon}
+                  alt="SGDE"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            )}
 
             {view === "login" && (
               <>
@@ -189,16 +197,16 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             )}
             {view === "forgot-sent" && (
               <>
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-                  <CheckCircle size={22} className="text-primary" />
-                </div>
-                <h1 className="text-2xl font-bold text-foreground leading-tight mb-1">
-                  Email enviado
+                <h1 className="text-2xl font-bold text-foreground leading-tight mb-2">
+                  Verifique o seu email
                 </h1>
-                <p className="text-sm text-muted-foreground">
-                  Enviámos um link de recuperação para{" "}
-                  <strong className="text-foreground">{resetEmail}</strong>.
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Enviámos as instruções de recuperação para:
                 </p>
+                <div className="mt-2.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/60 border border-border text-xs font-semibold text-foreground">
+                  <Mail size={13} className="text-[#2baf82]" />
+                  <span className="truncate max-w-[260px]">{resetEmail || "o seu email"}</span>
+                </div>
               </>
             )}
           </div>
@@ -357,23 +365,37 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </>
           )}
 
-          {/* ── FORGOT SENT ── */}
+          {/* ── FORGOT SENT actions ── */}
           {view === "forgot-sent" && (
-            <div className="space-y-4 text-center">
-              <p className="text-xs text-muted-foreground">
-                Se o email estiver registado no agrupamento, receberá instruções
-                em instantes.
-              </p>
+            <div className="space-y-4">
+              <div className="bg-muted/35 border border-border/70 rounded-xl p-3.5 text-xs text-muted-foreground leading-relaxed">
+                Se a conta estiver registada no agrupamento, receberá a ligação em instantes. Verifique também a pasta de <strong>spam</strong>.
+              </div>
+
               <button
                 type="button"
                 onClick={() => {
                   setView("login");
                   setError("");
                 }}
-                className="w-full py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-muted/40 transition-colors"
+                className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors shadow-xs"
               >
                 Voltar ao login
               </button>
+
+              <p className="text-xs text-muted-foreground text-center pt-1">
+                Não recebeu o email?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView("forgot");
+                    setError("");
+                  }}
+                  className="text-primary font-medium hover:underline transition-colors"
+                >
+                  Tentar outro email
+                </button>
+              </p>
             </div>
           )}
         </div>
