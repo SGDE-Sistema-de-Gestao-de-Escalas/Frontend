@@ -17,7 +17,7 @@ import {
   schools as INITIAL_SCHOOLS,
   absenceTypes as INITIAL_ABSENCE_TYPES,
 } from "../../api/mockData";
-import type { School, AbsenceType } from "../../types";
+import type { School, AbsenceType, EntityId } from "../../types";
 import Modal from "../common/Modal";
 
 export default function PlatformSettingsPage() {
@@ -28,8 +28,8 @@ export default function PlatformSettingsPage() {
     INITIAL_SCHOOLS.map((s) => ({ ...s }))
   );
   const [showSchoolForm, setShowSchoolForm] = useState(false);
-  const [schoolEditId, setSchoolEditId] = useState<number | null>(null);
-  const [schoolDeleteConfirm, setSchoolDeleteConfirm] = useState<number | null>(
+  const [schoolEditId, setSchoolEditId] = useState<EntityId | null>(null);
+  const [schoolDeleteConfirm, setSchoolDeleteConfirm] = useState<EntityId | null>(
     null
   );
   const [schoolName, setSchoolName] = useState("");
@@ -71,7 +71,7 @@ export default function PlatformSettingsPage() {
       setSchoolsList((p) => [
         ...p,
         {
-          id: p.length + 1,
+          id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
           name: schoolName,
           address: schoolAddress,
           phone: schoolPhone,
@@ -83,13 +83,13 @@ export default function PlatformSettingsPage() {
     setShowSchoolForm(false);
   }
 
-  function toggleSchoolActive(id: number) {
+  function toggleSchoolActive(id: EntityId) {
     setSchoolsList((p) =>
       p.map((s) => (s.id === id ? { ...s, active: !s.active } : s))
     );
   }
 
-  function deleteSchool(id: number) {
+  function deleteSchool(id: EntityId) {
     setSchoolsList((p) => p.filter((s) => s.id !== id));
     setSchoolDeleteConfirm(null);
   }
@@ -99,8 +99,8 @@ export default function PlatformSettingsPage() {
     INITIAL_ABSENCE_TYPES.map((t) => ({ ...t }))
   );
   const [showAbsenceTypeForm, setShowAbsenceTypeForm] = useState(false);
-  const [absenceTypeEditId, setAbsenceTypeEditId] = useState<number | null>(null);
-  const [absenceTypeDeleteConfirm, setAbsenceTypeDeleteConfirm] = useState<number | null>(null);
+  const [absenceTypeEditId, setAbsenceTypeEditId] = useState<EntityId | null>(null);
+  const [absenceTypeDeleteConfirm, setAbsenceTypeDeleteConfirm] = useState<EntityId | null>(null);
   const [absenceTypeName, setAbsenceTypeName] = useState("");
   const [absenceTypeRequiresDoc, setAbsenceTypeRequiresDoc] = useState(false);
 
@@ -137,7 +137,7 @@ export default function PlatformSettingsPage() {
       setAbsenceTypesList((p) => [
         ...p,
         {
-          id: p.length > 0 ? Math.max(...p.map((t) => t.id)) + 1 : 1,
+          id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
           name: absenceTypeName,
           requiresDocument: absenceTypeRequiresDoc,
           requires_document: absenceTypeRequiresDoc,
@@ -147,7 +147,7 @@ export default function PlatformSettingsPage() {
     setShowAbsenceTypeForm(false);
   }
 
-  function deleteAbsenceType(id: number) {
+  function deleteAbsenceType(id: EntityId) {
     setAbsenceTypesList((p) => p.filter((t) => t.id !== id));
     setAbsenceTypeDeleteConfirm(null);
   }

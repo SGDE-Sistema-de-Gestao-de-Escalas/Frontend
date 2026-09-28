@@ -13,11 +13,12 @@ import {
 } from "../../api/mockData";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { BLOCK_STYLES } from "./blockStyles";
+import type { EntityId } from "../../types";
 
 interface RecalculateModalProps {
   open: boolean;
   onClose: () => void;
-  currentSchoolId?: number;
+  currentSchoolId?: EntityId;
 }
 
 export default function RecalculateModal({

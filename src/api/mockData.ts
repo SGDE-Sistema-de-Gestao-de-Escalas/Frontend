@@ -263,7 +263,7 @@ export const VIEW_END = 84; // slot 84 = 21:00 (exclusive)
 export const VIEW_SLOTS = VIEW_END - VIEW_START; // 60 slots = 15 hours
 export const HOUR_LABELS = Array.from({ length: 25 }, (_, i) => i.toString().padStart(2, "0") + "h");
 
-export function buildAssistantRow(assistantId: number): BlockState[] {
+export function buildAssistantRow(assistantId: number | string): BlockState[] {
   const row: BlockState[] = Array(96).fill("off");
   const fill = (from: number, to: number, state: BlockState) => {
     for (let i = from; i < to; i++) {

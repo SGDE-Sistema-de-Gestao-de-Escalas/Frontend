@@ -8,7 +8,7 @@ import {
   VIEW_END,
   VIEW_SLOTS,
 } from "../../api/mockData";
-import type { BlockState } from "../../types";
+import type { BlockState, EntityId, ScheduleMatrix } from "../../types";
 import { Card } from "../ui/card";
 import {
   BLOCK_STYLES,
@@ -18,8 +18,8 @@ import {
 } from "./blockStyles";
 
 interface MatrixGridProps {
-  onSelectAssistant?: (id: number) => void;
-  matrix?: Record<number, BlockState[]>;
+  onSelectAssistant?: (id: EntityId) => void;
+  matrix?: ScheduleMatrix;
   dateLabel?: string;
 }
 
@@ -29,23 +29,23 @@ export default function MatrixGrid({
   dateLabel,
 }: MatrixGridProps) {
   const [hoveredCell, setHoveredCell] = useState<{
-    aid: number;
+    aid: EntityId;
     slot: number;
   } | null>(null);
   const [editMode, setEditMode] = useState(false);
-  const [localMatrix, setLocalMatrix] = useState<Record<number, BlockState[]>>(
+  const [localMatrix, setLocalMatrix] = useState<ScheduleMatrix>(
     () => {
       const base = matrix ?? SCHEDULE_MATRIX;
-      const clone: Record<number, BlockState[]> = {};
+      const clone: ScheduleMatrix = {};
       Object.entries(base).forEach(([k, v]) => {
-        clone[Number(k)] = [...v];
+        clone[k] = [...v];
       });
       return clone;
     }
   );
   const [paintType, setPaintType] = useState<BlockState>("work");
   const [isPainting, setIsPainting] = useState(false);
-  const [paintAid, setPaintAid] = useState<number | null>(null);
+  const [paintAid, setPaintAid] = useState<EntityId | null>(null);
 
   const effectiveMatrix = editMode ? localMatrix : matrix ?? SCHEDULE_MATRIX;
 
@@ -58,9 +58,9 @@ export default function MatrixGrid({
     return () => window.removeEventListener("mouseup", stop);
   }, []);
 
-  function paintSlot(aid: number, slot: number) {
+  function paintSlot(aid: EntityId, slot: number) {
     setLocalMatrix((prev) => {
-      const next = { ...prev, [aid]: [...prev[aid]] };
+      const next = { ...prev, [aid]: [...(prev[aid] || [])] };
       next[aid][slot] = paintType;
       return next;
     });

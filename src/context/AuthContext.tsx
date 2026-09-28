@@ -3,14 +3,14 @@ import type { Role } from "../types";
 import authService, { AuthUser, LoginCredentials } from "../api/services/auth.service";
 
 export interface UserProfile {
-  id?: number;
+  id?: number | string;
   name: string;
   initials: string;
   role: Role;
   roleLabel: string;
   email: string;
-  assistant_id?: number | null;
-  school_id?: number | null;
+  assistant_id?: number | string | null;
+  school_id?: number | string | null;
 }
 
 interface AuthContextType {

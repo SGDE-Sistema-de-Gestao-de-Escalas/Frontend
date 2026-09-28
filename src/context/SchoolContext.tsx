@@ -10,10 +10,10 @@ export interface OperatingHours {
 }
 
 interface SchoolContextType {
-  selectedSchoolId: number;
+  selectedSchoolId: number | string;
   selectedSchool: School;
   schools: School[];
-  setSchoolId: (id: number) => void;
+  setSchoolId: (id: number | string) => void;
   agrupamento: typeof AGRUPAMENTO;
   updateSchool: (school: School) => void;
   addSchool: (school: Omit<School, "id">) => void;
@@ -25,7 +25,9 @@ const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
 export function SchoolProvider({ children }: { children: React.ReactNode }) {
   const [schoolsList, setSchoolsList] = useState<School[]>(initialSchools);
-  const [selectedSchoolId, setSelectedSchoolId] = useState<number>(1);
+  const [selectedSchoolId, setSelectedSchoolId] = useState<number | string>(() => {
+    return localStorage.getItem("selected_school_id") || 1;
+  });
   const [operatingHours, setOperatingHours] = useState<OperatingHours>({
     startHour: 7,
     endHour: 21,
@@ -34,20 +36,24 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
   });
 
   const selectedSchool =
-    schoolsList.find((s) => s.id === selectedSchoolId) || schoolsList[0];
+    schoolsList.find((s) => String(s.id) === String(selectedSchoolId)) || schoolsList[0];
 
-  function setSchoolId(id: number) {
+  function setSchoolId(id: number | string) {
     setSelectedSchoolId(id);
+    localStorage.setItem("selected_school_id", String(id));
   }
 
   function updateSchool(updated: School) {
     setSchoolsList((prev) =>
-      prev.map((s) => (s.id === updated.id ? updated : s))
+      prev.map((s) => (String(s.id) === String(updated.id) ? updated : s))
     );
   }
 
   function addSchool(newSchool: Omit<School, "id">) {
-    const nextId = Math.max(...schoolsList.map((s) => s.id), 0) + 1;
+    const nextId =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : String(Date.now());
     setSchoolsList((prev) => [...prev, { ...newSchool, id: nextId }]);
   }
 

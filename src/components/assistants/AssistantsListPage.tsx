@@ -2,10 +2,11 @@ import React, { useState } from "react";
 import { ChevronRight, UserPlus, Users } from "lucide-react";
 import { assistants as ASSISTANTS } from "../../api/mockData";
 import { Card } from "../ui/card";
+import type { EntityId } from "../../types";
 
 interface AssistantsListPageProps {
   onAddNew: () => void;
-  onViewProfile: (id?: number) => void;
+  onViewProfile: (id?: EntityId) => void;
 }
 
 export default function AssistantsListPage({

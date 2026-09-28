@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { absences as initialAbsences, assistants as ASSISTANTS, absenceTypes as ABSENCE_TYPES_MOCK } from "../../api/mockData";
-import type { Absence } from "../../types";
+import type { Absence, EntityId } from "../../types";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import DatePicker from "../common/DatePicker";
@@ -20,12 +20,12 @@ import TimePicker from "../common/TimePicker";
 
 export default function AbsenceManagement() {
   const [absencesList, setAbsencesList] = useState<Absence[]>(initialAbsences);
-  const [selectedId, setSelectedId] = useState<number | null>(1);
+  const [selectedId, setSelectedId] = useState<EntityId | null>(1);
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "justified" | "unjustified">("pending");
   const [showForm, setShowForm] = useState(false);
-  const [editId, setEditId] = useState<number | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
-  const [documentationRequestedIds, setDocumentationRequestedIds] = useState<number[]>([]);
+  const [editId, setEditId] = useState<EntityId | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<EntityId | null>(null);
+  const [documentationRequestedIds, setDocumentationRequestedIds] = useState<EntityId[]>([]);
 
   const [formAssistant, setFormAssistant] = useState("");
   const [formStartDate, setFormStartDate] = useState("");
@@ -101,9 +101,9 @@ export default function AbsenceManagement() {
       if (selectedId === editId) setSelectedId(editId);
     } else {
       const newId =
-        absencesList.length > 0
-          ? Math.max(...absencesList.map((a) => a.id)) + 1
-          : 1;
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : String(Date.now());
       setAbsencesList((prev) => [
         ...prev,
         {
@@ -129,13 +129,13 @@ export default function AbsenceManagement() {
     setShowForm(false);
   }
 
-  function handleDelete(id: number) {
+  function handleDelete(id: EntityId) {
     setAbsencesList((prev) => prev.filter((a) => a.id !== id));
     if (selectedId === id) setSelectedId(null);
     setDeleteConfirmId(null);
   }
 
-  function handleJustify(id: number, justificationStatus: "justified" | "unjustified") {
+  function handleJustify(id: EntityId, justificationStatus: "justified" | "unjustified") {
     setAbsencesList((prev) =>
       prev.map((a) => (a.id === id ? { ...a, status: justificationStatus } : a))
     );

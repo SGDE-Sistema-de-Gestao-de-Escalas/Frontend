@@ -8,14 +8,14 @@ import {
   VIEW_SLOTS,
   VIEW_START,
 } from "../../api/mockData";
-import type { BlockState } from "../../types";
+import type { BlockState, EntityId } from "../../types";
 import { Card } from "../ui/card";
 import { BLOCK_STYLES, slotsToBlocks } from "./blockStyles";
 
 interface WeekMatrixViewProps {
   weekStart: number;
   onSelectDay: (offset: number) => void;
-  onSelectAssistant: (id: number) => void;
+  onSelectAssistant: (id: EntityId) => void;
 }
 
 export default function WeekMatrixView({

@@ -8,12 +8,12 @@ export interface LoginCredentials {
 }
 
 export interface AuthUser {
-  id: number;
+  id: string | number;
   name: string;
   email: string;
-  role: Role | { id: number; name: string; slug: Role };
-  assistant_id?: number | null;
-  school_id?: number | null;
+  role: Role | { id: string | number; name: string; slug: Role };
+  assistant_id?: string | number | null;
+  school_id?: string | number | null;
 }
 
 export interface BackendLoginResponse {

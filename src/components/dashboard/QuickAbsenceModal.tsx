@@ -8,11 +8,12 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { BLOCK_STYLES } from "./blockStyles";
 import TimePicker from "../common/TimePicker";
+import type { EntityId } from "../../types";
 
 interface QuickAbsenceModalProps {
   assistantName: string | null;
   onClose: () => void;
-  currentSchoolId?: number;
+  currentSchoolId?: EntityId;
 }
 
 export default function QuickAbsenceModal({

@@ -12,7 +12,7 @@ import {
   DEFAULT_ACTIVITY_TYPES,
   INITIAL_RULES,
 } from "../../api/mockData";
-import type { ScheduleRule } from "../../types";
+import type { ScheduleRule, EntityId } from "../../types";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -22,8 +22,8 @@ export default function ScheduleRulesTab() {
   const allAssistantIds = ASSISTANTS.map((a) => a.id);
   const [rules, setRules] = useState<ScheduleRule[]>(INITIAL_RULES);
   const [showAdd, setShowAdd] = useState(false);
-  const [editingRuleId, setEditingRuleId] = useState<number | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [editingRuleId, setEditingRuleId] = useState<EntityId | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<EntityId | null>(null);
 
   // Form state
   const [formActivityId, setFormActivityId] = useState("");
@@ -33,7 +33,7 @@ export default function ScheduleRulesTab() {
   const [formRuleType, setFormRuleType] = useState<"mandatory" | "optional">("mandatory");
   const [formValidityStart, setFormValidityStart] = useState("2026-02-01");
   const [formValidityEnd, setFormValidityEnd] = useState("");
-  const [formAssistantIds, setFormAssistantIds] = useState<number[]>(allAssistantIds);
+  const [formAssistantIds, setFormAssistantIds] = useState<EntityId[]>(allAssistantIds);
   const [formStep, setFormStep] = useState<"form" | "conflict" | "done">("form");
 
   const isEditing = editingRuleId !== null;
@@ -77,7 +77,7 @@ export default function ScheduleRulesTab() {
     setShowAdd(true);
   }
 
-  function toggleAssistant(id: number) {
+  function toggleAssistant(id: EntityId) {
     setFormAssistantIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
@@ -120,7 +120,7 @@ export default function ScheduleRulesTab() {
     setRules((prev) => [
       ...prev,
       {
-        id: Date.now(),
+        id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
         activityTypeId: formActivityId,
         periodStart: formPeriodStart,
         periodEnd: formPeriodEnd,

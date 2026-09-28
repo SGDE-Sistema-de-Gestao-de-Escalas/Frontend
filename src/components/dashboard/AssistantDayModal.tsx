@@ -1,13 +1,13 @@
 import React from "react";
 import { Eye, UserX } from "lucide-react";
 import { assistants as ASSISTANTS, SCHEDULE_MATRIX, TIME_SLOTS } from "../../api/mockData";
-import type { BlockState } from "../../types";
+import type { BlockState, EntityId } from "../../types";
 import { Badge } from "../ui/badge";
 import { Sheet, SheetContent } from "../ui/sheet";
 import { BLOCK_STYLES, groupSlotsFn } from "./blockStyles";
 
 interface AssistantDayModalProps {
-  assistantId: number | null;
+  assistantId: EntityId | null;
   onClose: () => void;
   onViewProfile: () => void;
   onMarkAbsence: (assistantName: string) => void;
