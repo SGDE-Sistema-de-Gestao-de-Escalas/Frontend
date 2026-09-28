@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import type { AdminPage, StaffPage } from "../../types";
+import logoHorizontal from "../../assets/logo-horizontal.svg";
 
 export interface NavItemConfig {
   id: string;
@@ -66,24 +67,20 @@ export default function SidebarContent({
 
   return (
     <div className="flex flex-col h-full bg-sidebar select-none">
-      {/* SGDE Brand Logo */}
-      <div className="px-5 h-16 flex items-center border-b border-sidebar-border flex-shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0 shadow-sm shadow-primary/30">
-            <Layers size={18} className="text-primary-foreground" />
-          </div>
-          <div>
-            <p
-              className="text-[15px] font-bold text-foreground tracking-tight leading-none"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              SGDE
-            </p>
-            <p className="text-[9px] text-muted-foreground tracking-[0.2em] uppercase mt-1">
-              {isStaff ? "Portal Assistente" : "Gestão de Escalas"}
-            </p>
-          </div>
+      {/* SGDE Brand Logo Horizontal */}
+      <div className="px-5 h-16 flex items-center justify-between border-b border-sidebar-border flex-shrink-0">
+        <div className="flex items-center gap-2.5 py-1">
+          <img
+            src={logoHorizontal}
+            alt="SGDE - Sistema de Gestão de Escalas"
+            className="h-8 w-auto max-w-[160px] object-contain"
+          />
         </div>
+        {isStaff && (
+          <span className="text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 uppercase tracking-wider">
+            Staff
+          </span>
+        )}
       </div>
 
       {/* Navigation */}

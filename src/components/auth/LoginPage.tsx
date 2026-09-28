@@ -2,19 +2,18 @@ import React, { useState } from "react";
 import {
   AlertCircle,
   BarChart2,
-  Calendar,
   CheckCircle,
   ChevronLeft,
   Eye,
-  Layers,
+  Mail,
   RefreshCw,
-  Settings,
   Shield,
-  User,
   Users,
 } from "lucide-react";
 import type { Role } from "../../types";
 import { useAuth } from "../../context/AuthContext";
+import authService from "../../api/services/auth.service";
+import appIcon from "../../assets/icon.svg";
 
 interface LoginPageProps {
   onLogin?: (role: Role) => void;
@@ -31,23 +30,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
-
-  const DEMO_ACCOUNTS = [
-    {
-      email: "admin@sgde.pt",
-      password: "admin123",
-      role: "admin" as Role,
-      name: "Miguel Silva",
-      label: "Gestor",
-    },
-    {
-      email: "assistente@sgde.pt",
-      password: "staff123",
-      role: "staff" as Role,
-      name: "Fábio Lopes",
-      label: "Assistente",
-    },
-  ];
+  const [rememberMe, setRememberMe] = useState(true);
 
   function handleAuthSuccess(role: Role) {
     if (onLogin) {
@@ -57,37 +40,57 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     }
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
-    setTimeout(() => {
-      const account = DEMO_ACCOUNTS.find(
-        (a) => a.email === email && a.password === password
+
+    try {
+      // Pedido real à API Laravel Sanctum (/api/login) com suporte a 'remember'
+      const resolvedRole = await auth.loginWithCredentials(
+        { email, password, remember: rememberMe },
+        rememberMe
       );
-      if (account) {
-        handleAuthSuccess(account.role);
+      handleAuthSuccess(resolvedRole);
+    } catch (err: any) {
+      if (err?.response?.data) {
+        const data = err.response.data;
+        const apiErrorMessage =
+          data?.errors?.email?.[0] ||
+          data?.errors?.password?.[0] ||
+          data?.message ||
+          "Email ou password incorretos.";
+        setError(apiErrorMessage);
       } else {
-        setError("Email ou password incorretos.");
-        setLoading(false);
+        setError(
+          "Não foi possível contactar o servidor em http://localhost:8000/api."
+        );
       }
-    }, 600);
+      setLoading(false);
+    }
   }
 
-  function quickLogin(role: Role) {
-    const account = DEMO_ACCOUNTS.find((a) => a.role === role)!;
-    setEmail(account.email);
-    setPassword(account.password);
-    setError("");
-    setLoading(true);
-    setTimeout(() => handleAuthSuccess(role), 400);
+  function handleSocialLogin(provider: "google" | "microsoft") {
+    setError(
+      `Autenticação com ${provider === "google" ? "Google" : "Microsoft"} em fase de integração com a API.`
+    );
   }
 
-  /* Pinx-style decorative pattern for the right panel */
+  /* Padrão decorativo no painel direito com as cores da marca (#4c57a2 e #2baf82) */
   const PinxPattern = () => (
-    <div className="absolute inset-0 overflow-hidden">
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {/* Luz ambiente de destaque no fundo */}
       <div
-        className="absolute inset-0 grid gap-4 p-8"
+        className="absolute -top-32 -left-32 w-[420px] h-[420px] rounded-full blur-3xl opacity-30"
+        style={{ backgroundColor: "#4c57a2" }}
+      />
+      <div
+        className="absolute -bottom-32 -right-32 w-[480px] h-[480px] rounded-full blur-3xl opacity-35"
+        style={{ backgroundColor: "#2baf82" }}
+      />
+
+      <div
+        className="absolute inset-0 grid gap-3.5 p-8"
         style={{
           gridTemplateColumns: "repeat(7, 1fr)",
           gridTemplateRows: "repeat(8, 1fr)",
@@ -97,15 +100,40 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           const col = i % 7;
           const row = Math.floor(i / 7);
           const isFilled = (col + row) % 3 !== 0;
+          const colorVariant = (col * 2 + row * 3) % 4;
+
+          let bg = "rgba(255, 255, 255, 0.03)";
+          let border = "1px solid rgba(255, 255, 255, 0.06)";
+
+          if (isFilled) {
+            if (colorVariant === 0) {
+              // Destaque verde esmeralda (#2baf82) translúcido
+              bg = "rgba(43, 175, 130, 0.18)";
+              border = "1.5px solid rgba(43, 175, 130, 0.35)";
+            } else if (colorVariant === 1) {
+              // Destaque anil/índigo (#4c57a2) translúcido
+              bg = "rgba(76, 87, 162, 0.28)";
+              border = "1.5px solid rgba(255, 255, 255, 0.15)";
+            } else if (colorVariant === 2) {
+              // Vidro branco fosco
+              bg = "rgba(255, 255, 255, 0.12)";
+              border = "1.5px solid rgba(255, 255, 255, 0.20)";
+            } else {
+              // Gradiente suave combinando ambas as cores
+              bg =
+                "linear-gradient(135deg, rgba(76, 87, 162, 0.25) 0%, rgba(43, 175, 130, 0.22) 100%)";
+              border = "1.5px solid rgba(43, 175, 130, 0.25)";
+            }
+          }
+
           return (
             <div
               key={i}
-              className="rounded-2xl"
+              className="rounded-2xl transition-all duration-300"
               style={{
-                backgroundColor: isFilled
-                  ? "rgba(255,255,255,0.12)"
-                  : "rgba(255,255,255,0.05)",
-                border: "1.5px solid rgba(255,255,255,0.08)",
+                background: bg,
+                border: border,
+                backdropFilter: isFilled ? "blur(3px)" : "none",
               }}
             />
           );
@@ -124,11 +152,22 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       {/* ── Left panel: form ── */}
       <div className="flex-1 lg:max-w-[480px] bg-card flex flex-col items-center justify-center px-8 py-12">
         <div className="w-full max-w-[340px]">
-          {/* Logo mark */}
+          {/* Logo mark com o icon oficial da marca */}
           <div className="mb-8">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center mb-6 shadow-sm shadow-primary/30">
-              <Layers size={20} className="text-primary-foreground" />
-            </div>
+            {/* Top icon: SGDE brand icon for login/forgot, or success check badge for forgot-sent */}
+            {view === "forgot-sent" ? (
+              <div className="w-14 h-14 rounded-2xl bg-[#2baf82]/10 border border-[#2baf82]/25 shadow-xs flex items-center justify-center mb-6 text-[#2baf82]">
+                <CheckCircle size={28} className="stroke-[2.2]" />
+              </div>
+            ) : (
+              <div className="w-14 h-14 rounded-2xl bg-muted/40 border border-border/80 shadow-xs flex items-center justify-center mb-6 p-2.5">
+                <img
+                  src={appIcon}
+                  alt="SGDE"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            )}
 
             {view === "login" && (
               <>
@@ -164,16 +203,16 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             )}
             {view === "forgot-sent" && (
               <>
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-                  <CheckCircle size={22} className="text-primary" />
-                </div>
-                <h1 className="text-2xl font-bold text-foreground leading-tight mb-1">
-                  Email enviado
+                <h1 className="text-2xl font-bold text-foreground leading-tight mb-2">
+                  Verifique o seu email
                 </h1>
-                <p className="text-sm text-muted-foreground">
-                  Enviámos um link de recuperação para{" "}
-                  <strong className="text-foreground">{resetEmail}</strong>.
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Enviámos as instruções de recuperação para:
                 </p>
+                <div className="mt-2.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/60 border border-border text-xs font-semibold text-foreground">
+                  <Mail size={13} className="text-[#2baf82]" />
+                  <span className="truncate max-w-[260px]">{resetEmail || "o seu email"}</span>
+                </div>
               </>
             )}
           </div>
@@ -182,207 +221,156 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           {view === "login" && (
             <>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="text-xs font-medium text-foreground block mb-1.5">
-                    Email <span className="text-destructive ml-0.5">*</span>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1.5">
+                  Email institucional{" "}
+                  <span className="text-destructive ml-0.5">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setError("");
+                  }}
+                  placeholder="utilizador@sgde.pt"
+                  autoComplete="email"
+                  className={inputCls(!!error)}
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-medium text-foreground">
+                    Password <span className="text-destructive ml-0.5">*</span>
                   </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => {
+                      setView("forgot");
+                      setResetEmail(email);
                       setError("");
                     }}
-                    placeholder="admin@sgde.pt"
-                    autoComplete="email"
-                    className={inputCls(!!error)}
+                    className="text-xs text-primary hover:text-primary/80 font-medium transition-colors"
+                  >
+                    Esqueceu a password?
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError("");
+                    }}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    className={inputCls(!!error) + " pr-10"}
                   />
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-medium text-foreground">
-                      Password <span className="text-destructive ml-0.5">*</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setView("forgot");
-                        setResetEmail(email);
-                        setError("");
-                      }}
-                      className="text-xs text-primary hover:text-primary/80 font-medium transition-colors"
-                    >
-                      Esqueceu a password?
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        setError("");
-                      }}
-                      placeholder="••••••••"
-                      autoComplete="current-password"
-                      className={inputCls(!!error) + " pr-10"}
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Eye
+                      size={15}
+                      className={showPassword ? "opacity-100" : "opacity-40"}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((v) => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <Eye
-                        size={15}
-                        className={showPassword ? "opacity-100" : "opacity-40"}
-                      />
-                    </button>
-                  </div>
+                  </button>
                 </div>
+              </div>
 
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="w-3.5 h-3.5 rounded border-border accent-primary"
-                    />
-                    <span className="text-sm text-muted-foreground">Lembrar</span>
-                  </label>
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-border accent-primary cursor-pointer"
+                  />
+                  <span className="text-sm text-muted-foreground">Lembrar</span>
+                </label>
+              </div>
+
+              {error && (
+                <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                  <AlertCircle size={12} className="flex-shrink-0" />
+                  {error}
                 </div>
+              )}
 
-                {error && (
-                  <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
-                    <AlertCircle size={12} className="flex-shrink-0" />
-                    {error}
-                  </div>
+              <button
+                type="submit"
+                disabled={!email || !password || loading}
+                className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-xs"
+              >
+                {loading ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    A entrar...
+                  </>
+                ) : (
+                  "Entrar"
                 )}
+              </button>
+            </form>
 
-                <button
-                  type="submit"
-                  disabled={!email || !password || loading}
-                  className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-xs"
-                >
-                  {loading ? (
-                    <>
-                      <RefreshCw size={14} className="animate-spin" />
-                      A entrar...
-                    </>
-                  ) : (
-                    "Entrar"
-                  )}
-                </button>
-              </form>
-
-              {/* Divider */}
-              <div className="flex items-center gap-3 my-5">
-                <div className="flex-1 h-px bg-border" />
-                <span className="text-xs text-muted-foreground">Ou</span>
-                <div className="flex-1 h-px bg-border" />
+            {/* Separador e Botões de Login Social */}
+            <div className="relative my-5">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border" />
               </div>
-
-              {/* Social buttons */}
-              <div className="space-y-2.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLoading(true);
-                    setTimeout(() => handleAuthSuccess("admin"), 700);
-                  }}
-                  className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-border bg-muted/40 hover:bg-muted/70 transition-colors text-sm font-medium text-foreground"
-                >
-                  <svg
-                    width="17"
-                    height="17"
-                    viewBox="0 0 18 18"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"
-                      fill="#4285F4"
-                    />
-                    <path
-                      d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
-                      fill="#34A853"
-                    />
-                    <path
-                      d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"
-                      fill="#FBBC05"
-                    />
-                    <path
-                      d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"
-                      fill="#EA4335"
-                    />
-                  </svg>
-                  Entrar com Google
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLoading(true);
-                    setTimeout(() => handleAuthSuccess("admin"), 700);
-                  }}
-                  className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-border bg-muted/40 hover:bg-muted/70 transition-colors text-sm font-medium text-foreground"
-                >
-                  <svg
-                    width="17"
-                    height="17"
-                    viewBox="0 0 21 21"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <rect x="1" y="1" width="9" height="9" fill="#F25022" />
-                    <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
-                    <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
-                    <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
-                  </svg>
-                  Entrar com Microsoft
-                </button>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground font-medium">
+                  Ou
+                </span>
               </div>
+            </div>
 
-              {/* Demo quick access */}
-              <div className="mt-6 pt-5 border-t border-border">
-                <p className="text-[10px] text-muted-foreground text-center uppercase tracking-wider mb-3 font-semibold">
-                  Acesso rápido · Demo
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => quickLogin("admin")}
-                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-border hover:border-primary/40 hover:bg-primary/5 transition-colors group text-center"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                      <Settings
-                        size={14}
-                        className="text-muted-foreground group-hover:text-primary transition-colors"
-                      />
-                    </div>
-                    <span className="text-xs font-medium text-foreground">
-                      Gestor Admin
-                    </span>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      admin@sgde.pt
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => quickLogin("staff")}
-                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-border hover:border-primary/40 hover:bg-primary/5 transition-colors group text-center"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                      <User
-                        size={14}
-                        className="text-muted-foreground group-hover:text-primary transition-colors"
-                      />
-                    </div>
-                    <span className="text-xs font-medium text-foreground">
-                      Assistente
-                    </span>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      assistente@sgde.pt
-                    </span>
-                  </button>
-                </div>
-              </div>
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                onClick={() => handleSocialLogin("google")}
+                className="w-full py-2.5 px-4 rounded-xl border border-border bg-background hover:bg-muted/50 text-foreground text-xs font-semibold transition-colors flex items-center justify-center shadow-xs cursor-pointer"
+              >
+                <svg className="w-4 h-4 mr-2.5 flex-shrink-0" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                  />
+                </svg>
+                <span>Entrar com Google</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSocialLogin("microsoft")}
+                className="w-full py-2.5 px-4 rounded-xl border border-border bg-background hover:bg-muted/50 text-foreground text-xs font-semibold transition-colors flex items-center justify-center shadow-xs cursor-pointer"
+              >
+                <svg className="w-4 h-4 mr-2.5 flex-shrink-0" viewBox="0 0 21 21">
+                  <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+                  <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+                  <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+                  <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+                </svg>
+                <span>Entrar com Microsoft</span>
+              </button>
+            </div>
             </>
           )}
 
@@ -390,13 +378,17 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           {view === "forgot" && (
             <>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   setLoading(true);
-                  setTimeout(() => {
+                  try {
+                    await authService.forgotPassword(resetEmail);
+                  } catch {
+                    // Fail silently or still show sent screen for privacy/security
+                  } finally {
                     setLoading(false);
                     setView("forgot-sent");
-                  }, 800);
+                  }
                 }}
                 className="space-y-4"
               >
@@ -436,71 +428,111 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </>
           )}
 
-          {/* ── FORGOT SENT ── */}
+          {/* ── FORGOT SENT actions ── */}
           {view === "forgot-sent" && (
             <div className="space-y-4">
-              <div className="bg-muted/50 rounded-xl px-4 py-3 text-xs font-mono text-muted-foreground text-center">
-                {resetEmail}
+              <div className="bg-muted/35 border border-border/70 rounded-xl p-3.5 text-xs text-muted-foreground leading-relaxed">
+                Se a conta estiver registada no agrupamento, receberá a ligação em instantes. Verifique também a pasta de <strong>spam</strong>.
               </div>
-              <p className="text-xs text-muted-foreground text-center">
-                O link é válido durante{" "}
-                <strong className="text-foreground">30 minutos</strong>.
-                Verifique também a pasta de spam.
-              </p>
+
               <button
                 type="button"
                 onClick={() => {
                   setView("login");
-                  setResetEmail("");
+                  setError("");
                 }}
                 className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors shadow-xs"
               >
                 Voltar ao login
               </button>
+
+              <p className="text-xs text-muted-foreground text-center pt-1">
+                Não recebeu o email?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView("forgot");
+                    setError("");
+                  }}
+                  className="text-primary font-medium hover:underline transition-colors"
+                >
+                  Tentar outro email
+                </button>
+              </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Right panel: decorative Pinx pattern ── */}
-      <div className="hidden lg:block flex-1 bg-primary relative overflow-hidden">
+      {/* ── Right panel: visual branding com as cores #4c57a2 e #2baf82 ── */}
+      <div
+        className="hidden lg:flex flex-1 relative flex-col justify-between p-12 text-white overflow-hidden"
+        style={{
+          background:
+            "linear-gradient(135deg, #373e75 0%, #4c57a2 35%, #368286 70%, #2baf82 100%)",
+        }}
+      >
         <PinxPattern />
-        {/* Centered branding overlay */}
-        <div className="relative z-10 flex flex-col items-center justify-center h-full text-center px-12">
-          <div className="w-16 h-16 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center mb-6 border border-white/20">
-            <Layers size={28} className="text-white" />
+
+        {/* Top badge */}
+        <div className="relative z-10 flex items-center justify-between">
+          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/15">
+            <span
+              className="w-2 h-2 rounded-full animate-pulse"
+              style={{ backgroundColor: "#2baf82" }}
+            />
+            <Shield size={14} className="text-white" />
+            <span className="text-xs font-semibold text-white tracking-wide">
+              SGDE · Gestão de Escalas
+            </span>
           </div>
-          <h2 className="text-3xl font-bold text-white mb-3 leading-tight">
-            Sistema de Gestão
-            <br />
-            Dinâmica de Escalas
-          </h2>
-          <p className="text-white/70 text-sm max-w-xs leading-relaxed">
-            Controlo de cobertura, gestão de ausências e conformidade em tempo
-            real para equipas de assistentes.
+          <span className="text-xs text-white/70 font-mono bg-black/15 px-2 py-0.5 rounded-md">
+            v0.0.1
+          </span>
+        </div>
+
+        {/* Middle illustration / testimonial */}
+        <div className="relative z-10 max-w-md my-auto">
+          <div className="w-14 h-14 rounded-2xl bg-white/95 backdrop-blur-md flex items-center justify-center mb-6 border border-white/40 shadow-xl p-2.5">
+            <img
+              src={appIcon}
+              alt="SGDE"
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <blockquote className="text-2xl font-semibold leading-snug mb-4 text-white">
+            "Organização inteligente de horários e equipas para agrupamentos
+            escolares."
+          </blockquote>
+          <p className="text-sm text-white/80 leading-relaxed">
+            Plataforma centralizada para gestão de matrizes semanais,
+            ausências, reforços e horários de assistentes operacionais.
           </p>
-          <div className="mt-10 grid grid-cols-2 gap-3 w-full max-w-xs">
+
+          {/* Feature pills */}
+          <div className="flex flex-wrap gap-2 mt-6">
             {[
-              { icon: <Calendar size={14} />, text: "Escalas automáticas" },
-              { icon: <Shield size={14} />, text: "Cobertura mínima" },
-              { icon: <Users size={14} />, text: "Gestão de equipa" },
-              { icon: <BarChart2 size={14} />, text: "Relatórios" },
-            ].map((f, i) => (
+              { icon: <BarChart2 size={12} />, label: "Matriz Dinâmica" },
+              { icon: <Users size={12} />, label: "Controlo de Lotação" },
+              { icon: <Shield size={12} />, label: "Motor de Regras" },
+            ].map((p, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2.5 bg-white/10 rounded-xl px-3 py-2.5 border border-white/10"
+                className="flex items-center gap-1.5 bg-white/10 hover:bg-white/15 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-medium border border-white/15 text-white shadow-xs transition-colors"
               >
-                <span className="text-white/70">{f.icon}</span>
-                <span className="text-white/90 text-xs font-medium">{f.text}</span>
+                <span style={{ color: "#2baf82" }}>{p.icon}</span>
+                {p.label}
               </div>
             ))}
           </div>
-          <p className="absolute bottom-6 text-white/30 text-xs">
-            © 2026 SGDE · v2.0
-          </p>
+        </div>
+
+        {/* Bottom footer */}
+        <div className="relative z-10 flex items-center justify-between text-xs text-white/70 border-t border-white/15 pt-4">
+          <span>Agrupamento de Escolas</span>
+          <span>Ano Letivo 2026/2027</span>
         </div>
       </div>
     </div>
   );
 }
-

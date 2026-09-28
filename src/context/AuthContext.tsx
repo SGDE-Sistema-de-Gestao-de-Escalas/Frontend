@@ -1,24 +1,31 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import type { Role } from "../types";
+import authService, { AuthUser, LoginCredentials } from "../api/services/auth.service";
 
-interface UserProfile {
+export interface UserProfile {
+  id?: number;
   name: string;
   initials: string;
   role: Role;
   roleLabel: string;
   email: string;
+  assistant_id?: number | null;
+  school_id?: number | null;
 }
 
 interface AuthContextType {
   role: Role | null;
   user: UserProfile;
   login: (role: Role) => void;
-  logout: () => void;
+  loginWithCredentials: (credentials: LoginCredentials, remember?: boolean) => Promise<Role>;
+  logout: () => Promise<void>;
   switchRole: () => void;
   isAuthenticated: boolean;
+  isLoading: boolean;
 }
 
 const ADMIN_USER: UserProfile = {
+  id: 1,
   name: "Miguel Silva",
   initials: "MS",
   role: "admin",
@@ -27,6 +34,7 @@ const ADMIN_USER: UserProfile = {
 };
 
 const STAFF_USER: UserProfile = {
+  id: 2,
   name: "Ana Costa",
   initials: "AC",
   role: "staff",
@@ -36,6 +44,31 @@ const STAFF_USER: UserProfile = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function extractInitials(name: string): string {
+  if (!name) return "U";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function mapAuthUserToProfile(authUser: AuthUser): UserProfile {
+  const roleSlug: Role =
+    typeof authUser.role === "string"
+      ? (authUser.role as Role)
+      : (authUser.role as any)?.slug || "staff";
+
+  return {
+    id: authUser.id,
+    name: authUser.name,
+    initials: extractInitials(authUser.name),
+    role: roleSlug,
+    roleLabel: roleSlug === "admin" ? "Administrador" : "Assistente",
+    email: authUser.email,
+    assistant_id: authUser.assistant_id,
+    school_id: authUser.school_id,
+  };
+}
+
 export function AuthProvider({
   children,
   initialRole = "admin",
@@ -44,30 +77,94 @@ export function AuthProvider({
   initialRole?: Role | null;
 }) {
   const [role, setRole] = useState<Role | null>(initialRole);
+  const [userProfile, setUserProfile] = useState<UserProfile>(
+    initialRole === "admin" ? ADMIN_USER : STAFF_USER
+  );
+  const [isLoading, setIsLoading] = useState(true);
 
-  const user = role === "admin" ? ADMIN_USER : STAFF_USER;
+  // Check existing session token on application load (localStorage or sessionStorage)
+  useEffect(() => {
+    async function checkCurrentSession() {
+      const token =
+        localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+      if (token) {
+        try {
+          const authUser = await authService.getMe();
+          const profile = mapAuthUserToProfile(authUser);
+          setUserProfile(profile);
+          setRole(profile.role);
+        } catch {
+          // Token is invalid or backend unreachable; clear token
+          localStorage.removeItem("auth_token");
+          sessionStorage.removeItem("auth_token");
+        }
+      }
+      setIsLoading(false);
+    }
+
+    checkCurrentSession();
+  }, []);
+
+  async function loginWithCredentials(
+    credentials: LoginCredentials,
+    remember: boolean = true
+  ): Promise<Role> {
+    const isRemember = credentials.remember !== undefined ? credentials.remember : remember;
+    const response = await authService.login({ ...credentials, remember: isRemember });
+    if (isRemember) {
+      localStorage.setItem("auth_token", response.token);
+      sessionStorage.removeItem("auth_token");
+    } else {
+      sessionStorage.setItem("auth_token", response.token);
+      localStorage.removeItem("auth_token");
+    }
+
+    const profile = mapAuthUserToProfile(response.user);
+    setUserProfile(profile);
+    setRole(profile.role);
+    return profile.role;
+  }
 
   function login(newRole: Role) {
     setRole(newRole);
+    setUserProfile(newRole === "admin" ? ADMIN_USER : STAFF_USER);
   }
 
-  function logout() {
-    setRole(null);
+  async function logout() {
+    try {
+      const token =
+        localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+      if (token) {
+        await authService.logout();
+      }
+    } catch {
+      // Ignore network errors on logout
+    } finally {
+      localStorage.removeItem("auth_token");
+      sessionStorage.removeItem("auth_token");
+      setRole(null);
+    }
   }
 
   function switchRole() {
-    setRole((prev) => (prev === "admin" ? "staff" : "admin"));
+    setRole((prev) => {
+      const next = prev === "admin" ? "staff" : "admin";
+      setUserProfile(next === "admin" ? ADMIN_USER : STAFF_USER);
+      return next;
+    });
   }
 
   return (
     <AuthContext.Provider
       value={{
         role,
-        user,
+        user: userProfile,
         login,
+        loginWithCredentials,
         logout,
         switchRole,
         isAuthenticated: role !== null,
+        isLoading,
       }}
     >
       {children}
@@ -82,4 +179,3 @@ export function useAuth() {
   }
   return ctx;
 }
-
