@@ -46,9 +46,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setLoading(true);
 
     try {
-      // Pedido real à API Laravel Sanctum (/api/login)
+      // Pedido real à API Laravel Sanctum (/api/login) com suporte a 'remember'
       const resolvedRole = await auth.loginWithCredentials(
-        { email, password },
+        { email, password, remember: rememberMe },
         rememberMe
       );
       handleAuthSuccess(resolvedRole);

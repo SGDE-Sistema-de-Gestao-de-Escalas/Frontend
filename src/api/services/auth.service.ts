@@ -1,9 +1,10 @@
-﻿import apiClient from "../client";
+import apiClient from "../client";
 import { Role } from "../../types";
 
 export interface LoginCredentials {
   email: string;
   password: string;
+  remember?: boolean;
 }
 
 export interface AuthUser {

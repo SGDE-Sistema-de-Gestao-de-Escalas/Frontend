@@ -109,8 +109,9 @@ export function AuthProvider({
     credentials: LoginCredentials,
     remember: boolean = true
   ): Promise<Role> {
-    const response = await authService.login(credentials);
-    if (remember) {
+    const isRemember = credentials.remember !== undefined ? credentials.remember : remember;
+    const response = await authService.login({ ...credentials, remember: isRemember });
+    if (isRemember) {
       localStorage.setItem("auth_token", response.token);
       sessionStorage.removeItem("auth_token");
     } else {
