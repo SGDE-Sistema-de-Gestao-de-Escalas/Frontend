@@ -14,8 +14,8 @@ export default function AssistantsListPage({
   onViewProfile,
 }: AssistantsListPageProps) {
   const [tab, setTab] = useState<"ativos" | "inativos">("ativos");
-  const active = ASSISTANTS.filter((a) => a.id !== 2);
-  const inactive = ASSISTANTS.filter((a) => a.id === 2);
+  const active = ASSISTANTS.filter((a) => (a.active ?? a.is_active ?? true));
+  const inactive = ASSISTANTS.filter((a) => !(a.active ?? a.is_active ?? true));
   const list = tab === "ativos" ? active : inactive;
 
   return (

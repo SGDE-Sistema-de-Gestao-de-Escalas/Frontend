@@ -29,14 +29,17 @@ interface AddEditAssistantProps {
   onCancel: () => void;
   onBack?: () => void;
   isEdit?: boolean;
+  initialActive?: boolean;
 }
 
 export default function AddEditAssistant({
   onSave,
   onCancel,
   isEdit = false,
+  initialActive = true,
 }: AddEditAssistantProps) {
   const [section, setSection] = useState<"personal" | "schedule">("personal");
+  const [isActive, setIsActive] = useState<boolean>(initialActive);
   const [showAddScheduleModal, setShowAddScheduleModal] = useState(false);
   const [shiftProfile, setShiftProfile] = useState<"fixed" | "rotating">(
     isEdit ? "rotating" : "fixed"
@@ -201,9 +204,30 @@ export default function AddEditAssistant({
       {section === "personal" && (
         <div className="grid grid-cols-2 gap-6">
           <Card className="p-5 col-span-2">
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-              Identificação
-            </h4>
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-border/50">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Identificação
+              </h4>
+              <div className="flex items-center gap-2.5">
+                <span className={`text-xs font-medium ${isActive ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
+                  {isActive ? "Assistente Ativo" : "Assistente Inativo"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsActive((v) => !v)}
+                  className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${
+                    isActive ? "bg-primary" : "bg-muted"
+                  }`}
+                  title={isActive ? "Inativar Assistente" : "Ativar Assistente"}
+                >
+                  <span
+                    className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                      isActive ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {[
                 {

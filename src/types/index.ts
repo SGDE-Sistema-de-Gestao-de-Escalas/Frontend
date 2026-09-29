@@ -60,6 +60,19 @@ export interface Assistant {
   exception: string | null;
   schoolId: EntityId;
   availableForTransfer: boolean;
+  active: boolean;
+  is_active?: boolean;
+}
+
+export interface AdminUser {
+  id: EntityId;
+  name: string;
+  email: string;
+  role: "admin" | "staff" | string;
+  role_id?: string;
+  is_active: boolean;
+  active?: boolean;
+  created_at?: string;
 }
 
 export type AbsenceStatus = "pending" | "justified" | "unjustified";

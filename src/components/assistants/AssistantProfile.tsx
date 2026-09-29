@@ -1,12 +1,17 @@
 import React, { useState } from "react";
 import {
+  AlertTriangle,
   Building2,
   Calendar,
+  CheckCircle,
   ChevronLeft,
   Edit2,
   Info,
   Plus,
+  Trash2,
   User,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -15,27 +20,35 @@ import AddEditAssistant from "./AddEditAssistant";
 import Modal from "../common/Modal";
 import TimePicker from "../common/TimePicker";
 import DatePicker from "../common/DatePicker";
+import type { EntityId } from "../../types";
 
 interface AssistantProfileProps {
   onBack?: () => void;
   assistantName?: string;
   initials?: string;
+  assistantId?: EntityId;
+  initialActive?: boolean;
 }
 
 export default function AssistantProfile({
   onBack,
   assistantName = "Ana Costa",
   initials = "ER",
+  initialActive = true,
 }: AssistantProfileProps) {
   const [activeTab, setActiveTab] = useState<"info" | "history">("info");
   const [showAddException, setShowAddException] = useState(false);
   const [editing, setEditing] = useState(false);
   const [availableForTransfer, setAvailableForTransfer] = useState(false);
+  const [isActive, setIsActive] = useState<boolean>(initialActive);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   if (editing) {
     return (
       <AddEditAssistant
         isEdit
+        initialActive={isActive}
         onSave={() => setEditing(false)}
         onCancel={() => setEditing(false)}
         onBack={onBack}
@@ -67,8 +80,15 @@ export default function AssistantProfile({
               {assistantName}
             </h2>
             <div className="flex items-center gap-2 mt-0.5">
-              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-                Ativo
+              <Badge
+                variant="outline"
+                className={
+                  isActive
+                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                    : "bg-muted text-muted-foreground border-border"
+                }
+              >
+                {isActive ? "Ativo" : "Inativo"}
               </Badge>
               <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
                 Licença Amamentação
@@ -76,13 +96,41 @@ export default function AssistantProfile({
             </div>
           </div>
         </div>
-        <button
-          onClick={() => setEditing(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
-        >
-          <Edit2 size={13} />
-          Editar
-        </button>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setShowStatusModal(true)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+              isActive
+                ? "border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
+                : "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+            }`}
+            title={isActive ? "Inativar Assistente" : "Reativar Assistente"}
+          >
+            {isActive ? <UserX size={14} /> : <UserCheck size={14} />}
+            {isActive ? "Inativar" : "Reativar"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+          >
+            <Edit2 size={13} />
+            Editar
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowDeleteModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-destructive/20 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+            title="Eliminar Assistente"
+          >
+            <Trash2 size={13} />
+            Eliminar
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -399,6 +447,118 @@ export default function AssistantProfile({
 
       {/* Histórico de Horários tab */}
       {activeTab === "history" && <ProfileScheduleHistory />}
+
+      {/* Modal: Confirmar Alteração de Estado (Inativar / Ativar) */}
+      {showStatusModal && (
+        <Modal
+          title={isActive ? "Inativar Assistente" : "Reativar Assistente"}
+          subtitle={assistantName}
+          onClose={() => setShowStatusModal(false)}
+        >
+          <div className="space-y-4">
+            <div
+              className={`p-3.5 rounded-xl border flex items-start gap-3 ${
+                isActive
+                  ? "bg-amber-500/10 border-amber-500/25 text-amber-800 dark:text-amber-300"
+                  : "bg-emerald-500/10 border-emerald-500/25 text-emerald-800 dark:text-emerald-300"
+              }`}
+            >
+              {isActive ? (
+                <AlertTriangle
+                  size={18}
+                  className="flex-shrink-0 text-amber-600 mt-0.5"
+                />
+              ) : (
+                <CheckCircle
+                  size={18}
+                  className="flex-shrink-0 text-emerald-600 mt-0.5"
+                />
+              )}
+              <div className="text-xs leading-relaxed">
+                {isActive ? (
+                  <>
+                    Tem a certeza que pretende inativar o assistente{" "}
+                    <strong>{assistantName}</strong>?
+                    Enquanto estiver inativo, o assistente deixará de estar elegível para atribuição de novos turnos e horários ativos.
+                  </>
+                ) : (
+                  <>
+                    Deseja reativar o assistente{" "}
+                    <strong>{assistantName}</strong>?
+                    O assistente voltará a estar ativo e elegível para escalas de serviço e marcações.
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsActive(!isActive);
+                  setShowStatusModal(false);
+                }}
+                className={`flex-1 py-2.5 rounded-lg text-white text-sm font-semibold transition-colors shadow-xs ${
+                  isActive
+                    ? "bg-amber-600 hover:bg-amber-700"
+                    : "bg-emerald-600 hover:bg-emerald-700"
+                }`}
+              >
+                {isActive ? "Confirmar Inativação" : "Confirmar Reativação"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowStatusModal(false)}
+                className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal: Confirmar Eliminação */}
+      {showDeleteModal && (
+        <Modal
+          title="Eliminar Assistente"
+          subtitle="Esta ação é permanente"
+          onClose={() => setShowDeleteModal(false)}
+        >
+          <div className="space-y-4">
+            <div className="p-3.5 rounded-xl border border-destructive/20 bg-destructive/10 text-destructive text-xs leading-relaxed flex items-start gap-3">
+              <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
+              <div>
+                Tem a certeza que pretende eliminar permanentemente o assistente{" "}
+                <strong>{assistantName}</strong>?
+                Esta ação é irreversível e removerá o registo do assistente e todas as suas configurações associadas.
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  if (onBack) {
+                    onBack();
+                  }
+                }}
+                className="flex-1 py-2.5 rounded-lg bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 transition-colors shadow-xs"
+              >
+                Eliminar Definitivamente
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
