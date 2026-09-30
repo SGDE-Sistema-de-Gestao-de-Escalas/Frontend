@@ -18,6 +18,7 @@ interface AuthContextType {
   user: UserProfile;
   login: (role: Role) => void;
   loginWithCredentials: (credentials: LoginCredentials, remember?: boolean) => Promise<Role>;
+  loginWithToken: (token: string) => Promise<Role>;
   logout: () => Promise<void>;
   switchRole: () => void;
   isAuthenticated: boolean;
@@ -125,6 +126,16 @@ export function AuthProvider({
     return profile.role;
   }
 
+  async function loginWithToken(token: string): Promise<Role> {
+    localStorage.setItem("auth_token", token);
+    sessionStorage.removeItem("auth_token");
+    const authUser = await authService.getMe();
+    const profile = mapAuthUserToProfile(authUser);
+    setUserProfile(profile);
+    setRole(profile.role);
+    return profile.role;
+  }
+
   function login(newRole: Role) {
     setRole(newRole);
     setUserProfile(newRole === "admin" ? ADMIN_USER : STAFF_USER);
@@ -161,6 +172,7 @@ export function AuthProvider({
         user: userProfile,
         login,
         loginWithCredentials,
+        loginWithToken,
         logout,
         switchRole,
         isAuthenticated: role !== null,

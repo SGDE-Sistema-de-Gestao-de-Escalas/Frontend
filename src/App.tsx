@@ -4,6 +4,8 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { SchoolProvider } from "./context/SchoolContext";
 import { AuthProvider } from "./context/AuthContext";
 
+import { Toaster } from "./components/ui/sonner";
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -11,6 +13,7 @@ export default function App() {
         <AuthProvider>
           <BrowserRouter>
             <AppRouter />
+            <Toaster position="top-right" richColors />
           </BrowserRouter>
         </AuthProvider>
       </SchoolProvider>

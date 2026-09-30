@@ -1,4 +1,4 @@
-﻿import axios, { AxiosError } from "axios";
+import axios, { AxiosError } from "axios";
 import { toast } from "sonner";
 import type { ApiValidationError } from "./types/api.types";
 
@@ -48,45 +48,49 @@ apiClient.interceptors.response.use(
     }
 
     const { status, data } = error.response;
+    const backendMessage = data?.message || (data as any)?.error;
+
+    // Se o BackOffice enviou uma mensagem específica de negócio, mostramos exatamente essa mensagem!
+    if (backendMessage && status !== 401 && status !== 422) {
+      toast.error(backendMessage);
+      return Promise.reject(error);
+    }
 
     switch (status) {
+      case 400:
+        toast.error(backendMessage || "Os dados enviados são inválidos.");
+        break;
+
       case 401:
         localStorage.removeItem("auth_token");
         sessionStorage.removeItem("auth_token");
-        if (window.location.pathname !== "/login") {
+        if (window.location.pathname !== "/login" && window.location.pathname !== "/auth/callback") {
           window.location.href = "/login";
         }
         break;
 
       case 403:
-        toast.error("Acesso Negado", {
-          description: "Não tem permissões para realizar esta ação.",
-        });
+        toast.error(backendMessage || "Não tem permissões para realizar esta ação.");
         break;
 
       case 404:
-        toast.error("Não Encontrado", {
-          description: data?.message || "O recurso solicitado não existe.",
-        });
+        toast.error(backendMessage || "O recurso solicitado não existe.");
         break;
 
       case 422:
-        // Handled inline in forms
+        // Validações de formulários geridas inline pelos próprios formulários
         break;
 
       case 429:
-        toast.error("Limite Excedido", {
-          description:
-            data?.message ||
-            "Demasiadas tentativas. Por favor aguarde um momento antes de tentar novamente.",
-        });
+        toast.error(
+          backendMessage ||
+            "Demasiadas tentativas. Por favor aguarde um momento antes de tentar novamente."
+        );
         break;
 
       case 500:
       default:
-        toast.error("Erro no Servidor", {
-          description: data?.message || "Ocorreu um erro inesperado no servidor.",
-        });
+        toast.error(backendMessage || "Ocorreu um erro inesperado no servidor.");
         break;
     }
 

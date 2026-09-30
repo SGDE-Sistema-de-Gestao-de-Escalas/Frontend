@@ -27,6 +27,12 @@ export interface AuthResponse {
   user: AuthUser;
 }
 
+export type OAuthProvider = "google" | "azure";
+
+export interface OAuthRedirectResponse {
+  url: string;
+}
+
 export const authService = {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     // Tenta primeiro /login (padrão Laravel da tua branch), com fallback para /auth/login
@@ -104,6 +110,17 @@ export const authService = {
       data
     );
     return response.data;
+  },
+
+  /**
+   * Get OAuth redirect authorization URL
+   * GET /api/auth/{provider}/redirect
+   */
+  async getOAuthRedirectUrl(provider: OAuthProvider): Promise<string> {
+    const response = await apiClient.get<OAuthRedirectResponse>(
+      `/auth/${provider}/redirect`
+    );
+    return response.data.url;
   },
 };
 
