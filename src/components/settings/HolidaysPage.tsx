@@ -1,19 +1,27 @@
 import React, { useState } from "react";
 import { AlertTriangle, Pencil, Plus, Trash2, X } from "lucide-react";
 import { HOLIDAYS } from "../../api/mockData";
-import type { Holiday } from "../../types";
+import type { Holiday, EntityId } from "../../types";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
-import DatePicker from "../common/DatePicker";
+import DatePicker, { formatToIsoDate, parseFlexibleDate } from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
+
+function formatDisplayDate(dateStr: string) {
+  const d = parseFlexibleDate(dateStr);
+  if (!d) return dateStr;
+  const day = String(d.getDate()).padStart(2, "0");
+  const months = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+  return `${day} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
 
 export default function HolidaysPage() {
   useDocumentTitle("Feriados");
   const [holidays, setHolidays] = useState<Holiday[]>(HOLIDAYS);
   const [showAdd, setShowAdd] = useState(false);
-  const [editingHolidayId, setEditingHolidayId] = useState<number | null>(null);
+  const [editingHolidayId, setEditingHolidayId] = useState<EntityId | null>(null);
   const [newName, setNewName] = useState("");
   const [newDate, setNewDate] = useState("");
   const [newType, setNewType] = useState<"national" | "municipal">("national");
@@ -30,7 +38,7 @@ export default function HolidaysPage() {
   function openEdit(h: Holiday) {
     setEditingHolidayId(h.id);
     setNewName(h.name);
-    setNewDate(h.date);
+    setNewDate(formatToIsoDate(h.date) || h.date);
     setNewType(h.type as "national" | "municipal");
     setShowAdd(true);
   }
@@ -49,7 +57,7 @@ export default function HolidaysPage() {
       setHolidays((prev) => [
         ...prev,
         {
-          id: prev.length > 0 ? Math.max(...prev.map((x) => x.id)) + 1 : 1,
+          id: prev.length > 0 ? Math.max(...prev.map((x) => Number(x.id) || 0)) + 1 : 1,
           name: newName.trim(),
           date: newDate,
           type: newType,
@@ -191,7 +199,7 @@ export default function HolidaysPage() {
                         {h.name}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                        {h.date}
+                        {formatDisplayDate(h.date)}
                       </td>
                       <td className="px-4 py-3">
                         <Badge
@@ -250,7 +258,7 @@ export default function HolidaysPage() {
                       {h.name}
                     </p>
                     <p className="text-[10px] font-mono text-muted-foreground">
-                      {h.date}
+                      {formatDisplayDate(h.date)}
                     </p>
                   </div>
                 </div>
@@ -290,7 +298,7 @@ export default function HolidaysPage() {
           holidayDeleteTarget ? (
             <>
               Tem a certeza que pretende eliminar o feriado{" "}
-              <strong className="text-foreground">{holidayDeleteTarget.name}</strong> ({holidayDeleteTarget.date})?
+              <strong className="text-foreground">{holidayDeleteTarget.name}</strong> ({formatDisplayDate(holidayDeleteTarget.date)})?
               Esta ação removerá o feriado das exceções automáticas de escala.
             </>
           ) : ""

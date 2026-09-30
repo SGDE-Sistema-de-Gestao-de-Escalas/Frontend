@@ -17,7 +17,7 @@ import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import TimePicker from "../common/TimePicker";
-import DatePicker from "../common/DatePicker";
+import DatePicker, { formatToIsoDate } from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 
 export default function ScheduleRulesTab() {
@@ -72,8 +72,8 @@ export default function ScheduleRulesTab() {
     setFormPeriodEnd(rule.periodEnd);
     setFormMinStaff(String(rule.min));
     setFormRuleType(rule.type);
-    setFormValidityStart(rule.start.split(" ").reverse().join("-"));
-    setFormValidityEnd(rule.end ?? "");
+    setFormValidityStart(formatToIsoDate(rule.start) || rule.start);
+    setFormValidityEnd(rule.end ? (formatToIsoDate(rule.end) || rule.end) : "");
     setFormAssistantIds(rule.assistantIds);
     setFormStep("form");
     setShowAdd(true);
@@ -534,7 +534,7 @@ export default function ScheduleRulesTab() {
             <>
               Tem a certeza que pretende eliminar a regra de{" "}
               <strong className="text-foreground">
-                {DEFAULT_ACTIVITY_TYPES.find((t) => t.id === deleteRuleTarget.activityId)?.label ?? deleteRuleTarget.activityId}
+                {DEFAULT_ACTIVITY_TYPES.find((t) => t.id === deleteRuleTarget.activityTypeId)?.label ?? deleteRuleTarget.activityTypeId}
               </strong>{" "}
               (Vigência: {deleteRuleTarget.start}
               {deleteRuleTarget.end ? ` — ${deleteRuleTarget.end}` : " — Em aberto"})?

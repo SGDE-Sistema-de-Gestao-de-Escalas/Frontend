@@ -8,6 +8,100 @@ interface DatePickerProps {
   placeholder?: string;
 }
 
+export function parseFlexibleDate(value: string | null | undefined): Date | null {
+  if (!value || typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  // 1. ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    const y = parseInt(isoMatch[1], 10);
+    const m = parseInt(isoMatch[2], 10) - 1;
+    const d = parseInt(isoMatch[3], 10);
+    const date = new Date(y, m, d, 12, 0, 0);
+    if (!isNaN(date.getTime())) return date;
+  }
+
+  // 2. Format DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dmyMatch) {
+    const d = parseInt(dmyMatch[1], 10);
+    const m = parseInt(dmyMatch[2], 10) - 1;
+    const y = parseInt(dmyMatch[3], 10);
+    const date = new Date(y, m, d, 12, 0, 0);
+    if (!isNaN(date.getTime())) return date;
+  }
+
+  // 3. Portuguese / text dates: "DD Mmm YYYY" or "YYYY-Mmm-DD" (e.g. "03 Mar 2026", "01 Set 2025")
+  const ptMonths: Record<string, number> = {
+    jan: 0,
+    fev: 1,
+    mar: 2,
+    abr: 3,
+    mai: 4,
+    may: 4,
+    jun: 5,
+    jul: 6,
+    ago: 7,
+    aug: 7,
+    set: 8,
+    sep: 8,
+    out: 9,
+    oct: 9,
+    nov: 10,
+    dez: 11,
+    dec: 11,
+  };
+
+  const ptMatch = trimmed.match(/^(\d{1,2})\s+([A-Za-zçÇáÁéÉíÍóÓúÚ]+)\s+(\d{4})/);
+  if (ptMatch) {
+    const d = parseInt(ptMatch[1], 10);
+    const mStr = ptMatch[2]
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .slice(0, 3);
+    const y = parseInt(ptMatch[3], 10);
+    if (mStr in ptMonths) {
+      const date = new Date(y, ptMonths[mStr], d, 12, 0, 0);
+      if (!isNaN(date.getTime())) return date;
+    }
+  }
+
+  // Reverse "YYYY-Mmm-DD"
+  const revPtMatch = trimmed.match(/^(\d{4})[\-\s]+([A-Za-zçÇáÁéÉíÍóÓúÚ]+)[\-\s]+(\d{1,2})/);
+  if (revPtMatch) {
+    const y = parseInt(revPtMatch[1], 10);
+    const mStr = revPtMatch[2]
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .slice(0, 3);
+    const d = parseInt(revPtMatch[3], 10);
+    if (mStr in ptMonths) {
+      const date = new Date(y, ptMonths[mStr], d, 12, 0, 0);
+      if (!isNaN(date.getTime())) return date;
+    }
+  }
+
+  // 4. Fallback standard Date parsing
+  const std = new Date(trimmed);
+  if (!isNaN(std.getTime())) {
+    return std;
+  }
+
+  return null;
+}
+
+export function formatToIsoDate(value: string | null | undefined): string {
+  const d = parseFlexibleDate(value);
+  if (!d) return "";
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
 export default function DatePicker({
   value,
   onChange,
@@ -17,14 +111,22 @@ export default function DatePicker({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const parsed = value ? new Date(value + "T12:00:00") : null;
+  const parsed = parseFlexibleDate(value);
   const today = new Date();
   const [viewYear, setViewYear] = useState(
-    parsed?.getFullYear() ?? today.getFullYear()
+    parsed ? parsed.getFullYear() : today.getFullYear()
   );
   const [viewMonth, setViewMonth] = useState(
-    parsed?.getMonth() ?? today.getMonth()
+    parsed ? parsed.getMonth() : today.getMonth()
   );
+
+  useEffect(() => {
+    const p = parseFlexibleDate(value);
+    if (p) {
+      setViewYear(p.getFullYear());
+      setViewMonth(p.getMonth());
+    }
+  }, [value]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -169,7 +271,11 @@ export default function DatePicker({
               const mm = String(viewMonth + 1).padStart(2, "0");
               const dd = String(day).padStart(2, "0");
               const iso = `${viewYear}-${mm}-${dd}`;
-              const isSelected = value === iso;
+              const isSelected = parsed
+                ? parsed.getFullYear() === viewYear &&
+                  parsed.getMonth() === viewMonth &&
+                  parsed.getDate() === day
+                : value === iso;
               const isToday =
                 today.getFullYear() === viewYear &&
                 today.getMonth() === viewMonth &&
