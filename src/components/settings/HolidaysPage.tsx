@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AlertTriangle, Plus, Trash2, X } from "lucide-react";
+import { AlertTriangle, Pencil, Plus, Trash2, X } from "lucide-react";
 import { HOLIDAYS } from "../../api/mockData";
 import type { Holiday } from "../../types";
 import { Badge } from "../ui/badge";
@@ -13,24 +13,52 @@ export default function HolidaysPage() {
   useDocumentTitle("Feriados");
   const [holidays, setHolidays] = useState<Holiday[]>(HOLIDAYS);
   const [showAdd, setShowAdd] = useState(false);
+  const [editingHolidayId, setEditingHolidayId] = useState<number | null>(null);
   const [newName, setNewName] = useState("");
   const [newDate, setNewDate] = useState("");
   const [newType, setNewType] = useState<"national" | "municipal">("national");
   const [holidayDeleteTarget, setHolidayDeleteTarget] = useState<Holiday | null>(null);
 
-  function addHoliday() {
-    if (!newName || !newDate) return;
-    setHolidays((prev) => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        name: newName,
-        date: newDate,
-        type: newType,
-        impact: "medium",
-      },
-    ]);
+  function openAdd() {
+    setEditingHolidayId(null);
+    setNewName("");
+    setNewDate("");
+    setNewType("national");
+    setShowAdd(true);
+  }
+
+  function openEdit(h: Holiday) {
+    setEditingHolidayId(h.id);
+    setNewName(h.name);
+    setNewDate(h.date);
+    setNewType(h.type as "national" | "municipal");
+    setShowAdd(true);
+  }
+
+  function saveHoliday() {
+    if (!newName.trim() || !newDate) return;
+    if (editingHolidayId !== null) {
+      setHolidays((prev) =>
+        prev.map((h) =>
+          h.id === editingHolidayId
+            ? { ...h, name: newName.trim(), date: newDate, type: newType }
+            : h
+        )
+      );
+    } else {
+      setHolidays((prev) => [
+        ...prev,
+        {
+          id: prev.length > 0 ? Math.max(...prev.map((x) => x.id)) + 1 : 1,
+          name: newName.trim(),
+          date: newDate,
+          type: newType,
+          impact: "medium",
+        },
+      ]);
+    }
     setShowAdd(false);
+    setEditingHolidayId(null);
     setNewName("");
     setNewDate("");
   }
@@ -54,7 +82,7 @@ export default function HolidaysPage() {
             </h3>
             <button
               type="button"
-              onClick={() => setShowAdd(true)}
+              onClick={openAdd}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
             >
               <Plus size={12} />
@@ -66,10 +94,12 @@ export default function HolidaysPage() {
             <DialogContent className="w-full max-w-md p-0 overflow-visible rounded-xl border border-border bg-card shadow-2xl">
               <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10 rounded-t-xl">
                 <DialogTitle className="font-semibold text-foreground text-sm">
-                  Novo Feriado
+                  {editingHolidayId !== null ? "Editar Feriado" : "Novo Feriado"}
                 </DialogTitle>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Adicionar ao calendário de feriados
+                  {editingHolidayId !== null
+                    ? "Alterar dados do feriado no calendário"
+                    : "Adicionar ao calendário de feriados"}
                 </p>
               </DialogHeader>
 
@@ -81,8 +111,10 @@ export default function HolidaysPage() {
                   <input
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && saveHoliday()}
                     placeholder="Ex: Carnaval"
                     className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    autoFocus
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -113,21 +145,21 @@ export default function HolidaysPage() {
                   </div>
                 </div>
 
-                <div className="flex gap-2 pt-2 border-t border-border">
-                  <button
-                    type="button"
-                    onClick={addHoliday}
-                    disabled={!newName || !newDate}
-                    className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
-                  >
-                    Guardar
-                  </button>
+                <div className="flex gap-3 pt-2 border-t border-border">
                   <button
                     type="button"
                     onClick={() => setShowAdd(false)}
-                    className="px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                   >
                     Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveHoliday}
+                    disabled={!newName.trim() || !newDate}
+                    className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
+                  >
+                    {editingHolidayId !== null ? "Guardar Alterações" : "Criar Feriado"}
                   </button>
                 </div>
               </div>
@@ -172,14 +204,24 @@ export default function HolidaysPage() {
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setHolidayDeleteTarget(h)}
-                          className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                          title="Eliminar feriado"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        <div className="flex items-center gap-1 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => openEdit(h)}
+                            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            title="Editar feriado"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setHolidayDeleteTarget(h)}
+                            className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                            title="Eliminar feriado"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
