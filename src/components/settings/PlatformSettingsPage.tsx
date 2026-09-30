@@ -202,6 +202,8 @@ export default function PlatformSettingsPage() {
               is_active: u.is_active,
               active: u.is_active,
               created_at: u.created_at ? new Date(u.created_at).toLocaleDateString("pt-PT") : undefined,
+              can_delete: u.can_delete ?? true,
+              cannot_delete_reason: u.cannot_delete_reason ?? null,
             }));
           if (mapped.length > 0) {
             setAdminsList(mapped);
@@ -332,13 +334,25 @@ export default function PlatformSettingsPage() {
 
     try {
       await usersService.delete(targetId);
-    } catch (err) {
-      console.warn("API delete failed, removing from local state:", err);
+      setAdminsList((prev) => prev.filter((a) => a.id !== targetId));
+      toast.success("Administrador removido com sucesso");
+    } catch (err: any) {
+      console.warn("API delete failed:", err);
+      const apiMsg = err?.response?.data?.message || err?.response?.data?.error;
+      if (apiMsg) {
+        toast.error(apiMsg);
+        return;
+      }
+      const isDev = Boolean((import.meta as any).env?.DEV);
+      if (isDev && !err?.response) {
+        setAdminsList((prev) => prev.filter((a) => a.id !== targetId));
+        toast.success("Administrador removido (modo de demonstração)");
+      } else {
+        toast.error("Não foi possível eliminar o administrador.");
+      }
+    } finally {
+      setAdminDeleteConfirm(null);
     }
-
-    setAdminsList((prev) => prev.filter((a) => a.id !== targetId));
-    toast.success("Administrador removido");
-    setAdminDeleteConfirm(null);
   }
 
   const TABS = [
@@ -532,13 +546,25 @@ export default function PlatformSettingsPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSchoolDeleteConfirm(school)}
-                      className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
-                      title="Eliminar escola"
+                      onClick={() => {
+                        if (school.can_delete !== false) {
+                          setSchoolDeleteConfirm(school);
+                        }
+                      }}
+                      disabled={school.can_delete === false}
+                      className={`p-1.5 rounded transition-colors ${
+                        school.can_delete === false
+                          ? "opacity-30 cursor-not-allowed text-muted-foreground"
+                          : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                      }`}
+                      title={
+                        school.can_delete === false
+                          ? school.cannot_delete_reason || (school.assistants > 0 ? `Não é possível eliminar: existem ${school.assistants} assistentes associados.` : "Não é possível eliminar esta escola.")
+                          : "Eliminar escola"
+                      }
                     >
                       <Trash2
                         size={13}
-                        className="text-muted-foreground hover:text-destructive"
                       />
                     </button>
                   </div>
@@ -784,9 +810,22 @@ export default function PlatformSettingsPage() {
 
                     <button
                       type="button"
-                      onClick={() => setAdminDeleteConfirm(admin)}
-                      className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      title="Eliminar utilizador"
+                      onClick={() => {
+                        if (admin.can_delete !== false) {
+                          setAdminDeleteConfirm(admin);
+                        }
+                      }}
+                      disabled={admin.can_delete === false}
+                      className={`p-1.5 rounded-lg transition-colors ${
+                        admin.can_delete === false
+                          ? "opacity-30 cursor-not-allowed text-muted-foreground"
+                          : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                      }`}
+                      title={
+                        admin.can_delete === false
+                          ? admin.cannot_delete_reason || "Não é possível eliminar este utilizador."
+                          : "Eliminar utilizador"
+                      }
                     >
                       <Trash2 size={14} />
                     </button>
@@ -901,13 +940,15 @@ export default function PlatformSettingsPage() {
             description={
               adminDeleteConfirm ? (
                 <>
-                  Tem a certeza que pretende eliminar permanentemente o administrador{" "}
+                  Tem a certeza que pretende eliminar o administrador{" "}
                   <strong className="text-foreground">{adminDeleteConfirm.name}</strong> ({adminDeleteConfirm.email})?
-                  Esta conta será removida da plataforma e todos os acessos serão revogados.
+                  <span className="text-xs text-muted-foreground mt-2 block">
+                    Em conformidade com o RGPD, os acessos serão revogados e os dados pessoais anonimizados no sistema, preservando a integridade dos históricos operacionais e de assiduidade do agrupamento.
+                  </span>
                 </>
               ) : ""
             }
-            confirmLabel="Eliminar Definitivamente"
+            confirmLabel="Eliminar e Anonimizar"
             cancelLabel="Cancelar"
             variant="danger"
           />

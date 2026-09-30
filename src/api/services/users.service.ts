@@ -16,6 +16,8 @@ export interface BackendUserResource {
   is_active: boolean;
   role?: string;
   created_at?: string;
+  can_delete?: boolean;
+  cannot_delete_reason?: string | null;
 }
 
 export const usersService = {

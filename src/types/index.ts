@@ -49,6 +49,8 @@ export interface School {
   phone: string;
   active: boolean;
   assistants: number;
+  can_delete?: boolean;
+  cannot_delete_reason?: string | null;
 }
 
 export interface Assistant {
@@ -62,6 +64,8 @@ export interface Assistant {
   availableForTransfer: boolean;
   active: boolean;
   is_active?: boolean;
+  can_delete?: boolean;
+  cannot_delete_reason?: string | null;
 }
 
 export interface AdminUser {
@@ -73,6 +77,8 @@ export interface AdminUser {
   is_active: boolean;
   active?: boolean;
   created_at?: string;
+  can_delete?: boolean;
+  cannot_delete_reason?: string | null;
 }
 
 export type AbsenceStatus = "pending" | "justified" | "unjustified";

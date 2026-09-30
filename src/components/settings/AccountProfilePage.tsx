@@ -11,6 +11,7 @@ import type { Role } from "../../types";
 import { Card } from "../ui/card";
 import DatePicker from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
+import { toast } from "sonner";
 
 interface AccountProfilePageProps {
   role?: Role;
@@ -29,6 +30,7 @@ export default function AccountProfilePage({
     role === "admin" ? "Miguel Silva" : "Fábio Lopes"
   );
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showRgpdConfirm, setShowRgpdConfirm] = useState(false);
 
   return (
     <div className="max-w-2xl">
@@ -186,6 +188,7 @@ export default function AccountProfilePage({
             </p>
             <button
               type="button"
+              onClick={() => setShowRgpdConfirm(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#C8291A]/30 text-[#C8291A] text-sm font-medium hover:bg-[#FEF2F2] transition-colors"
             >
               <XCircle size={14} />
@@ -197,7 +200,7 @@ export default function AccountProfilePage({
               Eliminar Conta
             </h3>
             <p className="text-xs text-muted-foreground mb-4">
-              Elimina permanentemente esta conta e todos os dados associados.
+              Elimina permanentemente esta conta e revoga todos os acessos.
               Irreversível.
             </p>
             <button
@@ -212,15 +215,33 @@ export default function AccountProfilePage({
         </div>
       )}
 
+      {/* Confirmation Modal for RGPD Right to be Forgotten */}
+      <ConfirmationModal
+        open={showRgpdConfirm}
+        onClose={() => setShowRgpdConfirm(false)}
+        onConfirm={() => {
+          setShowRgpdConfirm(false);
+          toast.success(
+            "Pedido de eliminação de dados (RGPD) registado com sucesso. Os dados pessoais serão anonimizados no BackOffice."
+          );
+        }}
+        title="Direito ao Esquecimento (RGPD)"
+        description="Tem a certeza que pretende solicitar a eliminação dos seus dados pessoais? Os seus dados de identificação serão anonimizados no sistema e os seus acessos revogados, mantendo-se apenas o registo histórico legal e operacional dos turnos e atividades já realizadas."
+        confirmLabel="Confirmar Pedido RGPD"
+        cancelLabel="Cancelar"
+        variant="warning"
+      />
+
       {/* Confirmation Modal for account deletion */}
       <ConfirmationModal
         open={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={() => {
           setShowDeleteConfirm(false);
+          toast.success("Conta eliminada com sucesso. Os acessos foram revogados.");
         }}
         title="Eliminar Conta"
-        description="Tem a certeza que pretende eliminar permanentemente esta conta? Esta operação é irreversível e revogará todos os acessos e dados associados na plataforma."
+        description="Tem a certeza que pretende eliminar permanentemente esta conta? Esta operação é irreversível, revogará todos os acessos e os dados pessoais associados serão anonimizados na plataforma."
         confirmLabel="Eliminar Definitivamente"
         cancelLabel="Cancelar"
         variant="danger"
