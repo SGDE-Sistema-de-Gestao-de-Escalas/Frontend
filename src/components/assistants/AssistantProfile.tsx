@@ -19,7 +19,7 @@ import ProfileScheduleHistory from "./ProfileScheduleHistory";
 import AddEditAssistant from "./AddEditAssistant";
 import Modal from "../common/Modal";
 import TimePicker from "../common/TimePicker";
-import DatePicker from "../common/DatePicker";
+import useDocumentTitle from "../../hooks/useDocumentTitle";
 import type { EntityId } from "../../types";
 
 interface AssistantProfileProps {
@@ -36,6 +36,7 @@ export default function AssistantProfile({
   initials = "ER",
   initialActive = true,
 }: AssistantProfileProps) {
+  useDocumentTitle(`${assistantName} - Perfil`);
   const [activeTab, setActiveTab] = useState<"info" | "history">("info");
   const [showAddException, setShowAddException] = useState(false);
   const [editing, setEditing] = useState(false);

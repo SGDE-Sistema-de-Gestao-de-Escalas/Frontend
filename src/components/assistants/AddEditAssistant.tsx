@@ -22,6 +22,7 @@ import {
   VIEW_SLOTS,
 } from "../dashboard/blockStyles";
 import { HOUR_LABELS, TIME_SLOTS } from "../../api/mockData";
+import useDocumentTitle from "../../hooks/useDocumentTitle";
 import type { BlockState } from "../../types";
 
 interface AddEditAssistantProps {
@@ -38,6 +39,7 @@ export default function AddEditAssistant({
   isEdit = false,
   initialActive = true,
 }: AddEditAssistantProps) {
+  useDocumentTitle(isEdit ? "Editar Assistente" : "Novo Assistente");
   const [section, setSection] = useState<"personal" | "schedule">("personal");
   const [isActive, setIsActive] = useState<boolean>(initialActive);
   const [showAddScheduleModal, setShowAddScheduleModal] = useState(false);

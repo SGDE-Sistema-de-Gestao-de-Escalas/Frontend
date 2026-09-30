@@ -17,6 +17,8 @@ import StaffAbsences from "../pages/StaffAbsences";
 import StaffRegisterAbsence from "../pages/StaffRegisterAbsence";
 import LegacyApp from "../pages/LegacyApp";
 
+import TitleUpdater from "./TitleUpdater";
+
 function ProtectedLayout() {
   const { role } = useAuth();
   if (!role) {
@@ -29,7 +31,9 @@ export default function AppRouter() {
   const { role } = useAuth();
 
   return (
-    <Routes>
+    <>
+      <TitleUpdater />
+      <Routes>
       {/* Auth */}
       <Route path="/login" element={<Login />} />
 
@@ -74,5 +78,6 @@ export default function AppRouter() {
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }
