@@ -493,66 +493,38 @@ export default function AbsenceManagement() {
               </div>
             )}
             {filteredAbsences.map((absence) => (
-              <div
+              <button
                 key={absence.id}
-                className={`w-full text-left px-3 py-3 border-b border-border/50 transition-colors hover:bg-muted/30 group ${
+                type="button"
+                onClick={() => setSelectedId(absence.id)}
+                className={`w-full text-left px-3 py-3 border-b border-border/50 transition-colors hover:bg-muted/30 ${
                   selectedId === absence.id
                     ? "bg-accent/5 border-l-2 border-l-accent"
                     : ""
                 }`}
               >
-                <button
-                  type="button"
-                  className="w-full text-left"
-                  onClick={() => setSelectedId(absence.id)}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <span className="text-[8px] font-bold text-primary font-mono">
-                        {absence.initials}
-                      </span>
-                    </div>
-                    <span className="text-xs font-semibold text-foreground flex-1">
-                      {absence.assistant}
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <span className="text-[8px] font-bold text-primary font-mono">
+                      {absence.initials}
                     </span>
-                    {absence.conflict && (
-                      <AlertTriangle
-                        size={12}
-                        className="text-[#C8291A] flex-shrink-0"
-                      />
-                    )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground font-mono">
-                    {absence.start} – {absence.end} · {absence.days}d ·{" "}
-                    {absence.reason}
-                  </p>
-                  <div className="mt-1.5">{renderStatusBadge(absence.status)}</div>
-                </button>
-                <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenEdit(absence);
-                    }}
-                    className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-muted-foreground hover:text-foreground border border-border hover:bg-muted transition-colors"
-                  >
-                    <Pencil size={10} />
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteConfirmId(absence.id);
-                    }}
-                    className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-muted-foreground hover:text-destructive border border-border hover:border-destructive/30 hover:bg-destructive/5 transition-colors"
-                  >
-                    <Trash2 size={10} />
-                    Eliminar
-                  </button>
+                  <span className="text-xs font-semibold text-foreground flex-1">
+                    {absence.assistant}
+                  </span>
+                  {absence.conflict && (
+                    <AlertTriangle
+                      size={12}
+                      className="text-[#C8291A] flex-shrink-0"
+                    />
+                  )}
                 </div>
-              </div>
+                <p className="text-[11px] text-muted-foreground font-mono">
+                  {absence.start} – {absence.end} · {absence.days}d ·{" "}
+                  {absence.reason}
+                </p>
+                <div className="mt-1.5">{renderStatusBadge(absence.status)}</div>
+              </button>
             ))}
           </div>
         </div>
@@ -600,26 +572,23 @@ export default function AbsenceManagement() {
                     · {selectedAbsence.days} dias · {selectedAbsence.reason}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-1.5 flex-shrink-0">
                   {renderStatusBadge(selectedAbsence.status)}
                   <button
                     type="button"
                     onClick={() => handleOpenEdit(selectedAbsence)}
-                    className="p-1.5 rounded hover:bg-muted transition-colors"
-                    title="Editar"
+                    className="p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    title="Editar ausência"
                   >
-                    <Pencil size={13} className="text-muted-foreground" />
+                    <Pencil size={13} />
                   </button>
                   <button
                     type="button"
                     onClick={() => setDeleteConfirmId(selectedAbsence.id)}
-                    className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
-                    title="Eliminar"
+                    className="p-1.5 rounded-lg border border-border hover:border-destructive/30 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                    title="Eliminar ausência"
                   >
-                    <Trash2
-                      size={13}
-                      className="text-muted-foreground hover:text-destructive"
-                    />
+                    <Trash2 size={13} />
                   </button>
                 </div>
               </div>
