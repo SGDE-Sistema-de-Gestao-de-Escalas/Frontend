@@ -5,6 +5,7 @@ import type { ActivityType } from "../../types";
 import { PRESET_COLORS } from "../dashboard/blockStyles";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import ConfirmationModal from "../common/ConfirmationModal";
 
 function ColorPicker({
   value,
@@ -66,7 +67,7 @@ export default function ActivityTypesTab() {
   const [showAdd, setShowAdd] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newColor, setNewColor] = useState("#6366F1");
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ActivityType | null>(null);
 
   function startEdit(t: ActivityType) {
     setEditingId(t.id);
@@ -217,12 +218,9 @@ export default function ActivityTypesTab() {
                     {!t.builtIn && (
                       <button
                         type="button"
-                        onClick={() =>
-                          setTypes((prev) =>
-                            prev.filter((item) => item.id !== t.id)
-                          )
-                        }
+                        onClick={() => setDeleteTarget(t)}
                         className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Eliminar tipo"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -315,6 +313,31 @@ export default function ActivityTypesTab() {
           podem ser eliminados, mas o nome e a cor podem ser personalizados.
         </p>
       </div>
+
+      {/* Confirmation Modal for deleting activity type */}
+      <ConfirmationModal
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) {
+            setTypes((prev) => prev.filter((item) => item.id !== deleteTarget.id));
+            setDeleteTarget(null);
+          }
+        }}
+        title="Eliminar Tipo de Atividade"
+        description={
+          deleteTarget ? (
+            <>
+              Tem a certeza que pretende eliminar permanentemente o tipo de atividade{" "}
+              <strong className="text-foreground">{deleteTarget.label}</strong>?
+              Esta ação removerá este tipo personalizado das opções da plataforma.
+            </>
+          ) : ""
+        }
+        confirmLabel="Eliminar Tipo"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
     </div>
   );
 }

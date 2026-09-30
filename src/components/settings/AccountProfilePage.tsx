@@ -10,6 +10,7 @@ import {
 import type { Role } from "../../types";
 import { Card } from "../ui/card";
 import DatePicker from "../common/DatePicker";
+import ConfirmationModal from "../common/ConfirmationModal";
 
 interface AccountProfilePageProps {
   role?: Role;
@@ -199,38 +200,31 @@ export default function AccountProfilePage({
               Elimina permanentemente esta conta e todos os dados associados.
               Irreversível.
             </p>
-            {!showDeleteConfirm ? (
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive text-white text-sm font-medium hover:bg-destructive/90 transition-colors"
-              >
-                <X size={14} />
-                Eliminar Conta
-              </button>
-            ) : (
-              <div className="flex items-center gap-3">
-                <p className="text-sm text-[#C8291A] font-medium">
-                  Tem a certeza?
-                </p>
-                <button
-                  type="button"
-                  className="px-3 py-1.5 rounded bg-destructive text-white text-xs font-medium"
-                >
-                  Confirmar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="px-3 py-1.5 rounded border border-border text-xs text-muted-foreground"
-                >
-                  Cancelar
-                </button>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive text-white text-sm font-medium hover:bg-destructive/90 transition-colors shadow-xs"
+            >
+              <X size={14} />
+              Eliminar Conta
+            </button>
           </Card>
         </div>
       )}
+
+      {/* Confirmation Modal for account deletion */}
+      <ConfirmationModal
+        open={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={() => {
+          setShowDeleteConfirm(false);
+        }}
+        title="Eliminar Conta"
+        description="Tem a certeza que pretende eliminar permanentemente esta conta? Esta operação é irreversível e revogará todos os acessos e dados associados na plataforma."
+        confirmLabel="Eliminar Definitivamente"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
     </div>
   );
 }

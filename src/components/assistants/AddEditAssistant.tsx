@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { Card } from "../ui/card";
 import { Switch } from "../ui/switch";
 import Modal from "../common/Modal";
+import ConfirmationModal from "../common/ConfirmationModal";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import {
@@ -1856,51 +1857,37 @@ export default function AddEditAssistant({
           )}
 
           {/* ── Delete schedule confirmation modal ── */}
-          {scheduleToDelete && (
-            <Modal
-              title="Eliminar Horário"
-              subtitle="Confirmação de eliminação de registo de horário"
-              onClose={() => setScheduleToDelete(null)}
-              maxWidth="max-w-md"
-            >
-              <div className="space-y-4">
-                <div className="flex items-start gap-3 p-3.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-                  <AlertTriangle size={18} className="mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="font-semibold">Tem a certeza que deseja eliminar este horário?</p>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                      {scheduleToDelete.type === "fixed" ? "Turno Fixo" : `Turno Rotativo (${scheduleToDelete.period})`} ·{" "}
-                      {formatDatePT(scheduleToDelete.from)}
-                      {scheduleToDelete.to ? ` → ${formatDatePT(scheduleToDelete.to)}` : " → Em vigor"}
+          <ConfirmationModal
+            open={scheduleToDelete !== null}
+            onClose={() => setScheduleToDelete(null)}
+            onConfirm={handleConfirmDeleteSchedule}
+            title="Eliminar Horário"
+            description={
+              scheduleToDelete ? (
+                <div className="space-y-2">
+                  <p>
+                    Tem a certeza que deseja eliminar este horário (
+                    <strong className="text-foreground">
+                      {scheduleToDelete.type === "fixed" ? "Turno Fixo" : `Turno Rotativo (${scheduleToDelete.period})`}
+                    </strong>
+                    )?
+                  </p>
+                  <p className="font-mono text-xs">
+                    {formatDatePT(scheduleToDelete.from)}
+                    {scheduleToDelete.to ? ` → ${formatDatePT(scheduleToDelete.to)}` : " → Em vigor"}
+                  </p>
+                  {getScheduleTypeStatus(scheduleToDelete, schedules) === "future" && (
+                    <p className="text-amber-600 dark:text-amber-400 font-medium text-xs mt-2">
+                      Nota: Ao eliminar este horário futuro, a vigência do horário atual voltará a ficar em aberto (sem data de fim).
                     </p>
-                    {getScheduleTypeStatus(scheduleToDelete, schedules) === "future" && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 font-medium">
-                        Nota: Ao eliminar este horário futuro, a vigência do horário atual voltará a ficar em aberto (sem data de fim).
-                      </p>
-                    )}
-                  </div>
+                  )}
                 </div>
-
-                <div className="flex justify-end gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setScheduleToDelete(null)}
-                    className="px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmDeleteSchedule}
-                    className="px-4 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors shadow-xs flex items-center gap-1.5"
-                  >
-                    <Trash2 size={14} />
-                    Eliminar
-                  </button>
-                </div>
-              </div>
-            </Modal>
-          )}
+              ) : ""
+            }
+            confirmLabel="Eliminar Horário"
+            cancelLabel="Cancelar"
+            variant="danger"
+          />
         </div>
       )}
 

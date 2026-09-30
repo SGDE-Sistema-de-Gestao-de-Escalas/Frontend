@@ -6,6 +6,7 @@ import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import DatePicker from "../common/DatePicker";
+import ConfirmationModal from "../common/ConfirmationModal";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
 
 export default function HolidaysPage() {
@@ -15,6 +16,7 @@ export default function HolidaysPage() {
   const [newName, setNewName] = useState("");
   const [newDate, setNewDate] = useState("");
   const [newType, setNewType] = useState<"national" | "municipal">("national");
+  const [holidayDeleteTarget, setHolidayDeleteTarget] = useState<Holiday | null>(null);
 
   function addHoliday() {
     if (!newName || !newDate) return;
@@ -172,12 +174,9 @@ export default function HolidaysPage() {
                       <td className="px-4 py-3 text-right">
                         <button
                           type="button"
-                          onClick={() =>
-                            setHolidays((prev) =>
-                              prev.filter((x) => x.id !== h.id)
-                            )
-                          }
+                          onClick={() => setHolidayDeleteTarget(h)}
                           className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                          title="Eliminar feriado"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -233,6 +232,31 @@ export default function HolidaysPage() {
           </Card>
         </div>
       </div>
+
+      {/* Confirmation Modal for deleting holiday */}
+      <ConfirmationModal
+        open={holidayDeleteTarget !== null}
+        onClose={() => setHolidayDeleteTarget(null)}
+        onConfirm={() => {
+          if (holidayDeleteTarget) {
+            setHolidays((prev) => prev.filter((x) => x.id !== holidayDeleteTarget.id));
+            setHolidayDeleteTarget(null);
+          }
+        }}
+        title="Eliminar Feriado"
+        description={
+          holidayDeleteTarget ? (
+            <>
+              Tem a certeza que pretende eliminar o feriado{" "}
+              <strong className="text-foreground">{holidayDeleteTarget.name}</strong> ({holidayDeleteTarget.date})?
+              Esta ação removerá o feriado das exceções automáticas de escala.
+            </>
+          ) : ""
+        }
+        confirmLabel="Eliminar Feriado"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
     </div>
   );
 }

@@ -18,13 +18,14 @@ import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import TimePicker from "../common/TimePicker";
 import DatePicker from "../common/DatePicker";
+import ConfirmationModal from "../common/ConfirmationModal";
 
 export default function ScheduleRulesTab() {
   const allAssistantIds = ASSISTANTS.map((a) => a.id);
   const [rules, setRules] = useState<ScheduleRule[]>(INITIAL_RULES);
   const [showAdd, setShowAdd] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState<EntityId | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<EntityId | null>(null);
+  const [deleteRuleTarget, setDeleteRuleTarget] = useState<ScheduleRule | null>(null);
 
   // Form state
   const [formActivityId, setFormActivityId] = useState("");
@@ -260,54 +261,24 @@ export default function ScheduleRulesTab() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {deleteConfirm === rule.id ? (
-                        <div className="flex items-center gap-1.5 justify-end">
-                          <span className="text-xs text-destructive font-medium">
-                            Confirmar?
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRules((p) =>
-                                p.filter((r) => r.id !== rule.id)
-                              );
-                              setDeleteConfirm(null);
-                            }}
-                            className="px-2 py-1 rounded text-xs bg-destructive text-destructive-foreground font-semibold"
-                          >
-                            Sim
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteConfirm(null)}
-                            className="px-2 py-1 rounded text-xs border border-border text-muted-foreground"
-                          >
-                            Não
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 justify-end">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDeleteConfirm(null);
-                              openEdit(rule);
-                            }}
-                            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            title="Editar regra"
-                          >
-                            <Pencil size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteConfirm(rule.id)}
-                            className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                            title="Eliminar regra"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(rule)}
+                          className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          title="Editar regra"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteRuleTarget(rule)}
+                          className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                          title="Eliminar regra"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -546,6 +517,35 @@ export default function ScheduleRulesTab() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Confirmation Modal for deleting rule */}
+      <ConfirmationModal
+        open={deleteRuleTarget !== null}
+        onClose={() => setDeleteRuleTarget(null)}
+        onConfirm={() => {
+          if (deleteRuleTarget) {
+            setRules((p) => p.filter((r) => r.id !== deleteRuleTarget.id));
+            setDeleteRuleTarget(null);
+          }
+        }}
+        title="Eliminar Regra do Motor"
+        description={
+          deleteRuleTarget ? (
+            <>
+              Tem a certeza que pretende eliminar a regra de{" "}
+              <strong className="text-foreground">
+                {DEFAULT_ACTIVITY_TYPES.find((t) => t.id === deleteRuleTarget.activityId)?.label ?? deleteRuleTarget.activityId}
+              </strong>{" "}
+              (Vigência: {deleteRuleTarget.start}
+              {deleteRuleTarget.end ? ` — ${deleteRuleTarget.end}` : " — Em aberto"})?
+              Esta ação removerá esta restrição no cálculo de escalas do motor.
+            </>
+          ) : ""
+        }
+        confirmLabel="Eliminar Regra"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
     </div>
   );
 }

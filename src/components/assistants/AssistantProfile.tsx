@@ -20,6 +20,7 @@ import { Switch } from "../ui/switch";
 import ProfileScheduleHistory from "./ProfileScheduleHistory";
 import AddEditAssistant from "./AddEditAssistant";
 import Modal from "../common/Modal";
+import ConfirmationModal from "../common/ConfirmationModal";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
@@ -625,153 +626,76 @@ export default function AssistantProfile({
       {activeTab === "history" && <ProfileScheduleHistory />}
 
       {/* Modal: Confirmar Alteração de Estado (Inativar / Ativar) */}
-      {showStatusModal && (
-        <Modal
-          title={isActive ? "Inativar Assistente" : "Reativar Assistente"}
-          subtitle={assistantName}
-          onClose={() => setShowStatusModal(false)}
-        >
-          <div className="space-y-4">
-            <div
-              className={`p-3.5 rounded-xl border flex items-start gap-3 ${
-                isActive
-                  ? "bg-amber-500/10 border-amber-500/25 text-amber-800 dark:text-amber-300"
-                  : "bg-emerald-500/10 border-emerald-500/25 text-emerald-800 dark:text-emerald-300"
-              }`}
-            >
-              {isActive ? (
-                <AlertTriangle
-                  size={18}
-                  className="flex-shrink-0 text-amber-600 mt-0.5"
-                />
-              ) : (
-                <CheckCircle
-                  size={18}
-                  className="flex-shrink-0 text-emerald-600 mt-0.5"
-                />
-              )}
-              <div className="text-xs leading-relaxed">
-                {isActive ? (
-                  <>
-                    Tem a certeza que pretende inativar o assistente{" "}
-                    <strong>{assistantName}</strong>?
-                    Enquanto estiver inativo, o assistente deixará de estar elegível para atribuição de novos turnos e horários ativos.
-                  </>
-                ) : (
-                  <>
-                    Deseja reativar o assistente{" "}
-                    <strong>{assistantName}</strong>?
-                    O assistente voltará a estar ativo e elegível para escalas de serviço e marcações.
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsActive(!isActive);
-                  setShowStatusModal(false);
-                }}
-                className={`flex-1 py-2.5 rounded-lg text-white text-sm font-semibold transition-colors shadow-xs ${
-                  isActive
-                    ? "bg-amber-600 hover:bg-amber-700"
-                    : "bg-emerald-600 hover:bg-emerald-700"
-                }`}
-              >
-                {isActive ? "Confirmar Inativação" : "Confirmar Reativação"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowStatusModal(false)}
-                className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      <ConfirmationModal
+        open={showStatusModal}
+        onClose={() => setShowStatusModal(false)}
+        onConfirm={() => {
+          setIsActive(!isActive);
+          setShowStatusModal(false);
+        }}
+        title={isActive ? "Inativar Assistente" : "Reativar Assistente"}
+        description={
+          isActive ? (
+            <>
+              Tem a certeza que pretende inativar o assistente{" "}
+              <strong className="text-foreground">{assistantName}</strong>?
+              Enquanto estiver inativo, o assistente deixará de estar elegível para atribuição de novos turnos e horários ativos.
+            </>
+          ) : (
+            <>
+              Deseja reativar o assistente{" "}
+              <strong className="text-foreground">{assistantName}</strong>?
+              O assistente voltará a estar ativo e elegível para escalas de serviço e marcações.
+            </>
+          )
+        }
+        confirmLabel={isActive ? "Confirmar Inativação" : "Confirmar Reativação"}
+        cancelLabel="Cancelar"
+        variant={isActive ? "warning" : "success"}
+      />
 
       {/* Modal: Confirmar Eliminação */}
-      {showDeleteModal && (
-        <Modal
-          title="Eliminar Assistente"
-          subtitle="Esta ação é permanente"
-          onClose={() => setShowDeleteModal(false)}
-        >
-          <div className="space-y-4">
-            <div className="p-3.5 rounded-xl border border-destructive/20 bg-destructive/10 text-destructive text-xs leading-relaxed flex items-start gap-3">
-              <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
-              <div>
-                Tem a certeza que pretende eliminar permanentemente o assistente{" "}
-                <strong>{assistantName}</strong>?
-                Esta ação é irreversível e removerá o registo do assistente e todas as suas configurações associadas.
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  if (onBack) {
-                    onBack();
-                  }
-                }}
-                className="flex-1 py-2.5 rounded-lg bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 transition-colors shadow-xs"
-              >
-                Eliminar Definitivamente
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      <ConfirmationModal
+        open={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={() => {
+          setShowDeleteModal(false);
+          if (onBack) {
+            onBack();
+          }
+        }}
+        title="Eliminar Assistente"
+        description={
+          <>
+            Tem a certeza que pretende eliminar permanentemente o assistente{" "}
+            <strong className="text-foreground">{assistantName}</strong>?
+            Esta ação é irreversível e removerá o registo do assistente e todas as suas configurações associadas.
+          </>
+        }
+        confirmLabel="Eliminar Definitivamente"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
 
       {/* Modal: Confirmar Eliminação de Exceção */}
-      {deleteExceptionTarget && (
-        <Modal
-          title="Eliminar Regra de Exceção"
-          subtitle={deleteExceptionTarget.tipo}
-          onClose={() => setDeleteExceptionTarget(null)}
-        >
-          <div className="space-y-4">
-            <div className="p-3.5 rounded-xl border border-destructive/20 bg-destructive/10 text-destructive text-xs leading-relaxed flex items-start gap-3">
-              <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
-              <div>
-                Tem a certeza que pretende eliminar permanentemente a regra de exceção{" "}
-                <strong>{deleteExceptionTarget.tipo}</strong> ({deleteExceptionTarget.detalhe})?
-                Esta ação removerá o registo de horário especial desta vigência.
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={confirmDeleteException}
-                className="flex-1 py-2.5 rounded-lg bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 transition-colors shadow-xs"
-              >
-                Eliminar Exceção
-              </button>
-              <button
-                type="button"
-                onClick={() => setDeleteExceptionTarget(null)}
-                className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      <ConfirmationModal
+        open={deleteExceptionTarget !== null}
+        onClose={() => setDeleteExceptionTarget(null)}
+        onConfirm={confirmDeleteException}
+        title="Eliminar Regra de Exceção"
+        description={
+          deleteExceptionTarget ? (
+            <>
+              Tem a certeza que pretende eliminar permanentemente a regra de exceção{" "}
+              <strong className="text-foreground">{deleteExceptionTarget.tipo}</strong> ({deleteExceptionTarget.detalhe})?
+              Esta ação removerá o registo de horário especial desta vigência.
+            </>
+          ) : ""
+        }
+        confirmLabel="Eliminar Exceção"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
     </div>
   );
 }

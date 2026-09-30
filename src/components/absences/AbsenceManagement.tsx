@@ -17,6 +17,7 @@ import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
+import ConfirmationModal from "../common/ConfirmationModal";
 
 export default function AbsenceManagement() {
   const [absencesList, setAbsencesList] = useState<Absence[]>(initialAbsences);
@@ -402,51 +403,34 @@ export default function AbsenceManagement() {
       )}
 
       {/* Delete confirmation modal */}
-      {deleteConfirmId !== null &&
-        (() => {
-          const targetAbsence = absencesList.find((x) => x.id === deleteConfirmId);
-          return (
-            <>
-              <div
-                className="fixed inset-0 z-40 bg-black/30"
-                onClick={() => setDeleteConfirmId(null)}
-              />
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-6 text-center">
-                  <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
-                    <Trash2 size={20} className="text-destructive" />
-                  </div>
-                  <h3 className="font-semibold text-foreground mb-1">
-                    Eliminar ausência?
-                  </h3>
-                  <p className="text-sm text-muted-foreground mb-5">
-                    A ausência de{" "}
-                    <span className="font-medium text-foreground">
-                      {targetAbsence?.assistant}
-                    </span>{" "}
-                    ({targetAbsence?.start} – {targetAbsence?.end}) será permanentemente eliminada.
-                  </p>
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setDeleteConfirmId(null)}
-                      className="flex-1 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(deleteConfirmId)}
-                      className="flex-1 py-2.5 rounded-lg bg-destructive text-white text-sm font-medium hover:bg-destructive/90 transition-colors"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </>
-          );
-        })()}
+      <ConfirmationModal
+        open={deleteConfirmId !== null}
+        onClose={() => setDeleteConfirmId(null)}
+        onConfirm={() => {
+          if (deleteConfirmId !== null) {
+            handleDelete(deleteConfirmId);
+            setDeleteConfirmId(null);
+          }
+        }}
+        title="Eliminar Ausência"
+        description={
+          deleteConfirmId !== null ? (() => {
+            const target = absencesList.find((x) => x.id === deleteConfirmId);
+            return (
+              <>
+                A ausência de{" "}
+                <strong className="text-foreground">
+                  {target?.assistant}
+                </strong>{" "}
+                ({target?.start} – {target?.end}) será permanentemente eliminada.
+              </>
+            );
+          })() : ""
+        }
+        confirmLabel="Eliminar Ausência"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
 
       <div
         className="grid grid-cols-1 lg:grid-cols-5 gap-4"

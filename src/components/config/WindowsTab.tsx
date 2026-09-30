@@ -4,6 +4,7 @@ import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import TimePicker from "../common/TimePicker";
 import DatePicker from "../common/DatePicker";
+import ConfirmationModal from "../common/ConfirmationModal";
 import { useSchool } from "../../context/SchoolContext";
 
 export default function WindowsTab() {
@@ -45,7 +46,7 @@ export default function WindowsTab() {
   const [formLunchEnd, setFormLunchEnd] = useState("14:00");
   const [formLunchDuration, setFormLunchDuration] = useState("30");
   const [overlapWarn, setOverlapWarn] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [deleteWindowTarget, setDeleteWindowTarget] = useState<(typeof windows)[0] | null>(null);
 
   function openAdd() {
     setFormDays([true, true, true, true, true, false, false]);
@@ -402,8 +403,9 @@ export default function WindowsTab() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setWindows((p) => p.filter((x) => x.id !== w.id))}
+                  onClick={() => setDeleteWindowTarget(w)}
                   className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                  title="Eliminar janela"
                 >
                   <Trash2 size={13} />
                 </button>
@@ -412,6 +414,34 @@ export default function WindowsTab() {
           </Card>
         ))}
       </div>
+
+      {/* Confirmation Modal for deleting window */}
+      <ConfirmationModal
+        open={deleteWindowTarget !== null}
+        onClose={() => setDeleteWindowTarget(null)}
+        onConfirm={() => {
+          if (deleteWindowTarget) {
+            setWindows((p) => p.filter((x) => x.id !== deleteWindowTarget.id));
+            setDeleteWindowTarget(null);
+          }
+        }}
+        title="Eliminar Janela de Funcionamento"
+        description={
+          deleteWindowTarget ? (
+            <>
+              Tem a certeza que pretende eliminar a janela de funcionamento{" "}
+              <strong className="text-foreground">
+                {deleteWindowTarget.open} — {deleteWindowTarget.close}
+              </strong>{" "}
+              (Vigência: {deleteWindowTarget.start})?
+              Esta janela deixará de ser considerada pelo motor de escalas.
+            </>
+          ) : ""
+        }
+        confirmLabel="Eliminar Janela"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
     </div>
   );
 }

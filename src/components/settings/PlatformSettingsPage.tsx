@@ -35,6 +35,7 @@ import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { Switch } from "../ui/switch";
 import Modal from "../common/Modal";
+import ConfirmationModal from "../common/ConfirmationModal";
 
 export default function PlatformSettingsPage() {
   const [activeTab, setActiveTab] = useState<"schools" | "users" | "absence-types">("schools");
@@ -45,9 +46,8 @@ export default function PlatformSettingsPage() {
   );
   const [showSchoolForm, setShowSchoolForm] = useState(false);
   const [schoolEditId, setSchoolEditId] = useState<EntityId | null>(null);
-  const [schoolDeleteConfirm, setSchoolDeleteConfirm] = useState<EntityId | null>(
-    null
-  );
+  const [schoolStatusConfirm, setSchoolStatusConfirm] = useState<School | null>(null);
+  const [schoolDeleteConfirm, setSchoolDeleteConfirm] = useState<School | null>(null);
   const [schoolName, setSchoolName] = useState("");
   const [schoolAddress, setSchoolAddress] = useState("");
   const [schoolPhone, setSchoolPhone] = useState("");
@@ -116,7 +116,7 @@ export default function PlatformSettingsPage() {
   );
   const [showAbsenceTypeForm, setShowAbsenceTypeForm] = useState(false);
   const [absenceTypeEditId, setAbsenceTypeEditId] = useState<EntityId | null>(null);
-  const [absenceTypeDeleteConfirm, setAbsenceTypeDeleteConfirm] = useState<EntityId | null>(null);
+  const [absenceTypeDeleteConfirm, setAbsenceTypeDeleteConfirm] = useState<AbsenceType | null>(null);
   const [absenceTypeName, setAbsenceTypeName] = useState("");
   const [absenceTypeRequiresDoc, setAbsenceTypeRequiresDoc] = useState(false);
 
@@ -517,49 +517,30 @@ export default function PlatformSettingsPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => toggleSchoolActive(school.id)}
+                      onClick={() => setSchoolStatusConfirm(school)}
                       className="p-1.5 rounded hover:bg-muted transition-colors"
-                      title={school.active ? "Desativar" : "Ativar"}
+                      title={school.active ? "Desativar escola" : "Ativar escola"}
                     >
                       {school.active ? (
-                        <XCircle size={13} className="text-muted-foreground" />
+                        <XCircle size={13} className="text-muted-foreground hover:text-amber-600" />
                       ) : (
                         <CheckCircle
                           size={13}
-                          className="text-muted-foreground"
+                          className="text-muted-foreground hover:text-emerald-600"
                         />
                       )}
                     </button>
-                    {schoolDeleteConfirm === school.id ? (
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => deleteSchool(school.id)}
-                          className="px-2 py-1 rounded bg-destructive text-white text-[10px] font-medium"
-                        >
-                          Confirmar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSchoolDeleteConfirm(null)}
-                          className="px-2 py-1 rounded border border-border text-[10px] text-muted-foreground"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setSchoolDeleteConfirm(school.id)}
-                        className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
-                        title="Eliminar"
-                      >
-                        <Trash2
-                          size={13}
-                          className="text-muted-foreground hover:text-destructive"
-                        />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setSchoolDeleteConfirm(school)}
+                      className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
+                      title="Eliminar escola"
+                    >
+                      <Trash2
+                        size={13}
+                        className="text-muted-foreground hover:text-destructive"
+                      />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -611,23 +592,79 @@ export default function PlatformSettingsPage() {
                 <div className="flex gap-3 pt-2">
                   <button
                     type="button"
-                    onClick={handleSaveSchool}
-                    disabled={!schoolName.trim()}
-                    className="flex-1 py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 disabled:opacity-40 transition-colors"
+                    onClick={() => setShowSchoolForm(false)}
+                    className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                   >
-                    {schoolEditId !== null ? "Guardar Alterações" : "Criar Escola"}
+                    Cancelar
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowSchoolForm(false)}
-                    className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={handleSaveSchool}
+                    disabled={!schoolName.trim()}
+                    className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
                   >
-                    Cancelar
+                    {schoolEditId !== null ? "Guardar Alterações" : "Criar Escola"}
                   </button>
                 </div>
               </div>
             </Modal>
           )}
+
+          {/* Confirmation Modal for toggling school status */}
+          <ConfirmationModal
+            open={schoolStatusConfirm !== null}
+            onClose={() => setSchoolStatusConfirm(null)}
+            onConfirm={() => {
+              if (schoolStatusConfirm) {
+                toggleSchoolActive(schoolStatusConfirm.id);
+                setSchoolStatusConfirm(null);
+              }
+            }}
+            title={schoolStatusConfirm?.active ? "Desativar Escola" : "Ativar Escola"}
+            description={
+              schoolStatusConfirm?.active ? (
+                <>
+                  Tem a certeza que pretende desativar a escola{" "}
+                  <strong className="text-foreground">{schoolStatusConfirm.name}</strong>?
+                  A escola deixará de estar disponível para alocação de novos turnos e horários de assistentes.
+                </>
+              ) : (
+                <>
+                  Deseja ativar a escola{" "}
+                  <strong className="text-foreground">{schoolStatusConfirm?.name}</strong>?
+                  A escola voltará a estar disponível para escalas de serviço e planeamento de pessoal.
+                </>
+              )
+            }
+            confirmLabel={schoolStatusConfirm?.active ? "Confirmar Desativação" : "Confirmar Ativação"}
+            cancelLabel="Cancelar"
+            variant={schoolStatusConfirm?.active ? "warning" : "success"}
+          />
+
+          {/* Confirmation Modal for deleting school */}
+          <ConfirmationModal
+            open={schoolDeleteConfirm !== null}
+            onClose={() => setSchoolDeleteConfirm(null)}
+            onConfirm={() => {
+              if (schoolDeleteConfirm) {
+                deleteSchool(schoolDeleteConfirm.id);
+                setSchoolDeleteConfirm(null);
+              }
+            }}
+            title="Eliminar Escola"
+            description={
+              schoolDeleteConfirm ? (
+                <>
+                  Tem a certeza que pretende eliminar a escola{" "}
+                  <strong className="text-foreground">{schoolDeleteConfirm.name}</strong>?
+                  Esta ação removerá o registo do estabelecimento e configurações associadas.
+                </>
+              ) : ""
+            }
+            confirmLabel="Eliminar Escola"
+            cancelLabel="Cancelar"
+            variant="danger"
+          />
         </>
       )}
 
@@ -811,18 +848,18 @@ export default function PlatformSettingsPage() {
                 <div className="flex gap-3 pt-2">
                   <button
                     type="button"
+                    onClick={() => setShowAdminForm(false)}
+                    className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
                     onClick={handleSaveAdmin}
                     disabled={!adminName.trim() || !adminEmail.trim()}
                     className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
                   >
                     {adminEditId !== null ? "Guardar Alterações" : "Criar Administrador"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminForm(false)}
-                    className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Cancelar
                   </button>
                 </div>
               </div>
@@ -830,100 +867,50 @@ export default function PlatformSettingsPage() {
           )}
 
           {/* Modal: Confirmar Alteração de Estado (Inativar / Ativar) */}
-          {adminStatusConfirm && (
-            <Modal
-              title={adminStatusConfirm.active ? "Inativar Administrador" : "Reativar Administrador"}
-              subtitle={adminStatusConfirm.name}
-              onClose={() => setAdminStatusConfirm(null)}
-            >
-              <div className="space-y-4">
-                <div className={`p-3.5 rounded-xl border flex items-start gap-3 ${
-                  adminStatusConfirm.active
-                    ? "bg-amber-500/10 border-amber-500/25 text-amber-800 dark:text-amber-300"
-                    : "bg-emerald-500/10 border-emerald-500/25 text-emerald-800 dark:text-emerald-300"
-                }`}>
-                  {adminStatusConfirm.active ? (
-                    <AlertTriangle size={18} className="flex-shrink-0 text-amber-600 mt-0.5" />
-                  ) : (
-                    <CheckCircle size={18} className="flex-shrink-0 text-emerald-600 mt-0.5" />
-                  )}
-                  <div className="text-xs leading-relaxed">
-                    {adminStatusConfirm.active ? (
-                      <>
-                        Tem a certeza que pretende inativar o administrador{" "}
-                        <strong>{adminStatusConfirm.name}</strong> ({adminStatusConfirm.email})?
-                        Enquanto a conta estiver inativa, o utilizador ficará bloqueado e não conseguirá iniciar sessão no sistema.
-                      </>
-                    ) : (
-                      <>
-                        Deseja reativar o acesso de{" "}
-                        <strong>{adminStatusConfirm.name}</strong> ({adminStatusConfirm.email})?
-                        O utilizador voltará a ter permissões de administração na plataforma.
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={handleConfirmStatusToggle}
-                    className={`flex-1 py-2.5 rounded-lg text-white text-sm font-semibold transition-colors shadow-xs ${
-                      adminStatusConfirm.active
-                        ? "bg-amber-600 hover:bg-amber-700"
-                        : "bg-emerald-600 hover:bg-emerald-700"
-                    }`}
-                  >
-                    {adminStatusConfirm.active ? "Confirmar Inativação" : "Confirmar Reativação"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdminStatusConfirm(null)}
-                    className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            </Modal>
-          )}
+          <ConfirmationModal
+            open={adminStatusConfirm !== null}
+            onClose={() => setAdminStatusConfirm(null)}
+            onConfirm={handleConfirmStatusToggle}
+            title={adminStatusConfirm?.active ? "Inativar Administrador" : "Reativar Administrador"}
+            description={
+              adminStatusConfirm?.active ? (
+                <>
+                  Tem a certeza que pretende inativar o administrador{" "}
+                  <strong className="text-foreground">{adminStatusConfirm.name}</strong> ({adminStatusConfirm.email})?
+                  Enquanto a conta estiver inativa, o utilizador ficará bloqueado e não conseguirá iniciar sessão no sistema.
+                </>
+              ) : (
+                <>
+                  Deseja reativar o acesso de{" "}
+                  <strong className="text-foreground">{adminStatusConfirm?.name}</strong> ({adminStatusConfirm?.email})?
+                  O utilizador voltará a ter permissões de administração na plataforma.
+                </>
+              )
+            }
+            confirmLabel={adminStatusConfirm?.active ? "Confirmar Inativação" : "Confirmar Reativação"}
+            cancelLabel="Cancelar"
+            variant={adminStatusConfirm?.active ? "warning" : "success"}
+          />
 
           {/* Modal: Confirmar Eliminação de Administrador */}
-          {adminDeleteConfirm && (
-            <Modal
-              title="Eliminar Administrador"
-              subtitle="Esta ação é permanente"
-              onClose={() => setAdminDeleteConfirm(null)}
-            >
-              <div className="space-y-4">
-                <div className="p-3.5 rounded-xl border border-destructive/20 bg-destructive/10 text-destructive text-xs leading-relaxed flex items-start gap-3">
-                  <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
-                  <div>
-                    Tem a certeza que pretende eliminar permanentemente o administrador{" "}
-                    <strong>{adminDeleteConfirm.name}</strong> ({adminDeleteConfirm.email})?
-                    Esta conta será removida da plataforma e todos os acessos serão revogados.
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={handleConfirmDeleteAdmin}
-                    className="flex-1 py-2.5 rounded-lg bg-destructive text-destructive-foreground text-sm font-semibold hover:bg-destructive/90 transition-colors shadow-xs"
-                  >
-                    Eliminar Definitivamente
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdminDeleteConfirm(null)}
-                    className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            </Modal>
-          )}
+          <ConfirmationModal
+            open={adminDeleteConfirm !== null}
+            onClose={() => setAdminDeleteConfirm(null)}
+            onConfirm={handleConfirmDeleteAdmin}
+            title="Eliminar Administrador"
+            description={
+              adminDeleteConfirm ? (
+                <>
+                  Tem a certeza que pretende eliminar permanentemente o administrador{" "}
+                  <strong className="text-foreground">{adminDeleteConfirm.name}</strong> ({adminDeleteConfirm.email})?
+                  Esta conta será removida da plataforma e todos os acessos serão revogados.
+                </>
+              ) : ""
+            }
+            confirmLabel="Eliminar Definitivamente"
+            cancelLabel="Cancelar"
+            variant="danger"
+          />
         </>
       )}
 
@@ -970,46 +957,27 @@ export default function PlatformSettingsPage() {
                     )}
                   </p>
                 </div>
-                {absenceTypeDeleteConfirm === t.id ? (
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => deleteAbsenceType(t.id)}
-                      className="px-2 py-1 rounded bg-destructive text-white text-[10px] font-medium"
-                    >
-                      Confirmar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAbsenceTypeDeleteConfirm(null)}
-                      className="px-2 py-1 rounded border border-border text-[10px] text-muted-foreground"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => openEditAbsenceType(t)}
-                      className="p-1.5 rounded hover:bg-muted transition-colors"
-                      title="Editar"
-                    >
-                      <Pencil size={13} className="text-muted-foreground" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAbsenceTypeDeleteConfirm(t.id)}
-                      className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
-                      title="Eliminar"
-                    >
-                      <Trash2
-                        size={13}
-                        className="text-muted-foreground hover:text-destructive"
-                      />
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => openEditAbsenceType(t)}
+                    className="p-1.5 rounded hover:bg-muted transition-colors"
+                    title="Editar"
+                  >
+                    <Pencil size={13} className="text-muted-foreground" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAbsenceTypeDeleteConfirm(t)}
+                    className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
+                    title="Eliminar"
+                  >
+                    <Trash2
+                      size={13}
+                      className="text-muted-foreground hover:text-destructive"
+                    />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -1054,23 +1022,47 @@ export default function PlatformSettingsPage() {
                 <div className="flex gap-3 pt-2">
                   <button
                     type="button"
-                    onClick={handleSaveAbsenceType}
-                    disabled={!absenceTypeName.trim()}
-                    className="flex-1 py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 disabled:opacity-40 transition-colors"
+                    onClick={() => setShowAbsenceTypeForm(false)}
+                    className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                   >
-                    {absenceTypeEditId !== null ? "Guardar Alterações" : "Criar Tipo"}
+                    Cancelar
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowAbsenceTypeForm(false)}
-                    className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={handleSaveAbsenceType}
+                    disabled={!absenceTypeName.trim()}
+                    className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
                   >
-                    Cancelar
+                    {absenceTypeEditId !== null ? "Guardar Alterações" : "Criar Tipo"}
                   </button>
                 </div>
               </div>
             </Modal>
           )}
+
+          {/* Confirmation Modal for deleting absence type */}
+          <ConfirmationModal
+            open={absenceTypeDeleteConfirm !== null}
+            onClose={() => setAbsenceTypeDeleteConfirm(null)}
+            onConfirm={() => {
+              if (absenceTypeDeleteConfirm) {
+                deleteAbsenceType(absenceTypeDeleteConfirm.id);
+              }
+            }}
+            title="Eliminar Tipo de Falta"
+            description={
+              absenceTypeDeleteConfirm ? (
+                <>
+                  Tem a certeza que pretende eliminar permanentemente o tipo de falta{" "}
+                  <strong className="text-foreground">{absenceTypeDeleteConfirm.name}</strong>?
+                  Esta ação removerá esta categoria do catálogo de ausências.
+                </>
+              ) : ""
+            }
+            confirmLabel="Eliminar Tipo"
+            cancelLabel="Cancelar"
+            variant="danger"
+          />
         </>
       )}
     </div>
