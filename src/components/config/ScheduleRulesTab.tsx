@@ -17,6 +17,7 @@ import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import TimePicker from "../common/TimePicker";
+import DatePicker from "../common/DatePicker";
 
 export default function ScheduleRulesTab() {
   const allAssistantIds = ASSISTANTS.map((a) => a.id);
@@ -318,8 +319,8 @@ export default function ScheduleRulesTab() {
 
       {/* Add / Edit Dialog */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
-        <DialogContent className="w-full max-w-lg p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-          <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10">
+        <DialogContent className="w-full max-w-lg p-0 overflow-visible rounded-xl border border-border bg-card shadow-2xl">
+          <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10 rounded-t-xl">
             <DialogTitle className="font-semibold text-foreground text-sm">
               {formStep === "form"
                 ? isEditing
@@ -440,6 +441,33 @@ export default function ScheduleRulesTab() {
                       </button>
                     );
                   })}
+                </div>
+              </div>
+
+              {/* Vigência */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                    Início de vigência *
+                  </label>
+                  <DatePicker
+                    value={formValidityStart}
+                    onChange={setFormValidityStart}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                    Fim de vigência
+                  </label>
+                  <DatePicker
+                    value={formValidityEnd}
+                    onChange={setFormValidityEnd}
+                    className="w-full"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Em branco = vigência em aberto
+                  </p>
                 </div>
               </div>
 

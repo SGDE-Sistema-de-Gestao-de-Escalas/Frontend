@@ -90,6 +90,9 @@ export default function AddEditAssistant({
   const [shiftBLunchDuration, setShiftBLunchDuration] = useState("30");
 
   // Personal data states
+  const [birthDate, setBirthDate] = useState(
+    isEdit ? "1988-03-14" : ""
+  );
   const [admissionDate, setAdmissionDate] = useState(
     isEdit ? "2019-03-14" : ""
   );
@@ -281,13 +284,6 @@ export default function AddEditAssistant({
                   span: 1,
                   editValue: "12345678901",
                 },
-                {
-                  label: "Data de Nascimento",
-                  placeholder: "",
-                  type: "date",
-                  span: 1,
-                  editValue: "1988-03-14",
-                },
               ].map((f) => (
                 <div
                   key={f.label}
@@ -304,6 +300,16 @@ export default function AddEditAssistant({
                   />
                 </div>
               ))}
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                  Data de Nascimento
+                </label>
+                <DatePicker
+                  value={birthDate}
+                  onChange={setBirthDate}
+                  className="w-full"
+                />
+              </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                   Data de Admissão

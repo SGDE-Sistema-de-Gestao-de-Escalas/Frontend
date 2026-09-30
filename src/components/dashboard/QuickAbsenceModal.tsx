@@ -7,6 +7,7 @@ import {
 } from "../../api/mockData";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { BLOCK_STYLES } from "./blockStyles";
+import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import type { EntityId } from "../../types";
 
@@ -61,8 +62,8 @@ export default function QuickAbsenceModal({
 
   return (
     <Dialog open={assistantName !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="w-full max-w-md p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-        <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10">
+      <DialogContent className="w-full max-w-md p-0 overflow-visible rounded-xl border border-border bg-card shadow-2xl">
+        <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10 rounded-t-xl">
           <DialogTitle className="font-semibold text-foreground text-sm">
             Registar Ausência
           </DialogTitle>
@@ -133,11 +134,10 @@ export default function QuickAbsenceModal({
                 <label className="text-xs text-muted-foreground block font-medium">
                   Data de início *
                 </label>
-                <input
-                  type="date"
+                <DatePicker
                   value={start}
-                  onChange={(e) => setStart(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  onChange={setStart}
+                  className="w-full"
                 />
                 <TimePicker
                   value={startTime}
@@ -149,11 +149,10 @@ export default function QuickAbsenceModal({
                 <label className="text-xs text-muted-foreground block font-medium">
                   Data de fim *
                 </label>
-                <input
-                  type="date"
+                <DatePicker
                   value={end}
-                  onChange={(e) => setEnd(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  onChange={setEnd}
+                  className="w-full"
                 />
                 <TimePicker
                   value={endTime}

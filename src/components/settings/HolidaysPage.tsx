@@ -5,8 +5,11 @@ import type { Holiday } from "../../types";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import DatePicker from "../common/DatePicker";
+import useDocumentTitle from "../../hooks/useDocumentTitle";
 
 export default function HolidaysPage() {
+  useDocumentTitle("Feriados");
   const [holidays, setHolidays] = useState<Holiday[]>(HOLIDAYS);
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
@@ -58,8 +61,8 @@ export default function HolidaysPage() {
           </div>
 
           <Dialog open={showAdd} onOpenChange={setShowAdd}>
-            <DialogContent className="w-full max-w-md p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-              <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10">
+            <DialogContent className="w-full max-w-md p-0 overflow-visible rounded-xl border border-border bg-card shadow-2xl">
+              <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10 rounded-t-xl">
                 <DialogTitle className="font-semibold text-foreground text-sm">
                   Novo Feriado
                 </DialogTitle>
@@ -85,11 +88,10 @@ export default function HolidaysPage() {
                     <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                       Data *
                     </label>
-                    <input
-                      type="date"
+                    <DatePicker
                       value={newDate}
-                      onChange={(e) => setNewDate(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      onChange={setNewDate}
+                      className="w-full"
                     />
                   </div>
                   <div>

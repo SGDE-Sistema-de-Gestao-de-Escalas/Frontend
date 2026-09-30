@@ -35,7 +35,7 @@ export default function ConfigEngine() {
         </p>
       </div>
 
-      <div className="flex gap-1 border-b border-border overflow-x-auto">
+      <div className="flex gap-1 border-b border-border">
         {tabs.map((tab) => (
           <button
             key={tab.id}

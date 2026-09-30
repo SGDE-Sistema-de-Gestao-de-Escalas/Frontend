@@ -18,6 +18,7 @@ import { Badge } from "../ui/badge";
 import ProfileScheduleHistory from "./ProfileScheduleHistory";
 import AddEditAssistant from "./AddEditAssistant";
 import Modal from "../common/Modal";
+import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
 import type { EntityId } from "../../types";
@@ -39,6 +40,11 @@ export default function AssistantProfile({
   useDocumentTitle(`${assistantName} - Perfil`);
   const [activeTab, setActiveTab] = useState<"info" | "history">("info");
   const [showAddException, setShowAddException] = useState(false);
+  const [exceptionType, setExceptionType] = useState("");
+  const [exceptionEntry, setExceptionEntry] = useState("09:30");
+  const [exceptionExit, setExceptionExit] = useState("16:30");
+  const [exceptionStartDate, setExceptionStartDate] = useState("");
+  const [exceptionEndDate, setExceptionEndDate] = useState("");
   const [editing, setEditing] = useState(false);
   const [availableForTransfer, setAvailableForTransfer] = useState(false);
   const [isActive, setIsActive] = useState<boolean>(initialActive);
@@ -305,6 +311,8 @@ export default function AssistantProfile({
                       <input
                         type="text"
                         placeholder="Ex: Licença Amamentação"
+                        value={exceptionType}
+                        onChange={(e) => setExceptionType(e.target.value)}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     </div>
@@ -313,8 +321,8 @@ export default function AssistantProfile({
                         Hora de Entrada
                       </label>
                       <TimePicker
-                        value="09:30"
-                        onChange={() => {}}
+                        value={exceptionEntry}
+                        onChange={setExceptionEntry}
                         className="w-full"
                       />
                     </div>
@@ -323,8 +331,8 @@ export default function AssistantProfile({
                         Hora de Saída
                       </label>
                       <TimePicker
-                        value="16:30"
-                        onChange={() => {}}
+                        value={exceptionExit}
+                        onChange={setExceptionExit}
                         className="w-full"
                       />
                     </div>
@@ -333,8 +341,8 @@ export default function AssistantProfile({
                         Data de Início
                       </label>
                       <DatePicker
-                        value=""
-                        onChange={() => {}}
+                        value={exceptionStartDate}
+                        onChange={setExceptionStartDate}
                         className="w-full"
                       />
                     </div>
@@ -343,8 +351,8 @@ export default function AssistantProfile({
                         Data de Fim (opcional)
                       </label>
                       <DatePicker
-                        value=""
-                        onChange={() => {}}
+                        value={exceptionEndDate}
+                        onChange={setExceptionEndDate}
                         className="w-full"
                       />
                     </div>
@@ -352,6 +360,7 @@ export default function AssistantProfile({
                   <div className="flex gap-2 pt-2 border-t border-border">
                     <button
                       type="button"
+                      onClick={() => setShowAddException(false)}
                       className="px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90"
                     >
                       Guardar
