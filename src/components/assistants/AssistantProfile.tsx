@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
+import { Switch } from "../ui/switch";
 import ProfileScheduleHistory from "./ProfileScheduleHistory";
 import AddEditAssistant from "./AddEditAssistant";
 import Modal from "../common/Modal";
@@ -397,21 +398,11 @@ export default function AssistantProfile({
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setAvailableForTransfer((v) => !v)}
-                  className={`relative flex-shrink-0 w-9 h-5 rounded-full transition-colors ${
-                    availableForTransfer ? "bg-accent" : "bg-border"
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                      availableForTransfer
-                        ? "translate-x-4"
-                        : "translate-x-0.5"
-                    }`}
-                  />
-                </button>
+                <Switch
+                  checked={availableForTransfer}
+                  onCheckedChange={setAvailableForTransfer}
+                  className="data-[state=checked]:bg-accent"
+                />
               </div>
               {availableForTransfer && (
                 <div className="mt-3 pt-3 border-t border-border">

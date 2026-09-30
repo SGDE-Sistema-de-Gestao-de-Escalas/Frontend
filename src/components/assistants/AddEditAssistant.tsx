@@ -11,6 +11,7 @@ import {
   User,
 } from "lucide-react";
 import { Card } from "../ui/card";
+import { Switch } from "../ui/switch";
 import Modal from "../common/Modal";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
@@ -217,20 +218,11 @@ export default function AddEditAssistant({
                 <span className={`text-xs font-medium ${isActive ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
                   {isActive ? "Assistente Ativo" : "Assistente Inativo"}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setIsActive((v) => !v)}
-                  className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${
-                    isActive ? "bg-primary" : "bg-muted"
-                  }`}
+                <Switch
+                  checked={isActive}
+                  onCheckedChange={setIsActive}
                   title={isActive ? "Inativar Assistente" : "Ativar Assistente"}
-                >
-                  <span
-                    className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                      isActive ? "translate-x-5" : "translate-x-0.5"
-                    }`}
-                  />
-                </button>
+                />
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -734,21 +726,10 @@ export default function AddEditAssistant({
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                           Pausa de Almoço
                         </p>
-                        <button
-                          type="button"
-                          onClick={() => setLunchEnabled((v) => !v)}
-                          className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                            lunchEnabled ? "bg-primary" : "bg-muted-foreground/30"
-                          }`}
-                          role="switch"
-                          aria-checked={lunchEnabled}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${
-                              lunchEnabled ? "translate-x-4" : "translate-x-0"
-                            }`}
-                          />
-                        </button>
+                        <Switch
+                          checked={lunchEnabled}
+                          onCheckedChange={setLunchEnabled}
+                        />
                       </div>
                       {lunchEnabled ? (
                         <div className="grid grid-cols-3 gap-3">
@@ -1041,25 +1022,10 @@ export default function AddEditAssistant({
                                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                                   Pausa de Almoço
                                 </p>
-                                <button
-                                  type="button"
-                                  onClick={() => setLunchEn((v) => !v)}
-                                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                                    lunchEn
-                                      ? "bg-primary"
-                                      : "bg-muted-foreground/30"
-                                  }`}
-                                  role="switch"
-                                  aria-checked={lunchEn}
-                                >
-                                  <span
-                                    className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${
-                                      lunchEn
-                                        ? "translate-x-4"
-                                        : "translate-x-0"
-                                    }`}
-                                  />
-                                </button>
+                                <Switch
+                                  checked={lunchEn}
+                                  onCheckedChange={setLunchEn}
+                                />
                               </div>
                               {lunchEn ? (
                                 <div className="space-y-2">

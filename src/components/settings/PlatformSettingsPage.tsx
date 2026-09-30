@@ -33,6 +33,7 @@ import usersService from "../../api/services/users.service";
 import type { School, AbsenceType, AdminUser, EntityId } from "../../types";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
+import { Switch } from "../ui/switch";
 import Modal from "../common/Modal";
 
 export default function PlatformSettingsPage() {
@@ -801,19 +802,10 @@ export default function PlatformSettingsPage() {
                       Permite acesso imediato ao painel de administração
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setAdminActive((v) => !v)}
-                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${
-                      adminActive ? "bg-primary" : "bg-muted"
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                        adminActive ? "translate-x-5" : "translate-x-0.5"
-                      }`}
-                    />
-                  </button>
+                  <Switch
+                    checked={adminActive}
+                    onCheckedChange={setAdminActive}
+                  />
                 </div>
 
                 <div className="flex gap-3 pt-2">
@@ -1053,19 +1045,11 @@ export default function PlatformSettingsPage() {
                       Ativa o upload obrigatório no registo da falta
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setAbsenceTypeRequiresDoc((v) => !v)}
-                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${
-                      absenceTypeRequiresDoc ? "bg-accent" : "bg-muted"
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                        absenceTypeRequiresDoc ? "translate-x-5" : "translate-x-0.5"
-                      }`}
-                    />
-                  </button>
+                  <Switch
+                    checked={absenceTypeRequiresDoc}
+                    onCheckedChange={setAbsenceTypeRequiresDoc}
+                    className="data-[state=checked]:bg-accent"
+                  />
                 </div>
                 <div className="flex gap-3 pt-2">
                   <button
