@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { ChevronRight, UserPlus, Users } from "lucide-react";
-import { assistants as ASSISTANTS } from "../../api/mockData";
+import { ChevronRight, Loader2, UserPlus, Users } from "lucide-react";
 import { Card } from "../ui/card";
 import type { EntityId } from "../../types";
+import { useAssistantsList } from "../../hooks/api/useAssistants";
+import { useSchool } from "../../context/SchoolContext";
 
 interface AssistantsListPageProps {
   onAddNew: () => void;
@@ -14,8 +15,11 @@ export default function AssistantsListPage({
   onViewProfile,
 }: AssistantsListPageProps) {
   const [tab, setTab] = useState<"ativos" | "inativos">("ativos");
-  const active = ASSISTANTS.filter((a) => (a.active ?? a.is_active ?? true));
-  const inactive = ASSISTANTS.filter((a) => !(a.active ?? a.is_active ?? true));
+  const { selectedSchool } = useSchool();
+  // Muda automaticamente quando se troca de escola no header (schoolId na queryKey).
+  const { data: assistants = [], isLoading, isFetching } = useAssistantsList();
+  const active = assistants.filter((a) => (a.active ?? a.is_active ?? true));
+  const inactive = assistants.filter((a) => !(a.active ?? a.is_active ?? true));
   const list = tab === "ativos" ? active : inactive;
 
   return (
@@ -26,8 +30,11 @@ export default function AssistantsListPage({
           <h2 className="text-xl font-semibold text-foreground">
             Equipa de Assistentes
           </h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {ASSISTANTS.length} assistentes registados no agrupamento
+          <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5">
+            {assistants.length} assistentes registados em {selectedSchool.name}
+            {isFetching && !isLoading && (
+              <Loader2 size={12} className="animate-spin" />
+            )}
           </p>
         </div>
         <button
@@ -84,10 +91,15 @@ export default function AssistantsListPage({
       </div>
 
       {/* List */}
-      {list.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16 text-muted-foreground">
+          <Loader2 size={20} className="animate-spin mr-2" />
+          <span className="text-sm">A carregar assistentes...</span>
+        </div>
+      ) : list.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <Users size={32} className="mb-3 opacity-30" />
-          <p className="text-sm">Nenhum assistente nesta categoria</p>
+          <p className="text-sm">Nenhum assistente nesta categoria para esta escola</p>
         </div>
       ) : (
         <Card className="overflow-hidden border-border bg-card">

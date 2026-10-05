@@ -7,6 +7,7 @@ import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import DatePicker, { formatToIsoDate, parseFlexibleDate } from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
+import { ActionTooltip } from "../common/ActionTooltip";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
 
 function formatDisplayDate(dateStr: string) {
@@ -213,22 +214,25 @@ export default function HolidaysPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center gap-1 justify-end">
-                          <button
-                            type="button"
-                            onClick={() => openEdit(h)}
-                            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            title="Editar feriado"
-                          >
-                            <Pencil size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setHolidayDeleteTarget(h)}
-                            className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                            title="Eliminar feriado"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          <ActionTooltip content="Editar feriado">
+                            <button
+                              type="button"
+                              onClick={() => openEdit(h)}
+                              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                          </ActionTooltip>
+
+                          <ActionTooltip content="Eliminar feriado">
+                            <button
+                              type="button"
+                              onClick={() => setHolidayDeleteTarget(h)}
+                              className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </ActionTooltip>
                         </div>
                       </td>
                     </tr>

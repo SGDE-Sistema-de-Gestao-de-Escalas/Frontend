@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AGRUPAMENTO, schools as initialSchools } from "../api/mockData";
+import schoolsService, { BackendSchoolResource } from "../api/services/schools.service";
 import type { School } from "../types";
 
 export interface OperatingHours {
@@ -17,6 +19,7 @@ interface SchoolContextType {
   agrupamento: typeof AGRUPAMENTO;
   updateSchool: (school: School) => void;
   addSchool: (school: Omit<School, "id">) => void;
+  refreshSchools: () => Promise<void>;
   operatingHours: OperatingHours;
   updateOperatingHours: (hours: Partial<OperatingHours>) => void;
 }
@@ -24,6 +27,7 @@ interface SchoolContextType {
 const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
 export function SchoolProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [schoolsList, setSchoolsList] = useState<School[]>(initialSchools);
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | string>(() => {
     return localStorage.getItem("selected_school_id") || 1;
@@ -35,12 +39,64 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
     close: "21:00",
   });
 
+  const refreshSchools = async () => {
+    try {
+      const res = await schoolsService.getAll();
+      const rawList = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : null;
+      if (rawList !== null) {
+        const mapped: School[] = rawList.map((s: BackendSchoolResource) => ({
+          id: s.id,
+          name: s.name,
+          acronym: s.acronym || undefined,
+          address: s.address || "",
+          phone: s.phone || "",
+          email: s.email || undefined,
+          active: s.active,
+          assistants: s.assistants ?? s.assistants_count ?? 0,
+          assistants_count: s.assistants_count ?? s.assistants ?? 0,
+          can_delete: s.can_delete ?? true,
+          cannot_delete_reason: s.cannot_delete_reason ?? null,
+        }));
+        setSchoolsList(mapped);
+
+        if (mapped.length > 0) {
+          setSelectedSchoolId((currId) => {
+            const exists = mapped.some((s) => String(s.id) === String(currId));
+            if (!exists) {
+              const firstActive = mapped.find((s) => s.active) || mapped[0];
+              localStorage.setItem("selected_school_id", String(firstActive.id));
+              return firstActive.id;
+            }
+            return currId;
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch schools from API in SchoolContext:", err);
+    }
+  };
+
+  useEffect(() => {
+    refreshSchools();
+  }, []);
+
   const selectedSchool =
-    schoolsList.find((s) => String(s.id) === String(selectedSchoolId)) || schoolsList[0];
+    schoolsList.find((s) => String(s.id) === String(selectedSchoolId)) || schoolsList[0] || initialSchools[0];
 
   function setSchoolId(id: number | string) {
-    setSelectedSchoolId(id);
+    if (String(id) === String(selectedSchoolId)) return;
+
+    // 1) Gravar primeiro no localStorage: o interceptor do Axios lê daqui o
+    //    header X-School-ID, por isso tem de estar atualizado antes de qualquer refetch.
     localStorage.setItem("selected_school_id", String(id));
+
+    // 2) Atualizar o estado: as queries que usam o schoolId na queryKey
+    //    mudam de key e são pedidas de novo automaticamente.
+    setSelectedSchoolId(id);
+
+    // 3) Rede de segurança: invalida tudo o que está em cache, para apanhar
+    //    queries que dependam da escola mas não tenham o schoolId na key.
+    queryClient.invalidateQueries();
   }
 
   function updateSchool(updated: School) {
@@ -71,6 +127,7 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
         agrupamento: AGRUPAMENTO,
         updateSchool,
         addSchool,
+        refreshSchools,
         operatingHours,
         updateOperatingHours,
       }}

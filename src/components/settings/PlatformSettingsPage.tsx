@@ -30,84 +30,207 @@ import {
   INITIAL_ADMINS,
 } from "../../api/mockData";
 import usersService from "../../api/services/users.service";
+import schoolsService, { BackendSchoolResource } from "../../api/services/schools.service";
 import type { School, AbsenceType, AdminUser, EntityId } from "../../types";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { Switch } from "../ui/switch";
 import Modal from "../common/Modal";
 import ConfirmationModal from "../common/ConfirmationModal";
+import { ActionTooltip } from "../common/ActionTooltip";
+import { useSchool } from "../../context/SchoolContext";
 
 export default function PlatformSettingsPage() {
   const [activeTab, setActiveTab] = useState<"schools" | "users" | "absence-types">("schools");
+  const { refreshSchools: refreshGlobalSchools } = useSchool();
 
   // ── Schools state ─────────────────────────────────────────────────────────
   const [schoolsList, setSchoolsList] = useState<School[]>(
     INITIAL_SCHOOLS.map((s) => ({ ...s }))
   );
+  const [loadingSchools, setLoadingSchools] = useState(false);
+  const [savingSchool, setSavingSchool] = useState(false);
   const [showSchoolForm, setShowSchoolForm] = useState(false);
   const [schoolEditId, setSchoolEditId] = useState<EntityId | null>(null);
   const [schoolStatusConfirm, setSchoolStatusConfirm] = useState<School | null>(null);
   const [schoolDeleteConfirm, setSchoolDeleteConfirm] = useState<School | null>(null);
   const [schoolName, setSchoolName] = useState("");
+  const [schoolAcronym, setSchoolAcronym] = useState("");
   const [schoolAddress, setSchoolAddress] = useState("");
   const [schoolPhone, setSchoolPhone] = useState("");
+  const [schoolEmail, setSchoolEmail] = useState("");
+
+  const fetchSchools = async () => {
+    try {
+      setLoadingSchools(true);
+      const res = await schoolsService.getAll();
+      const rawList = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : null;
+      if (rawList !== null) {
+        const mapped: School[] = rawList.map((s: BackendSchoolResource) => ({
+          id: s.id,
+          name: s.name,
+          acronym: s.acronym || undefined,
+          address: s.address || "",
+          phone: s.phone || "",
+          email: s.email || undefined,
+          active: s.active,
+          assistants: s.assistants ?? s.assistants_count ?? 0,
+          assistants_count: s.assistants_count ?? s.assistants ?? 0,
+          can_delete: s.can_delete ?? true,
+          cannot_delete_reason: s.cannot_delete_reason ?? null,
+        }));
+        setSchoolsList(mapped);
+      }
+    } catch (err) {
+      console.warn("Backend schools API offline or error, using local data fallback:", err);
+    } finally {
+      setLoadingSchools(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSchools();
+  }, []);
 
   function openAddSchool() {
     setSchoolName("");
+    setSchoolAcronym("");
     setSchoolAddress("");
     setSchoolPhone("");
+    setSchoolEmail("");
     setSchoolEditId(null);
     setShowSchoolForm(true);
   }
 
   function openEditSchool(s: School) {
     setSchoolName(s.name);
-    setSchoolAddress(s.address);
-    setSchoolPhone(s.phone);
+    setSchoolAcronym(s.acronym || "");
+    setSchoolAddress(s.address || "");
+    setSchoolPhone(s.phone || "");
+    setSchoolEmail(s.email || "");
     setSchoolEditId(s.id);
     setShowSchoolForm(true);
   }
 
-  function handleSaveSchool() {
-    if (!schoolName.trim()) return;
-    if (schoolEditId !== null) {
-      setSchoolsList((p) =>
-        p.map((s) =>
-          s.id === schoolEditId
-            ? {
-                ...s,
-                name: schoolName,
-                address: schoolAddress,
-                phone: schoolPhone,
-              }
-            : s
-        )
-      );
-    } else {
-      setSchoolsList((p) => [
-        ...p,
-        {
-          id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-          name: schoolName,
-          address: schoolAddress,
-          phone: schoolPhone,
-          active: true,
-          assistants: 0,
-        },
-      ]);
+  async function handleSaveSchool() {
+    if (!schoolName.trim()) {
+      toast.error("O nome da escola é obrigatório.");
+      return;
     }
-    setShowSchoolForm(false);
-  }
 
-  function toggleSchoolActive(id: EntityId) {
-    setSchoolsList((p) =>
-      p.map((s) => (s.id === id ? { ...s, active: !s.active } : s))
+    const derivedAcronym = (
+      schoolAcronym.trim() ||
+      schoolName
+        .trim()
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 10)
     );
+
+    const isEditing = schoolEditId !== null;
+    setSavingSchool(true);
+
+    try {
+      if (isEditing) {
+        await schoolsService.update(schoolEditId, {
+          name: schoolName.trim(),
+          acronym: derivedAcronym,
+          address: schoolAddress.trim() || null,
+          phone: schoolPhone.trim() || null,
+          email: schoolEmail.trim() || null,
+        });
+        toast.success("Escola atualizada com sucesso.");
+      } else {
+        await schoolsService.create({
+          name: schoolName.trim(),
+          acronym: derivedAcronym,
+          address: schoolAddress.trim() || null,
+          phone: schoolPhone.trim() || null,
+          email: schoolEmail.trim() || null,
+          active: true,
+        });
+        toast.success("Escola criada com sucesso.");
+      }
+      await fetchSchools();
+      refreshGlobalSchools().catch(() => {});
+      setShowSchoolForm(false);
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || "Erro ao guardar escola.";
+      toast.error(msg);
+
+      // Fallback local caso a API não esteja disponível:
+      if (isEditing) {
+        setSchoolsList((p) =>
+          p.map((s) =>
+            s.id === schoolEditId
+              ? {
+                  ...s,
+                  name: schoolName.trim(),
+                  acronym: derivedAcronym,
+                  address: schoolAddress.trim(),
+                  phone: schoolPhone.trim(),
+                  email: schoolEmail.trim() || undefined,
+                }
+              : s
+          )
+        );
+      } else {
+        setSchoolsList((p) => [
+          ...p,
+          {
+            id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+            name: schoolName.trim(),
+            acronym: derivedAcronym,
+            address: schoolAddress.trim(),
+            phone: schoolPhone.trim(),
+            email: schoolEmail.trim() || undefined,
+            active: true,
+            assistants: 0,
+            can_delete: true,
+          },
+        ]);
+      }
+      setShowSchoolForm(false);
+    } finally {
+      setSavingSchool(false);
+    }
   }
 
-  function deleteSchool(id: EntityId) {
-    setSchoolsList((p) => p.filter((s) => s.id !== id));
-    setSchoolDeleteConfirm(null);
+  async function toggleSchoolActive(id: EntityId) {
+    const currentSchool = schoolsList.find((s) => s.id === id);
+    if (!currentSchool) return;
+    const newStatus = !currentSchool.active;
+
+    try {
+      await schoolsService.toggleActive(id, newStatus);
+      toast.success(newStatus ? "Escola ativada com sucesso." : "Escola desativada com sucesso.");
+      await fetchSchools();
+      refreshGlobalSchools().catch(() => {});
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Erro ao alterar estado da escola.");
+      // Fallback local:
+      setSchoolsList((p) =>
+        p.map((s) => (s.id === id ? { ...s, active: newStatus } : s))
+      );
+    }
+  }
+
+  async function deleteSchool(id: EntityId) {
+    try {
+      await schoolsService.delete(id);
+      toast.success("Escola eliminada com sucesso.");
+      await fetchSchools();
+      refreshGlobalSchools().catch(() => {});
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || "Erro ao eliminar escola.";
+      toast.error(msg);
+      // Fallback local:
+      setSchoolsList((p) => p.filter((s) => s.id !== id));
+    } finally {
+      setSchoolDeleteConfirm(null);
+    }
   }
 
   // ── Absence types state ───────────────────────────────────────────────────
@@ -464,123 +587,163 @@ export default function PlatformSettingsPage() {
               Nova Escola
             </button>
           </div>
-          <div className="space-y-3">
-            {schoolsList.map((school) => (
-              <div
-                key={school.id}
-                className={`p-4 rounded-xl border transition-colors ${
-                  school.active
-                    ? "border-border bg-card"
-                    : "border-border/50 bg-muted/20"
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      school.active ? "bg-primary/10" : "bg-muted"
-                    }`}
-                  >
-                    <Building2
-                      size={16}
-                      className={
-                        school.active ? "text-primary" : "text-muted-foreground"
-                      }
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p
-                        className={`text-sm font-semibold ${
-                          school.active
-                            ? "text-foreground"
-                            : "text-muted-foreground"
-                        }`}
-                      >
-                        {school.name}
-                      </p>
-                      <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                          school.active
-                            ? "bg-[#0E7C59]/10 text-[#0E7C59]"
-                            : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {school.active ? "Ativa" : "Inativa"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
-                      <MapPin size={10} />
-                      <span className="truncate">{school.address}</span>
-                    </div>
-                    <div className="flex items-center gap-4 mt-2 text-[11px] text-muted-foreground">
-                      <span>{school.phone}</span>
-                      <span>
-                        {school.assistants} assistente
-                        {school.assistants !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => openEditSchool(school)}
-                      className="p-1.5 rounded hover:bg-muted transition-colors"
-                      title="Editar"
-                    >
-                      <Pencil size={13} className="text-muted-foreground" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSchoolStatusConfirm(school)}
-                      className="p-1.5 rounded hover:bg-muted transition-colors"
-                      title={school.active ? "Desativar escola" : "Ativar escola"}
-                    >
-                      {school.active ? (
-                        <XCircle size={13} className="text-muted-foreground hover:text-amber-600" />
-                      ) : (
-                        <CheckCircle
-                          size={13}
-                          className="text-muted-foreground hover:text-emerald-600"
-                        />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (school.can_delete !== false) {
-                          setSchoolDeleteConfirm(school);
-                        }
-                      }}
-                      disabled={school.can_delete === false}
-                      className={`p-1.5 rounded transition-colors ${
-                        school.can_delete === false
-                          ? "opacity-30 cursor-not-allowed text-muted-foreground"
-                          : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+          {loadingSchools ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+              <Loader2 size={16} className="animate-spin" />
+              <span className="text-xs">A carregar escolas...</span>
+            </div>
+          ) : schoolsList.length === 0 ? (
+            <div className="text-center py-12 border border-dashed border-border rounded-xl">
+              <Building2 size={24} className="mx-auto text-muted-foreground/40 mb-2" />
+              <p className="text-xs text-muted-foreground">Nenhuma escola registada.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {schoolsList.map((school) => (
+                <div
+                  key={school.id}
+                  className={`p-4 rounded-xl border transition-colors ${
+                    school.active
+                      ? "border-border bg-card"
+                      : "border-border/50 bg-muted/20"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        school.active ? "bg-primary/10" : "bg-muted"
                       }`}
-                      title={
-                        school.can_delete === false
-                          ? school.cannot_delete_reason || (school.assistants > 0 ? `Não é possível eliminar: existem ${school.assistants} assistentes associados.` : "Não é possível eliminar esta escola.")
-                          : "Eliminar escola"
-                      }
                     >
-                      <Trash2
-                        size={13}
+                      <Building2
+                        size={16}
+                        className={
+                          school.active ? "text-primary" : "text-muted-foreground"
+                        }
                       />
-                    </button>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p
+                          className={`text-sm font-semibold ${
+                            school.active
+                              ? "text-foreground"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {school.name}
+                        </p>
+                        {school.acronym && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded font-mono font-medium bg-muted text-muted-foreground border border-border">
+                            {school.acronym}
+                          </span>
+                        )}
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                            school.active
+                              ? "bg-[#0E7C59]/10 text-[#0E7C59]"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {school.active ? "Ativa" : "Inativa"}
+                        </span>
+                      </div>
+                      {school.address && (
+                        <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                          <MapPin size={10} />
+                          <span className="truncate">{school.address}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-4 mt-2 text-[11px] text-muted-foreground flex-wrap">
+                        {school.phone && <span>{school.phone}</span>}
+                        {school.email && (
+                          <span className="flex items-center gap-1">
+                            <Mail size={10} />
+                            {school.email}
+                          </span>
+                        )}
+                        <span>
+                          {school.assistants} assistente
+                          {school.assistants !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <ActionTooltip content="Editar escola">
+                        <button
+                          type="button"
+                          onClick={() => openEditSchool(school)}
+                          className="p-1.5 rounded hover:bg-muted transition-colors"
+                        >
+                          <Pencil size={13} className="text-muted-foreground" />
+                        </button>
+                      </ActionTooltip>
+
+                      <ActionTooltip content={school.active ? "Desativar escola" : "Ativar escola"}>
+                        <button
+                          type="button"
+                          onClick={() => setSchoolStatusConfirm(school)}
+                          className="p-1.5 rounded hover:bg-muted transition-colors"
+                        >
+                          {school.active ? (
+                            <XCircle size={13} className="text-muted-foreground hover:text-amber-600" />
+                          ) : (
+                            <CheckCircle
+                              size={13}
+                              className="text-muted-foreground hover:text-emerald-600"
+                            />
+                          )}
+                        </button>
+                      </ActionTooltip>
+
+                      <ActionTooltip
+                        content={
+                          school.can_delete === false ? (
+                            <div className="flex items-start gap-1.5 text-left py-0.5">
+                              <AlertTriangle size={13} className="text-amber-400 flex-shrink-0 mt-0.5" />
+                              <span>
+                                {school.cannot_delete_reason ||
+                                  (school.assistants > 0
+                                    ? `Não é possível eliminar: existem ${school.assistants} assistentes associados.`
+                                    : "Não é possível eliminar esta escola.")}
+                              </span>
+                            </div>
+                          ) : (
+                            "Eliminar escola"
+                          )
+                        }
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (school.can_delete !== false) {
+                              setSchoolDeleteConfirm(school);
+                            }
+                          }}
+                          disabled={school.can_delete === false}
+                          className={`p-1.5 rounded transition-colors ${
+                            school.can_delete === false
+                              ? "opacity-30 cursor-not-allowed text-muted-foreground"
+                              : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                          }`}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </ActionTooltip>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
           {showSchoolForm && (
             <Modal
               title={schoolEditId !== null ? "Editar Escola" : "Nova Escola"}
               subtitle="Dados de identificação da escola"
-              onClose={() => setShowSchoolForm(false)}
+              onClose={() => !savingSchool && setShowSchoolForm(false)}
             >
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5">
+                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                     Nome da Escola *
                   </label>
                   <input
@@ -589,10 +752,38 @@ export default function PlatformSettingsPage() {
                     onChange={(e) => setSchoolName(e.target.value)}
                     placeholder="Ex: EB1 Quinta das Flores"
                     className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    autoFocus
                   />
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                      Sigla / Código *
+                    </label>
+                    <input
+                      type="text"
+                      value={schoolAcronym}
+                      onChange={(e) => setSchoolAcronym(e.target.value)}
+                      placeholder="Ex: EB1QF"
+                      maxLength={20}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background uppercase font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                      Telefone
+                    </label>
+                    <input
+                      type="tel"
+                      value={schoolPhone}
+                      onChange={(e) => setSchoolPhone(e.target.value)}
+                      placeholder="213 000 000"
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </div>
+                </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5">
+                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                     Morada
                   </label>
                   <input
@@ -604,31 +795,33 @@ export default function PlatformSettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5">
-                    Telefone
+                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                    Email
                   </label>
                   <input
-                    type="tel"
-                    value={schoolPhone}
-                    onChange={(e) => setSchoolPhone(e.target.value)}
-                    placeholder="213 000 000"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                    type="email"
+                    value={schoolEmail}
+                    onChange={(e) => setSchoolEmail(e.target.value)}
+                    placeholder="escola@sgde.pt"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </div>
                 <div className="flex gap-3 pt-2">
                   <button
                     type="button"
+                    disabled={savingSchool}
                     onClick={() => setShowSchoolForm(false)}
-                    className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
                   >
                     Cancelar
                   </button>
                   <button
                     type="button"
                     onClick={handleSaveSchool}
-                    disabled={!schoolName.trim()}
-                    className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
+                    disabled={!schoolName.trim() || savingSchool}
+                    className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-2"
                   >
+                    {savingSchool && <Loader2 size={14} className="animate-spin" />}
                     {schoolEditId !== null ? "Guardar Alterações" : "Criar Escola"}
                   </button>
                 </div>
@@ -782,53 +975,65 @@ export default function PlatformSettingsPage() {
                   </div>
 
                   <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => openEditAdmin(admin)}
-                      className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      title="Editar"
-                    >
-                      <Pencil size={14} />
-                    </button>
+                    <ActionTooltip content="Editar utilizador">
+                      <button
+                        type="button"
+                        onClick={() => openEditAdmin(admin)}
+                        className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                    </ActionTooltip>
 
-                    <button
-                      type="button"
-                      onClick={() => setAdminStatusConfirm(admin)}
-                      className={`p-1.5 rounded-lg transition-colors ${
-                        admin.active
-                          ? "hover:bg-amber-500/10 text-muted-foreground hover:text-amber-600"
-                          : "hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-600"
-                      }`}
-                      title={admin.active ? "Inativar utilizador" : "Ativar utilizador"}
-                    >
-                      {admin.active ? (
-                        <UserX size={14} />
-                      ) : (
-                        <UserCheck size={14} />
-                      )}
-                    </button>
+                    <ActionTooltip content={admin.active ? "Inativar utilizador" : "Ativar utilizador"}>
+                      <button
+                        type="button"
+                        onClick={() => setAdminStatusConfirm(admin)}
+                        className={`p-1.5 rounded-lg transition-colors ${
+                          admin.active
+                            ? "hover:bg-amber-500/10 text-muted-foreground hover:text-amber-600"
+                            : "hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-600"
+                        }`}
+                      >
+                        {admin.active ? (
+                          <UserX size={14} />
+                        ) : (
+                          <UserCheck size={14} />
+                        )}
+                      </button>
+                    </ActionTooltip>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (admin.can_delete !== false) {
-                          setAdminDeleteConfirm(admin);
-                        }
-                      }}
-                      disabled={admin.can_delete === false}
-                      className={`p-1.5 rounded-lg transition-colors ${
-                        admin.can_delete === false
-                          ? "opacity-30 cursor-not-allowed text-muted-foreground"
-                          : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                      }`}
-                      title={
-                        admin.can_delete === false
-                          ? admin.cannot_delete_reason || "Não é possível eliminar este utilizador."
-                          : "Eliminar utilizador"
+                    <ActionTooltip
+                      content={
+                        admin.can_delete === false ? (
+                          <div className="flex items-start gap-1.5 text-left py-0.5">
+                            <AlertTriangle size={13} className="text-amber-400 flex-shrink-0 mt-0.5" />
+                            <span>
+                              {admin.cannot_delete_reason || "Não é possível eliminar este utilizador."}
+                            </span>
+                          </div>
+                        ) : (
+                          "Eliminar utilizador"
+                        )
                       }
                     >
-                      <Trash2 size={14} />
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (admin.can_delete !== false) {
+                            setAdminDeleteConfirm(admin);
+                          }
+                        }}
+                        disabled={admin.can_delete === false}
+                        className={`p-1.5 rounded-lg transition-colors ${
+                          admin.can_delete === false
+                            ? "opacity-30 cursor-not-allowed text-muted-foreground"
+                            : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                        }`}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </ActionTooltip>
                   </div>
                 </div>
               </div>
@@ -999,25 +1204,28 @@ export default function PlatformSettingsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => openEditAbsenceType(t)}
-                    className="p-1.5 rounded hover:bg-muted transition-colors"
-                    title="Editar"
-                  >
-                    <Pencil size={13} className="text-muted-foreground" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAbsenceTypeDeleteConfirm(t)}
-                    className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
-                    title="Eliminar"
-                  >
-                    <Trash2
-                      size={13}
-                      className="text-muted-foreground hover:text-destructive"
-                    />
-                  </button>
+                  <ActionTooltip content="Editar tipo de falta">
+                    <button
+                      type="button"
+                      onClick={() => openEditAbsenceType(t)}
+                      className="p-1.5 rounded hover:bg-muted transition-colors"
+                    >
+                      <Pencil size={13} className="text-muted-foreground" />
+                    </button>
+                  </ActionTooltip>
+
+                  <ActionTooltip content="Eliminar tipo de falta">
+                    <button
+                      type="button"
+                      onClick={() => setAbsenceTypeDeleteConfirm(t)}
+                      className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
+                    >
+                      <Trash2
+                        size={13}
+                        className="text-muted-foreground hover:text-destructive"
+                      />
+                    </button>
+                  </ActionTooltip>
                 </div>
               </div>
             ))}
