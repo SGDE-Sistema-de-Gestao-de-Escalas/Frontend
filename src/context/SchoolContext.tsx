@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import { AGRUPAMENTO, schools as initialSchools } from "../api/mockData";
+import schoolsService, { BackendSchoolResource } from "../api/services/schools.service";
 import type { School } from "../types";
 
 export interface OperatingHours {
@@ -17,6 +18,7 @@ interface SchoolContextType {
   agrupamento: typeof AGRUPAMENTO;
   updateSchool: (school: School) => void;
   addSchool: (school: Omit<School, "id">) => void;
+  refreshSchools: () => Promise<void>;
   operatingHours: OperatingHours;
   updateOperatingHours: (hours: Partial<OperatingHours>) => void;
 }
@@ -35,8 +37,37 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
     close: "21:00",
   });
 
+  const refreshSchools = async () => {
+    try {
+      const res = await schoolsService.getAll();
+      const rawList = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : null;
+      if (rawList !== null) {
+        const mapped: School[] = rawList.map((s: BackendSchoolResource) => ({
+          id: s.id,
+          name: s.name,
+          acronym: s.acronym || undefined,
+          address: s.address || "",
+          phone: s.phone || "",
+          email: s.email || undefined,
+          active: s.active,
+          assistants: s.assistants ?? s.assistants_count ?? 0,
+          assistants_count: s.assistants_count ?? s.assistants ?? 0,
+          can_delete: s.can_delete ?? true,
+          cannot_delete_reason: s.cannot_delete_reason ?? null,
+        }));
+        setSchoolsList(mapped);
+      }
+    } catch (err) {
+      console.warn("Could not fetch schools from API in SchoolContext:", err);
+    }
+  };
+
+  useEffect(() => {
+    refreshSchools();
+  }, []);
+
   const selectedSchool =
-    schoolsList.find((s) => String(s.id) === String(selectedSchoolId)) || schoolsList[0];
+    schoolsList.find((s) => String(s.id) === String(selectedSchoolId)) || schoolsList[0] || initialSchools[0];
 
   function setSchoolId(id: number | string) {
     setSelectedSchoolId(id);
@@ -71,6 +102,7 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
         agrupamento: AGRUPAMENTO,
         updateSchool,
         addSchool,
+        refreshSchools,
         operatingHours,
         updateOperatingHours,
       }}

@@ -45,10 +45,13 @@ export interface SchoolCluster {
 export interface School {
   id: EntityId;
   name: string;
+  acronym?: string;
   address: string;
   phone: string;
+  email?: string;
   active: boolean;
   assistants: number;
+  assistants_count?: number;
   can_delete?: boolean;
   cannot_delete_reason?: string | null;
 }
