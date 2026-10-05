@@ -56,6 +56,18 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
           cannot_delete_reason: s.cannot_delete_reason ?? null,
         }));
         setSchoolsList(mapped);
+
+        if (mapped.length > 0) {
+          setSelectedSchoolId((currId) => {
+            const exists = mapped.some((s) => String(s.id) === String(currId));
+            if (!exists) {
+              const firstActive = mapped.find((s) => s.active) || mapped[0];
+              localStorage.setItem("selected_school_id", String(firstActive.id));
+              return firstActive.id;
+            }
+            return currId;
+          });
+        }
       }
     } catch (err) {
       console.warn("Could not fetch schools from API in SchoolContext:", err);
