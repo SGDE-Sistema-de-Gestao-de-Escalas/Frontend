@@ -119,16 +119,10 @@ export function AuthProvider({
     const isRemember = credentials.remember !== undefined ? credentials.remember : remember;
     const response = await authService.login({ ...credentials, remember: isRemember });
 
-    // Se o backend enviar token no JSON (modo Bearer legado), guardamos; se for HttpOnly, response.token será vazio
-    if (response.token) {
-      if (isRemember) {
-        localStorage.setItem("auth_token", response.token);
-        sessionStorage.removeItem("auth_token");
-      } else {
-        sessionStorage.setItem("auth_token", response.token);
-        localStorage.removeItem("auth_token");
-      }
-    }
+    // O backend agora emite cookie HttpOnly ('access_token').
+    // Limpamos quaisquer tokens antigos do localStorage/sessionStorage para segurança contra XSS.
+    localStorage.removeItem("auth_token");
+    sessionStorage.removeItem("auth_token");
 
     const profile = mapAuthUserToProfile(response.user);
     setUserProfile(profile);
@@ -137,12 +131,15 @@ export function AuthProvider({
   }
 
   async function loginWithToken(token: string): Promise<Role> {
+    // Usado apenas para OAuth callback inicial se vier por query param
     if (token) {
       localStorage.setItem("auth_token", token);
-      sessionStorage.removeItem("auth_token");
     }
     const authUser = await authService.getMe();
     const profile = mapAuthUserToProfile(authUser);
+    // Após obter o perfil, se o backend já configurou a sessão, limpa do storage
+    localStorage.removeItem("auth_token");
+    sessionStorage.removeItem("auth_token");
     setUserProfile(profile);
     setRole(profile.role);
     return profile.role;
