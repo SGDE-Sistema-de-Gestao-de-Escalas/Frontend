@@ -7,6 +7,7 @@ const API_BASE_URL =
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -14,7 +15,7 @@ export const apiClient = axios.create({
   timeout: 15000,
 });
 
-// Request Interceptor: Attach Bearer Token & Selected School
+// Request Interceptor: Attach Bearer Token (if available) & Selected School
 apiClient.interceptors.request.use(
   (config) => {
     const token =

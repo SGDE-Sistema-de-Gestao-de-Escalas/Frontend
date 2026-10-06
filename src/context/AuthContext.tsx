@@ -89,24 +89,24 @@ export function AuthProvider({
   );
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check existing session token on application load (localStorage or sessionStorage)
+  // Check existing session on application load (supports HttpOnly cookies or fallback localStorage token)
   useEffect(() => {
     async function checkCurrentSession() {
-      const token =
-        localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-      if (token) {
-        try {
-          const authUser = await authService.getMe();
-          const profile = mapAuthUserToProfile(authUser);
-          setUserProfile(profile);
-          setRole(profile.role);
-        } catch {
-          // Token is invalid or backend unreachable; clear token
-          localStorage.removeItem("auth_token");
-          sessionStorage.removeItem("auth_token");
-        }
+      try {
+        // With HttpOnly cookies enabled (withCredentials: true), getMe() validates the active cookie session.
+        // If the backend still uses Bearer tokens, the request interceptor will attach the token from storage.
+        const authUser = await authService.getMe();
+        const profile = mapAuthUserToProfile(authUser);
+        setUserProfile(profile);
+        setRole(profile.role);
+      } catch {
+        // Session expired or unauthenticated; clean up any legacy storage
+        localStorage.removeItem("auth_token");
+        sessionStorage.removeItem("auth_token");
+        setRole(null);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     }
 
     checkCurrentSession();
@@ -118,12 +118,16 @@ export function AuthProvider({
   ): Promise<Role> {
     const isRemember = credentials.remember !== undefined ? credentials.remember : remember;
     const response = await authService.login({ ...credentials, remember: isRemember });
-    if (isRemember) {
-      localStorage.setItem("auth_token", response.token);
-      sessionStorage.removeItem("auth_token");
-    } else {
-      sessionStorage.setItem("auth_token", response.token);
-      localStorage.removeItem("auth_token");
+
+    // Se o backend enviar token no JSON (modo Bearer legado), guardamos; se for HttpOnly, response.token será vazio
+    if (response.token) {
+      if (isRemember) {
+        localStorage.setItem("auth_token", response.token);
+        sessionStorage.removeItem("auth_token");
+      } else {
+        sessionStorage.setItem("auth_token", response.token);
+        localStorage.removeItem("auth_token");
+      }
     }
 
     const profile = mapAuthUserToProfile(response.user);
@@ -133,8 +137,10 @@ export function AuthProvider({
   }
 
   async function loginWithToken(token: string): Promise<Role> {
-    localStorage.setItem("auth_token", token);
-    sessionStorage.removeItem("auth_token");
+    if (token) {
+      localStorage.setItem("auth_token", token);
+      sessionStorage.removeItem("auth_token");
+    }
     const authUser = await authService.getMe();
     const profile = mapAuthUserToProfile(authUser);
     setUserProfile(profile);
@@ -149,11 +155,8 @@ export function AuthProvider({
 
   async function logout() {
     try {
-      const token =
-        localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-      if (token) {
-        await authService.logout();
-      }
+      // Sempre chamamos /logout para que o backend possa limpar o cookie HttpOnly ou revogar a sessão/token
+      await authService.logout();
     } catch {
       // Ignore network errors on logout
     } finally {
