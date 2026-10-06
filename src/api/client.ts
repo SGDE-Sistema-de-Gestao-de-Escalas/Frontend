@@ -52,8 +52,7 @@ apiClient.interceptors.response.use(
     const { status, data } = error.response;
     const backendMessage = data?.message || (data as any)?.error;
 
-    // Se o BackOffice enviou uma mensagem específica de negócio (ex: 409 Conflito, 403 Permissão, etc.)
-    // exibimos com a componente FeedbackNotification, exceto 401 (auth) e 422 (validações locais)
+    // Se o BackOffice enviou uma mensagem específica de negócio, exibimos com o FeedbackNotification
     if (backendMessage && status !== 401 && status !== 422) {
       notify.error(
         backendMessage,
@@ -66,8 +65,10 @@ apiClient.interceptors.response.use(
 
     switch (status) {
       case 400:
-        notify.error(backendMessage || "Os dados enviados são inválidos.", undefined, "Dados Inválidos");
-        (error as any).__alreadyNotified = true;
+        if (backendMessage) {
+          notify.error(backendMessage, undefined, "Dados Inválidos");
+          (error as any).__alreadyNotified = true;
+        }
         break;
 
       case 401:
@@ -79,13 +80,17 @@ apiClient.interceptors.response.use(
         break;
 
       case 403:
-        notify.error(backendMessage || "Não tem permissões para realizar esta ação.", undefined, "Acesso Negado");
-        (error as any).__alreadyNotified = true;
+        if (backendMessage) {
+          notify.error(backendMessage, undefined, "Acesso Negado");
+          (error as any).__alreadyNotified = true;
+        }
         break;
 
       case 404:
-        notify.error(backendMessage || "O recurso solicitado não existe.", undefined, "Não Encontrado");
-        (error as any).__alreadyNotified = true;
+        if (backendMessage) {
+          notify.error(backendMessage, undefined, "Não Encontrado");
+          (error as any).__alreadyNotified = true;
+        }
         break;
 
       case 422:
@@ -93,19 +98,18 @@ apiClient.interceptors.response.use(
         break;
 
       case 429:
-        notify.error(
-          backendMessage ||
-            "Demasiadas tentativas. Por favor aguarde um momento antes de tentar novamente.",
-          undefined,
-          "Limite Excedido"
-        );
-        (error as any).__alreadyNotified = true;
+        if (backendMessage) {
+          notify.error(backendMessage, undefined, "Limite Excedido");
+          (error as any).__alreadyNotified = true;
+        }
         break;
 
       case 500:
       default:
-        notify.error(backendMessage || "Ocorreu um erro inesperado no servidor.", undefined, "Erro no Servidor");
-        (error as any).__alreadyNotified = true;
+        if (backendMessage) {
+          notify.error(backendMessage, undefined, "Erro no Servidor");
+          (error as any).__alreadyNotified = true;
+        }
         break;
     }
 

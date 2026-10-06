@@ -73,7 +73,8 @@ export interface Assistant {
 
 export interface AdminUser {
   id: EntityId;
-  name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   role: "admin" | "staff" | string;
   role_id?: string;

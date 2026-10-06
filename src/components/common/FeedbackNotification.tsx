@@ -122,12 +122,13 @@ export function FeedbackNotification({
 
 /**
  * Extrai a mensagem de erro formatada enviada pelo BackOffice (Laravel API).
+ * Devolve null se a API não enviou nenhuma mensagem explicita.
  */
 export function getBackendErrorMessage(
   error: any,
-  fallback = "Ocorreu um erro ao processar o pedido."
-): string {
-  if (!error) return fallback;
+  fallback?: string
+): string | null {
+  if (!error) return fallback ?? null;
   if (typeof error === "string") return error;
 
   // Resposta estruturada do Laravel:
@@ -149,22 +150,18 @@ export function getBackendErrorMessage(
     }
   }
 
-  // Mensagem nativa do Error:
-  if (error.message && typeof error.message === "string") {
-    return error.message;
-  }
-
-  return fallback;
+  return fallback ?? null;
 }
 
 /**
- * Extrai a mensagem de sucesso da resposta do BackOffice.
+ * Extrai a mensagem de sucesso enviada pelo BackOffice.
+ * Devolve null se o endpoint não enviou campo 'message'.
  */
 export function getBackendSuccessMessage(
   response: any,
-  fallback = "Operação realizada com sucesso."
-): string {
-  if (!response) return fallback;
+  fallback?: string
+): string | null {
+  if (!response) return fallback ?? null;
   if (typeof response === "string") return response;
 
   if (response.data?.message && typeof response.data.message === "string") {
@@ -175,7 +172,7 @@ export function getBackendSuccessMessage(
     return response.message;
   }
 
-  return fallback;
+  return fallback ?? null;
 }
 
 /**
@@ -213,16 +210,30 @@ export function showFeedbackToast(
  * notify.error(err, "Falha ao eliminar escola");
  */
 export const notify = {
-  success: (message: React.ReactNode, title?: string, options?: { duration?: number; description?: React.ReactNode }) =>
-    showFeedbackToast("success", message, title ?? "Operação Concluída", options),
-
-  error: (
-    errOrMessage: any,
-    fallback = "Não foi possível concluir a operação.",
+  success: (
+    responseOrMessage: any,
     title?: string,
     options?: { duration?: number; description?: React.ReactNode }
   ) => {
-    const message = typeof errOrMessage === "string" ? errOrMessage : getBackendErrorMessage(errOrMessage, fallback);
+    const message =
+      typeof responseOrMessage === "string"
+        ? responseOrMessage
+        : getBackendSuccessMessage(responseOrMessage);
+    if (!message) return null;
+    return showFeedbackToast("success", message, title ?? "Operação Concluída", options);
+  },
+
+  error: (
+    errOrMessage: any,
+    fallback?: string,
+    title?: string,
+    options?: { duration?: number; description?: React.ReactNode }
+  ) => {
+    const message =
+      typeof errOrMessage === "string"
+        ? errOrMessage
+        : getBackendErrorMessage(errOrMessage, fallback);
+    if (!message) return null;
     return showFeedbackToast("error", message, title ?? "Falha na Operação", options);
   },
 

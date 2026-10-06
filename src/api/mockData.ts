@@ -195,7 +195,8 @@ export const assistants: Assistant[] = [
 export const INITIAL_ADMINS: AdminUser[] = [
   {
     id: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
-    name: "Miguel Silva",
+    first_name: "Miguel",
+    last_name: "Silva",
     email: "admin@sgde.pt",
     role: "admin",
     active: true,
@@ -204,7 +205,8 @@ export const INITIAL_ADMINS: AdminUser[] = [
   },
   {
     id: "b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e",
-    name: "Sofia Carvalho",
+    first_name: "Sofia",
+    last_name: "Carvalho",
     email: "sofia.carvalho@sgde.pt",
     role: "admin",
     active: true,
@@ -213,7 +215,8 @@ export const INITIAL_ADMINS: AdminUser[] = [
   },
   {
     id: "c3d4e5f6-a7b8-9c0d-1e2f-3a4b5c6d7e8f",
-    name: "Carlos Mendes",
+    first_name: "Carlos",
+    last_name: "Mendes",
     email: "carlos.mendes@sgde.pt",
     role: "admin",
     active: false,

@@ -150,7 +150,7 @@ export default function PlatformSettingsPage() {
           phone: schoolPhone.trim() || null,
           email: schoolEmail.trim() || null,
         });
-        notify.success(getBackendSuccessMessage(res, "Escola atualizada com sucesso."));
+        notify.success(res);
       } else {
         const res = await schoolsService.create({
           name: schoolName.trim(),
@@ -160,16 +160,18 @@ export default function PlatformSettingsPage() {
           email: schoolEmail.trim() || null,
           active: true,
         });
-        notify.success(getBackendSuccessMessage(res, "Escola criada com sucesso."));
+        notify.success(res);
       }
       await fetchSchools();
       refreshGlobalSchools().catch(() => {});
       setShowSchoolForm(false);
     } catch (err: any) {
-      const msg = getBackendErrorMessage(err, "Erro ao guardar escola.");
-      setSchoolFormError(msg);
+      const msg = getBackendErrorMessage(err);
+      if (msg) {
+        setSchoolFormError(msg);
+      }
       if (!(err as any)?.__alreadyNotified) {
-        notify.error(msg);
+        notify.error(err);
       }
 
       // Fallback local caso a API não esteja disponível:
@@ -219,17 +221,12 @@ export default function PlatformSettingsPage() {
 
     try {
       const res = await schoolsService.toggleActive(id, newStatus);
-      notify.success(
-        getBackendSuccessMessage(
-          res,
-          newStatus ? "Escola ativada com sucesso." : "Escola desativada com sucesso."
-        )
-      );
+      notify.success(res);
       await fetchSchools();
       refreshGlobalSchools().catch(() => {});
     } catch (err: any) {
       if (!(err as any)?.__alreadyNotified) {
-        notify.error(err, "Erro ao alterar estado da escola.");
+        notify.error(err);
       }
       // Fallback local apenas se erro de rede offline:
       if (!err?.response) {
@@ -243,12 +240,12 @@ export default function PlatformSettingsPage() {
   async function deleteSchool(id: EntityId) {
     try {
       const res = await schoolsService.delete(id);
-      notify.success(getBackendSuccessMessage(res, "Escola eliminada com sucesso."));
+      notify.success(res);
       await fetchSchools();
       refreshGlobalSchools().catch(() => {});
     } catch (err: any) {
       if (!(err as any)?.__alreadyNotified) {
-        notify.error(err, "Erro ao eliminar escola.");
+        notify.error(err);
       }
       // Se for erro de rede offline (sem resposta do backend), remove localmente como fallback:
       if (!err?.response) {
@@ -348,14 +345,12 @@ export default function PlatformSettingsPage() {
           const mapped: AdminUser[] = res.data
             .filter((u) => !u.role || u.role === "admin")
             .map((u) => {
-              const displayName =
-                u.name ||
-                [u.first_name, u.last_name].filter(Boolean).join(" ") ||
-                u.email?.split("@")[0] ||
-                "Administrador";
+              const fName = u.first_name || (u.name ? u.name.split(" ")[0] : "");
+              const lName = u.last_name || (u.name ? u.name.split(" ").slice(1).join(" ") : "");
               return {
                 id: u.id,
-                name: displayName,
+                first_name: fName,
+                last_name: lName,
                 email: u.email,
                 role: (u.role as "admin") || "admin",
                 is_active: u.is_active,
@@ -391,14 +386,8 @@ export default function PlatformSettingsPage() {
   }
 
   function openEditAdmin(admin: AdminUser) {
-    if (admin.first_name || admin.last_name) {
-      setAdminFirstName(admin.first_name || "");
-      setAdminLastName(admin.last_name || "");
-    } else {
-      const parts = (admin.name || "").trim().split(/\s+/);
-      setAdminFirstName(parts[0] || "");
-      setAdminLastName(parts.slice(1).join(" ") || "");
-    }
+    setAdminFirstName(admin.first_name || "");
+    setAdminLastName(admin.last_name || "");
     setAdminEmail(admin.email);
     setAdminActive(admin.is_active ?? admin.active ?? true);
     setAdminEditId(admin.id);
@@ -414,15 +403,19 @@ export default function PlatformSettingsPage() {
 
     if (isEditing) {
       try {
-        await usersService.update(adminEditId, {
+        const res = await usersService.update(adminEditId, {
           name: fullName,
           first_name: fName,
           last_name: lName,
           email: adminEmail.trim(),
           is_active: adminActive,
         });
-      } catch (err) {
-        console.warn("API update failed, updating local state:", err);
+        notify.success(res);
+      } catch (err: any) {
+        console.warn("API update failed:", err);
+        if (!(err as any)?.__alreadyNotified) {
+          notify.error(err);
+        }
       }
 
       setAdminsList((prev) =>
@@ -430,7 +423,6 @@ export default function PlatformSettingsPage() {
           a.id === adminEditId
             ? {
                 ...a,
-                name: fullName,
                 first_name: fName,
                 last_name: lName,
                 email: adminEmail.trim(),
@@ -440,7 +432,6 @@ export default function PlatformSettingsPage() {
             : a
         )
       );
-      notify.success("Administrador atualizado com sucesso");
     } else {
       let createdId: EntityId =
         typeof crypto !== "undefined" && crypto.randomUUID
@@ -458,13 +449,16 @@ export default function PlatformSettingsPage() {
         if (res?.data?.id) {
           createdId = res.data.id;
         }
-      } catch (err) {
-        console.warn("API create failed, saving to local state:", err);
+        notify.success(res);
+      } catch (err: any) {
+        console.warn("API create failed:", err);
+        if (!(err as any)?.__alreadyNotified) {
+          notify.error(err);
+        }
       }
 
       const newAdmin: AdminUser = {
         id: createdId,
-        name: fullName,
         first_name: fName,
         last_name: lName,
         email: adminEmail.trim(),
@@ -474,7 +468,6 @@ export default function PlatformSettingsPage() {
         created_at: new Date().toLocaleDateString("pt-PT"),
       };
       setAdminsList((prev) => [...prev, newAdmin]);
-      notify.success("Administrador criado com sucesso");
     }
     setShowAdminForm(false);
   }
@@ -488,12 +481,17 @@ export default function PlatformSettingsPage() {
     try {
       if (!newStatus) {
         // Deactivating calls DELETE /api/users/{id} in Laravel UserController
-        await usersService.delete(target.id);
+        const res = await usersService.delete(target.id);
+        notify.success(res);
       } else {
-        await usersService.update(target.id, { is_active: true });
+        const res = await usersService.update(target.id, { is_active: true });
+        notify.success(res);
       }
-    } catch (err) {
-      console.warn("API status toggle failed, updating local state:", err);
+    } catch (err: any) {
+      console.warn("API status toggle failed:", err);
+      if (!(err as any)?.__alreadyNotified) {
+        notify.error(err);
+      }
     }
 
     setAdminsList((prev) =>
@@ -503,7 +501,6 @@ export default function PlatformSettingsPage() {
           : a
       )
     );
-    notify.success(newStatus ? "Administrador reativado" : "Administrador inativado");
     setAdminStatusConfirm(null);
   }
 
@@ -512,14 +509,13 @@ export default function PlatformSettingsPage() {
     const targetId = adminDeleteConfirm.id;
 
     try {
-      await usersService.delete(targetId);
+      const res = await usersService.delete(targetId);
       setAdminsList((prev) => prev.filter((a) => a.id !== targetId));
-      notify.success("Administrador removido com sucesso");
+      notify.success(res);
     } catch (err: any) {
       console.warn("API delete failed:", err);
       if (!(err as any)?.__alreadyNotified) {
-        const apiMsg = getBackendErrorMessage(err, "Não foi possível eliminar o administrador.");
-        notify.error(apiMsg);
+        notify.error(err);
       }
     } finally {
       setAdminDeleteConfirm(null);
@@ -983,14 +979,9 @@ export default function PlatformSettingsPage() {
                         : "bg-muted text-muted-foreground border border-border"
                     }`}
                   >
-                    {(admin.name || admin.email || "AD")
-                      .trim()
-                      .split(" ")
-                      .filter(Boolean)
-                      .map((p) => p[0])
-                      .slice(0, 2)
-                      .join("")
-                      .toUpperCase() || "AD"}
+                    {((admin.first_name?.[0] || "") + (admin.last_name?.[0] || "")) ||
+                      admin.email?.slice(0, 2).toUpperCase() ||
+                      "AD"}
                   </div>
 
                   <div className="flex-1 min-w-0">
@@ -1002,7 +993,9 @@ export default function PlatformSettingsPage() {
                             : "text-muted-foreground"
                         }`}
                       >
-                        {admin.name || admin.email || "Administrador"}
+                        {[admin.first_name, admin.last_name].filter(Boolean).join(" ") ||
+                          admin.email ||
+                          "Administrador"}
                       </p>
                       <span
                         className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
@@ -1192,13 +1185,21 @@ export default function PlatformSettingsPage() {
               adminStatusConfirm?.active ? (
                 <>
                   Tem a certeza que pretende inativar o administrador{" "}
-                  <strong className="text-foreground">{adminStatusConfirm.name}</strong> ({adminStatusConfirm.email})?
+                  <strong className="text-foreground">
+                    {[adminStatusConfirm.first_name, adminStatusConfirm.last_name].filter(Boolean).join(" ") ||
+                      adminStatusConfirm.email}
+                  </strong>{" "}
+                  ({adminStatusConfirm.email})?
                   Enquanto a conta estiver inativa, o utilizador ficará bloqueado e não conseguirá iniciar sessão no sistema.
                 </>
               ) : (
                 <>
                   Deseja reativar o acesso de{" "}
-                  <strong className="text-foreground">{adminStatusConfirm?.name}</strong> ({adminStatusConfirm?.email})?
+                  <strong className="text-foreground">
+                    {[adminStatusConfirm?.first_name, adminStatusConfirm?.last_name].filter(Boolean).join(" ") ||
+                      adminStatusConfirm?.email}
+                  </strong>{" "}
+                  ({adminStatusConfirm?.email})?
                   O utilizador voltará a ter permissões de administração na plataforma.
                 </>
               )
@@ -1218,7 +1219,11 @@ export default function PlatformSettingsPage() {
               adminDeleteConfirm ? (
                 <>
                   Tem a certeza que pretende eliminar o administrador{" "}
-                  <strong className="text-foreground">{adminDeleteConfirm.name || adminDeleteConfirm.email}</strong> ({adminDeleteConfirm.email})?
+                  <strong className="text-foreground">
+                    {[adminDeleteConfirm.first_name, adminDeleteConfirm.last_name].filter(Boolean).join(" ") ||
+                      adminDeleteConfirm.email}
+                  </strong>{" "}
+                  ({adminDeleteConfirm.email})?
                   <span className="text-xs text-muted-foreground mt-2 block">
                     Em conformidade com o RGPD, os acessos serão revogados e os dados pessoais anonimizados no sistema, preservando a integridade dos históricos operacionais e de assiduidade do agrupamento.
                   </span>
