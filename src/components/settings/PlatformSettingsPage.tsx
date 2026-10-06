@@ -358,6 +358,8 @@ export default function PlatformSettingsPage() {
                 created_at: u.created_at ? new Date(u.created_at).toLocaleDateString("pt-PT") : undefined,
                 can_delete: u.can_delete ?? true,
                 cannot_delete_reason: u.cannot_delete_reason ?? null,
+                delete_action: u.delete_action,
+                delete_message: u.delete_message,
               };
             });
           if (mapped.length > 0) {
@@ -1214,25 +1216,45 @@ export default function PlatformSettingsPage() {
             open={adminDeleteConfirm !== null}
             onClose={() => setAdminDeleteConfirm(null)}
             onConfirm={handleConfirmDeleteAdmin}
-            title="Eliminar Administrador"
+            title={
+              adminDeleteConfirm?.delete_action === "hard_delete"
+                ? "Eliminar Administrador"
+                : "Remover Administrador"
+            }
             description={
               adminDeleteConfirm ? (
-                <>
-                  Tem a certeza que pretende eliminar o administrador{" "}
-                  <strong className="text-foreground">
-                    {[adminDeleteConfirm.first_name, adminDeleteConfirm.last_name].filter(Boolean).join(" ") ||
-                      adminDeleteConfirm.email}
-                  </strong>{" "}
-                  ({adminDeleteConfirm.email})?
-                  <span className="text-xs text-muted-foreground mt-2 block">
-                    Em conformidade com o RGPD, os acessos serão revogados e os dados pessoais anonimizados no sistema, preservando a integridade dos históricos operacionais e de assiduidade do agrupamento.
-                  </span>
-                </>
+                <div className="space-y-3">
+                  <p className="text-muted-foreground">
+                    Tem a certeza que pretende eliminar o administrador{" "}
+                    <strong className="text-foreground">
+                      {[adminDeleteConfirm.first_name, adminDeleteConfirm.last_name].filter(Boolean).join(" ") ||
+                        adminDeleteConfirm.email}
+                    </strong>{" "}
+                    ({adminDeleteConfirm.email})?
+                  </p>
+
+                  {/* Mensagem vinda da API apresentada com alinhamento justificado apenas quando fornecida pelo backend */}
+                  {adminDeleteConfirm.delete_message && (
+                    <div
+                      className={`py-2.5 px-3.5 rounded-lg border text-xs leading-relaxed text-justify transition-colors ${
+                        adminDeleteConfirm.delete_action === "hard_delete"
+                          ? "bg-destructive/10 text-destructive border-destructive/20 font-medium"
+                          : "bg-amber-500/10 text-amber-900 dark:text-amber-200 border-amber-500/20"
+                      }`}
+                    >
+                      {adminDeleteConfirm.delete_message}
+                    </div>
+                  )}
+                </div>
               ) : ""
             }
-            confirmLabel="Eliminar e Anonimizar"
+            confirmLabel={
+              adminDeleteConfirm?.delete_action === "hard_delete"
+                ? "Eliminar Definitivamente"
+                : "Confirmar Remoção"
+            }
             cancelLabel="Cancelar"
-            variant="danger"
+            variant={adminDeleteConfirm?.delete_action === "hard_delete" ? "danger" : "warning"}
           />
         </>
       )}

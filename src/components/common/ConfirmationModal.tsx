@@ -103,7 +103,7 @@ export default function ConfirmationModal({
         <div
           role="dialog"
           aria-modal="true"
-          className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-6 text-center pointer-events-auto transform transition-all animate-in zoom-in-95 duration-150"
+          className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-md p-6 text-center pointer-events-auto transform transition-all animate-in zoom-in-95 duration-150"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Icon Badge */}
@@ -122,12 +122,12 @@ export default function ConfirmationModal({
           </div>
 
           {/* Action buttons with strict uniform sizing and ordering: Cancel on Left, Confirm on Right */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-stretch gap-3">
             <button
               type="button"
               disabled={isLoading}
               onClick={onClose}
-              className="flex-1 py-2.5 px-4 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              className="flex-1 py-2.5 px-4 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 flex items-center justify-center text-center"
             >
               {cancelLabel}
             </button>
@@ -135,7 +135,7 @@ export default function ConfirmationModal({
               type="button"
               disabled={isLoading}
               onClick={onConfirm}
-              className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium shadow-xs transition-colors disabled:opacity-50 ${getConfirmButtonClass()}`}
+              className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium shadow-xs transition-colors disabled:opacity-50 flex items-center justify-center text-center leading-tight ${getConfirmButtonClass()}`}
             >
               {isLoading ? "A processar..." : confirmLabel}
             </button>

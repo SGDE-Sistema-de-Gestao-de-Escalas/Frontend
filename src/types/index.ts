@@ -56,6 +56,8 @@ export interface School {
   cannot_delete_reason?: string | null;
 }
 
+export type DeleteActionType = "hard_delete" | "anonymize";
+
 export interface Assistant {
   id: EntityId;
   name: string;
@@ -69,6 +71,8 @@ export interface Assistant {
   is_active?: boolean;
   can_delete?: boolean;
   cannot_delete_reason?: string | null;
+  delete_action?: DeleteActionType;
+  delete_message?: string;
 }
 
 export interface AdminUser {
@@ -83,6 +87,8 @@ export interface AdminUser {
   created_at?: string;
   can_delete?: boolean;
   cannot_delete_reason?: string | null;
+  delete_action?: DeleteActionType;
+  delete_message?: string;
 }
 
 export type AbsenceStatus = "pending" | "justified" | "unjustified";
