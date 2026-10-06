@@ -38,6 +38,11 @@ import { Switch } from "../ui/switch";
 import Modal from "../common/Modal";
 import ConfirmationModal from "../common/ConfirmationModal";
 import { ActionTooltip } from "../common/ActionTooltip";
+import FeedbackNotification, {
+  notify,
+  getBackendErrorMessage,
+  getBackendSuccessMessage,
+} from "../common/FeedbackNotification";
 import { useSchool } from "../../context/SchoolContext";
 
 export default function PlatformSettingsPage() {
@@ -59,6 +64,7 @@ export default function PlatformSettingsPage() {
   const [schoolAddress, setSchoolAddress] = useState("");
   const [schoolPhone, setSchoolPhone] = useState("");
   const [schoolEmail, setSchoolEmail] = useState("");
+  const [schoolFormError, setSchoolFormError] = useState<string | null>(null);
 
   const fetchSchools = async () => {
     try {
@@ -99,6 +105,7 @@ export default function PlatformSettingsPage() {
     setSchoolPhone("");
     setSchoolEmail("");
     setSchoolEditId(null);
+    setSchoolFormError(null);
     setShowSchoolForm(true);
   }
 
@@ -109,12 +116,13 @@ export default function PlatformSettingsPage() {
     setSchoolPhone(s.phone || "");
     setSchoolEmail(s.email || "");
     setSchoolEditId(s.id);
+    setSchoolFormError(null);
     setShowSchoolForm(true);
   }
 
   async function handleSaveSchool() {
     if (!schoolName.trim()) {
-      toast.error("O nome da escola é obrigatório.");
+      notify.error("O nome da escola é obrigatório.", "Dados Incompletos");
       return;
     }
 
@@ -131,19 +139,20 @@ export default function PlatformSettingsPage() {
 
     const isEditing = schoolEditId !== null;
     setSavingSchool(true);
+    setSchoolFormError(null);
 
     try {
       if (isEditing) {
-        await schoolsService.update(schoolEditId, {
+        const res = await schoolsService.update(schoolEditId, {
           name: schoolName.trim(),
           acronym: derivedAcronym,
           address: schoolAddress.trim() || null,
           phone: schoolPhone.trim() || null,
           email: schoolEmail.trim() || null,
         });
-        toast.success("Escola atualizada com sucesso.");
+        notify.success(getBackendSuccessMessage(res, "Escola atualizada com sucesso."));
       } else {
-        await schoolsService.create({
+        const res = await schoolsService.create({
           name: schoolName.trim(),
           acronym: derivedAcronym,
           address: schoolAddress.trim() || null,
@@ -151,48 +160,53 @@ export default function PlatformSettingsPage() {
           email: schoolEmail.trim() || null,
           active: true,
         });
-        toast.success("Escola criada com sucesso.");
+        notify.success(getBackendSuccessMessage(res, "Escola criada com sucesso."));
       }
       await fetchSchools();
       refreshGlobalSchools().catch(() => {});
       setShowSchoolForm(false);
     } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || "Erro ao guardar escola.";
-      toast.error(msg);
+      const msg = getBackendErrorMessage(err, "Erro ao guardar escola.");
+      setSchoolFormError(msg);
+      if (!(err as any)?.__alreadyNotified) {
+        notify.error(msg);
+      }
 
       // Fallback local caso a API não esteja disponível:
-      if (isEditing) {
-        setSchoolsList((p) =>
-          p.map((s) =>
-            s.id === schoolEditId
-              ? {
-                  ...s,
-                  name: schoolName.trim(),
-                  acronym: derivedAcronym,
-                  address: schoolAddress.trim(),
-                  phone: schoolPhone.trim(),
-                  email: schoolEmail.trim() || undefined,
-                }
-              : s
-          )
-        );
-      } else {
-        setSchoolsList((p) => [
-          ...p,
-          {
-            id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-            name: schoolName.trim(),
-            acronym: derivedAcronym,
-            address: schoolAddress.trim(),
-            phone: schoolPhone.trim(),
-            email: schoolEmail.trim() || undefined,
-            active: true,
-            assistants: 0,
-            can_delete: true,
-          },
-        ]);
+      if (!err?.response) {
+        if (isEditing) {
+          setSchoolsList((p) =>
+            p.map((s) =>
+              s.id === schoolEditId
+                ? {
+                    ...s,
+                    name: schoolName.trim(),
+                    acronym: derivedAcronym,
+                    address: schoolAddress.trim(),
+                    phone: schoolPhone.trim(),
+                    email: schoolEmail.trim() || undefined,
+                  }
+                : s
+            )
+          );
+        } else {
+          setSchoolsList((p) => [
+            ...p,
+            {
+              id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+              name: schoolName.trim(),
+              acronym: derivedAcronym,
+              address: schoolAddress.trim(),
+              phone: schoolPhone.trim(),
+              email: schoolEmail.trim() || undefined,
+              active: true,
+              assistants: 0,
+              can_delete: true,
+            },
+          ]);
+        }
+        setShowSchoolForm(false);
       }
-      setShowSchoolForm(false);
     } finally {
       setSavingSchool(false);
     }
@@ -204,30 +218,42 @@ export default function PlatformSettingsPage() {
     const newStatus = !currentSchool.active;
 
     try {
-      await schoolsService.toggleActive(id, newStatus);
-      toast.success(newStatus ? "Escola ativada com sucesso." : "Escola desativada com sucesso.");
+      const res = await schoolsService.toggleActive(id, newStatus);
+      notify.success(
+        getBackendSuccessMessage(
+          res,
+          newStatus ? "Escola ativada com sucesso." : "Escola desativada com sucesso."
+        )
+      );
       await fetchSchools();
       refreshGlobalSchools().catch(() => {});
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Erro ao alterar estado da escola.");
-      // Fallback local:
-      setSchoolsList((p) =>
-        p.map((s) => (s.id === id ? { ...s, active: newStatus } : s))
-      );
+      if (!(err as any)?.__alreadyNotified) {
+        notify.error(err, "Erro ao alterar estado da escola.");
+      }
+      // Fallback local apenas se erro de rede offline:
+      if (!err?.response) {
+        setSchoolsList((p) =>
+          p.map((s) => (s.id === id ? { ...s, active: newStatus } : s))
+        );
+      }
     }
   }
 
   async function deleteSchool(id: EntityId) {
     try {
-      await schoolsService.delete(id);
-      toast.success("Escola eliminada com sucesso.");
+      const res = await schoolsService.delete(id);
+      notify.success(getBackendSuccessMessage(res, "Escola eliminada com sucesso."));
       await fetchSchools();
       refreshGlobalSchools().catch(() => {});
     } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || "Erro ao eliminar escola.";
-      toast.error(msg);
-      // Fallback local:
-      setSchoolsList((p) => p.filter((s) => s.id !== id));
+      if (!(err as any)?.__alreadyNotified) {
+        notify.error(err, "Erro ao eliminar escola.");
+      }
+      // Se for erro de rede offline (sem resposta do backend), remove localmente como fallback:
+      if (!err?.response) {
+        setSchoolsList((p) => p.filter((s) => s.id !== id));
+      }
     } finally {
       setSchoolDeleteConfirm(null);
     }
@@ -272,6 +298,7 @@ export default function PlatformSettingsPage() {
             : t
         )
       );
+      notify.success("Tipo de falta atualizado com sucesso");
     } else {
       setAbsenceTypesList((p) => [
         ...p,
@@ -282,12 +309,14 @@ export default function PlatformSettingsPage() {
           requires_document: absenceTypeRequiresDoc,
         },
       ]);
+      notify.success("Tipo de falta criado com sucesso");
     }
     setShowAbsenceTypeForm(false);
   }
 
   function deleteAbsenceType(id: EntityId) {
     setAbsenceTypesList((p) => p.filter((t) => t.id !== id));
+    notify.success("Tipo de falta removido com sucesso");
     setAbsenceTypeDeleteConfirm(null);
   }
 
@@ -298,7 +327,8 @@ export default function PlatformSettingsPage() {
   const [loadingAdmins, setLoadingAdmins] = useState(false);
   const [showAdminForm, setShowAdminForm] = useState(false);
   const [adminEditId, setAdminEditId] = useState<EntityId | null>(null);
-  const [adminName, setAdminName] = useState("");
+  const [adminFirstName, setAdminFirstName] = useState("");
+  const [adminLastName, setAdminLastName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminActive, setAdminActive] = useState(true);
 
@@ -317,17 +347,24 @@ export default function PlatformSettingsPage() {
         if (isMounted && res?.data && Array.isArray(res.data)) {
           const mapped: AdminUser[] = res.data
             .filter((u) => !u.role || u.role === "admin")
-            .map((u) => ({
-              id: u.id,
-              name: u.name,
-              email: u.email,
-              role: (u.role as "admin") || "admin",
-              is_active: u.is_active,
-              active: u.is_active,
-              created_at: u.created_at ? new Date(u.created_at).toLocaleDateString("pt-PT") : undefined,
-              can_delete: u.can_delete ?? true,
-              cannot_delete_reason: u.cannot_delete_reason ?? null,
-            }));
+            .map((u) => {
+              const displayName =
+                u.name ||
+                [u.first_name, u.last_name].filter(Boolean).join(" ") ||
+                u.email?.split("@")[0] ||
+                "Administrador";
+              return {
+                id: u.id,
+                name: displayName,
+                email: u.email,
+                role: (u.role as "admin") || "admin",
+                is_active: u.is_active,
+                active: u.is_active,
+                created_at: u.created_at ? new Date(u.created_at).toLocaleDateString("pt-PT") : undefined,
+                can_delete: u.can_delete ?? true,
+                cannot_delete_reason: u.cannot_delete_reason ?? null,
+              };
+            });
           if (mapped.length > 0) {
             setAdminsList(mapped);
           }
@@ -345,7 +382,8 @@ export default function PlatformSettingsPage() {
   }, []);
 
   function openAddAdmin() {
-    setAdminName("");
+    setAdminFirstName("");
+    setAdminLastName("");
     setAdminEmail("");
     setAdminActive(true);
     setAdminEditId(null);
@@ -353,7 +391,14 @@ export default function PlatformSettingsPage() {
   }
 
   function openEditAdmin(admin: AdminUser) {
-    setAdminName(admin.name);
+    if (admin.first_name || admin.last_name) {
+      setAdminFirstName(admin.first_name || "");
+      setAdminLastName(admin.last_name || "");
+    } else {
+      const parts = (admin.name || "").trim().split(/\s+/);
+      setAdminFirstName(parts[0] || "");
+      setAdminLastName(parts.slice(1).join(" ") || "");
+    }
     setAdminEmail(admin.email);
     setAdminActive(admin.is_active ?? admin.active ?? true);
     setAdminEditId(admin.id);
@@ -361,13 +406,18 @@ export default function PlatformSettingsPage() {
   }
 
   async function handleSaveAdmin() {
-    if (!adminName.trim() || !adminEmail.trim()) return;
+    const fName = adminFirstName.trim();
+    const lName = adminLastName.trim();
+    if (!fName || !adminEmail.trim()) return;
+    const fullName = [fName, lName].filter(Boolean).join(" ");
     const isEditing = adminEditId !== null;
 
     if (isEditing) {
       try {
         await usersService.update(adminEditId, {
-          name: adminName.trim(),
+          name: fullName,
+          first_name: fName,
+          last_name: lName,
           email: adminEmail.trim(),
           is_active: adminActive,
         });
@@ -380,7 +430,9 @@ export default function PlatformSettingsPage() {
           a.id === adminEditId
             ? {
                 ...a,
-                name: adminName.trim(),
+                name: fullName,
+                first_name: fName,
+                last_name: lName,
                 email: adminEmail.trim(),
                 active: adminActive,
                 is_active: adminActive,
@@ -388,7 +440,7 @@ export default function PlatformSettingsPage() {
             : a
         )
       );
-      toast.success("Administrador atualizado com sucesso");
+      notify.success("Administrador atualizado com sucesso");
     } else {
       let createdId: EntityId =
         typeof crypto !== "undefined" && crypto.randomUUID
@@ -397,7 +449,9 @@ export default function PlatformSettingsPage() {
 
       try {
         const res = await usersService.create({
-          name: adminName.trim(),
+          name: fullName,
+          first_name: fName,
+          last_name: lName,
           email: adminEmail.trim(),
           is_active: adminActive,
         });
@@ -410,7 +464,9 @@ export default function PlatformSettingsPage() {
 
       const newAdmin: AdminUser = {
         id: createdId,
-        name: adminName.trim(),
+        name: fullName,
+        first_name: fName,
+        last_name: lName,
         email: adminEmail.trim(),
         role: "admin",
         active: adminActive,
@@ -418,7 +474,7 @@ export default function PlatformSettingsPage() {
         created_at: new Date().toLocaleDateString("pt-PT"),
       };
       setAdminsList((prev) => [...prev, newAdmin]);
-      toast.success("Administrador criado com sucesso");
+      notify.success("Administrador criado com sucesso");
     }
     setShowAdminForm(false);
   }
@@ -447,7 +503,7 @@ export default function PlatformSettingsPage() {
           : a
       )
     );
-    toast.success(newStatus ? "Administrador reativado" : "Administrador inativado");
+    notify.success(newStatus ? "Administrador reativado" : "Administrador inativado");
     setAdminStatusConfirm(null);
   }
 
@@ -458,20 +514,12 @@ export default function PlatformSettingsPage() {
     try {
       await usersService.delete(targetId);
       setAdminsList((prev) => prev.filter((a) => a.id !== targetId));
-      toast.success("Administrador removido com sucesso");
+      notify.success("Administrador removido com sucesso");
     } catch (err: any) {
       console.warn("API delete failed:", err);
-      const apiMsg = err?.response?.data?.message || err?.response?.data?.error;
-      if (apiMsg) {
-        toast.error(apiMsg);
-        return;
-      }
-      const isDev = Boolean((import.meta as any).env?.DEV);
-      if (isDev && !err?.response) {
-        setAdminsList((prev) => prev.filter((a) => a.id !== targetId));
-        toast.success("Administrador removido (modo de demonstração)");
-      } else {
-        toast.error("Não foi possível eliminar o administrador.");
+      if (!(err as any)?.__alreadyNotified) {
+        const apiMsg = getBackendErrorMessage(err, "Não foi possível eliminar o administrador.");
+        notify.error(apiMsg);
       }
     } finally {
       setAdminDeleteConfirm(null);
@@ -742,6 +790,14 @@ export default function PlatformSettingsPage() {
               onClose={() => !savingSchool && setShowSchoolForm(false)}
             >
               <div className="space-y-4">
+                {schoolFormError && (
+                  <FeedbackNotification
+                    type="error"
+                    title="Erro ao guardar"
+                    message={schoolFormError}
+                    onClose={() => setSchoolFormError(null)}
+                  />
+                )}
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                     Nome da Escola *
@@ -927,12 +983,14 @@ export default function PlatformSettingsPage() {
                         : "bg-muted text-muted-foreground border border-border"
                     }`}
                   >
-                    {admin.name
+                    {(admin.name || admin.email || "AD")
+                      .trim()
                       .split(" ")
+                      .filter(Boolean)
                       .map((p) => p[0])
                       .slice(0, 2)
                       .join("")
-                      .toUpperCase()}
+                      .toUpperCase() || "AD"}
                   </div>
 
                   <div className="flex-1 min-w-0">
@@ -944,7 +1002,7 @@ export default function PlatformSettingsPage() {
                             : "text-muted-foreground"
                         }`}
                       >
-                        {admin.name}
+                        {admin.name || admin.email || "Administrador"}
                       </p>
                       <span
                         className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
@@ -1048,17 +1106,31 @@ export default function PlatformSettingsPage() {
               onClose={() => setShowAdminForm(false)}
             >
               <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-medium text-foreground block mb-1.5">
-                    Nome Completo <span className="text-destructive">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={adminName}
-                    onChange={(e) => setAdminName(e.target.value)}
-                    placeholder="Ex: Miguel Silva"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-foreground block mb-1.5">
+                      Primeiro Nome <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={adminFirstName}
+                      onChange={(e) => setAdminFirstName(e.target.value)}
+                      placeholder="Ex: Miguel"
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-foreground block mb-1.5">
+                      Último Nome
+                    </label>
+                    <input
+                      type="text"
+                      value={adminLastName}
+                      onChange={(e) => setAdminLastName(e.target.value)}
+                      placeholder="Ex: Silva"
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -1100,7 +1172,7 @@ export default function PlatformSettingsPage() {
                   <button
                     type="button"
                     onClick={handleSaveAdmin}
-                    disabled={!adminName.trim() || !adminEmail.trim()}
+                    disabled={!adminFirstName.trim() || !adminEmail.trim()}
                     className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
                   >
                     {adminEditId !== null ? "Guardar Alterações" : "Criar Administrador"}
@@ -1146,7 +1218,7 @@ export default function PlatformSettingsPage() {
               adminDeleteConfirm ? (
                 <>
                   Tem a certeza que pretende eliminar o administrador{" "}
-                  <strong className="text-foreground">{adminDeleteConfirm.name}</strong> ({adminDeleteConfirm.email})?
+                  <strong className="text-foreground">{adminDeleteConfirm.name || adminDeleteConfirm.email}</strong> ({adminDeleteConfirm.email})?
                   <span className="text-xs text-muted-foreground mt-2 block">
                     Em conformidade com o RGPD, os acessos serão revogados e os dados pessoais anonimizados no sistema, preservando a integridade dos históricos operacionais e de assiduidade do agrupamento.
                   </span>

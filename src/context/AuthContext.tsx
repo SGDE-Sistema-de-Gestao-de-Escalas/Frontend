@@ -45,8 +45,8 @@ const STAFF_USER: UserProfile = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function extractInitials(name: string): string {
-  if (!name) return "U";
+function extractInitials(name?: string | null): string {
+  if (!name || !name.trim()) return "U";
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -58,10 +58,16 @@ function mapAuthUserToProfile(authUser: AuthUser): UserProfile {
       ? (authUser.role as Role)
       : (authUser.role as any)?.slug || "staff";
 
+  const resolvedName =
+    authUser.name ||
+    [authUser.first_name, authUser.last_name].filter(Boolean).join(" ").trim() ||
+    authUser.email?.split("@")[0] ||
+    "Utilizador";
+
   return {
     id: authUser.id,
-    name: authUser.name,
-    initials: extractInitials(authUser.name),
+    name: resolvedName,
+    initials: extractInitials(resolvedName),
     role: roleSlug,
     roleLabel: roleSlug === "admin" ? "Administrador" : "Assistente",
     email: authUser.email,

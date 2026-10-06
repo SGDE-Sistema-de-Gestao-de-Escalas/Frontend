@@ -9,7 +9,9 @@ export interface LoginCredentials {
 
 export interface AuthUser {
   id: string | number;
-  name: string;
+  name?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
   email: string;
   role: Role | { id: string | number; name: string; slug: Role };
   assistant_id?: string | number | null;

@@ -1,6 +1,6 @@
 import axios, { AxiosError } from "axios";
-import { toast } from "sonner";
 import type { ApiValidationError } from "./types/api.types";
+import { notify } from "../components/common/FeedbackNotification";
 
 const API_BASE_URL =
   (import.meta as any).env?.VITE_API_URL || "http://localhost:8000/api";
@@ -38,27 +38,36 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError<ApiValidationError>) => {
     if (!error.response) {
-      toast.error("Erro de Ligação", {
-        description:
-          "Não foi possível contactar o servidor em " +
+      notify.error(
+        "Não foi possível contactar o servidor em " +
           API_BASE_URL +
           ". Verifique se o backend está ativo.",
-      });
+        undefined,
+        "Erro de Ligação"
+      );
+      (error as any).__alreadyNotified = true;
       return Promise.reject(error);
     }
 
     const { status, data } = error.response;
     const backendMessage = data?.message || (data as any)?.error;
 
-    // Se o BackOffice enviou uma mensagem específica de negócio, mostramos exatamente essa mensagem!
+    // Se o BackOffice enviou uma mensagem específica de negócio (ex: 409 Conflito, 403 Permissão, etc.)
+    // exibimos com a componente FeedbackNotification, exceto 401 (auth) e 422 (validações locais)
     if (backendMessage && status !== 401 && status !== 422) {
-      toast.error(backendMessage);
+      notify.error(
+        backendMessage,
+        undefined,
+        status === 409 ? "Conflito de Regras" : "Erro no Servidor"
+      );
+      (error as any).__alreadyNotified = true;
       return Promise.reject(error);
     }
 
     switch (status) {
       case 400:
-        toast.error(backendMessage || "Os dados enviados são inválidos.");
+        notify.error(backendMessage || "Os dados enviados são inválidos.", undefined, "Dados Inválidos");
+        (error as any).__alreadyNotified = true;
         break;
 
       case 401:
@@ -70,11 +79,13 @@ apiClient.interceptors.response.use(
         break;
 
       case 403:
-        toast.error(backendMessage || "Não tem permissões para realizar esta ação.");
+        notify.error(backendMessage || "Não tem permissões para realizar esta ação.", undefined, "Acesso Negado");
+        (error as any).__alreadyNotified = true;
         break;
 
       case 404:
-        toast.error(backendMessage || "O recurso solicitado não existe.");
+        notify.error(backendMessage || "O recurso solicitado não existe.", undefined, "Não Encontrado");
+        (error as any).__alreadyNotified = true;
         break;
 
       case 422:
@@ -82,15 +93,19 @@ apiClient.interceptors.response.use(
         break;
 
       case 429:
-        toast.error(
+        notify.error(
           backendMessage ||
-            "Demasiadas tentativas. Por favor aguarde um momento antes de tentar novamente."
+            "Demasiadas tentativas. Por favor aguarde um momento antes de tentar novamente.",
+          undefined,
+          "Limite Excedido"
         );
+        (error as any).__alreadyNotified = true;
         break;
 
       case 500:
       default:
-        toast.error(backendMessage || "Ocorreu um erro inesperado no servidor.");
+        notify.error(backendMessage || "Ocorreu um erro inesperado no servidor.", undefined, "Erro no Servidor");
+        (error as any).__alreadyNotified = true;
         break;
     }
 

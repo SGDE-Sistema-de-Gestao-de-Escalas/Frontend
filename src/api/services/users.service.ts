@@ -3,7 +3,9 @@ import type { ApiResponse, PaginatedResponse } from "../types/api.types";
 import type { AdminUser, EntityId } from "../../types";
 
 export interface UserApiPayload {
-  name: string;
+  name?: string;
+  first_name?: string;
+  last_name?: string;
   email: string;
   role_id?: string;
   is_active?: boolean;
@@ -11,7 +13,9 @@ export interface UserApiPayload {
 
 export interface BackendUserResource {
   id: string;
-  name: string;
+  name?: string;
+  first_name?: string;
+  last_name?: string;
   email: string;
   is_active: boolean;
   role?: string;
