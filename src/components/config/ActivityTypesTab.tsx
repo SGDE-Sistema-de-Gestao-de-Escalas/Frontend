@@ -5,6 +5,7 @@ import type { ActivityType } from "../../types";
 import { PRESET_COLORS } from "../dashboard/blockStyles";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import ConfirmationModal from "../common/ConfirmationModal";
 
 function ColorPicker({
   value,
@@ -60,45 +61,49 @@ function ColorPicker({
 
 export default function ActivityTypesTab() {
   const [types, setTypes] = useState<ActivityType[]>(DEFAULT_ACTIVITY_TYPES);
+  const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editLabel, setEditLabel] = useState("");
-  const [editColor, setEditColor] = useState("#1A56DB");
-  const [showAdd, setShowAdd] = useState(false);
-  const [newLabel, setNewLabel] = useState("");
-  const [newColor, setNewColor] = useState("#6366F1");
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [formLabel, setFormLabel] = useState("");
+  const [formColor, setFormColor] = useState("#1A56DB");
+  const [deleteTarget, setDeleteTarget] = useState<ActivityType | null>(null);
 
-  function startEdit(t: ActivityType) {
-    setEditingId(t.id);
-    setEditLabel(t.label);
-    setEditColor(t.color);
-    setShowAdd(false);
-  }
-
-  function saveEdit() {
-    setTypes((prev) =>
-      prev.map((t) =>
-        t.id === editingId
-          ? { ...t, label: editLabel.trim() || t.label, color: editColor }
-          : t
-      )
-    );
+  function openAdd() {
     setEditingId(null);
+    setFormLabel("");
+    setFormColor("#6366F1");
+    setShowDialog(true);
   }
 
-  function addType() {
-    if (!newLabel.trim()) return;
-    const id =
-      newLabel.toLowerCase().replace(/[^a-z0-9]/g, "_") +
-      "_" +
-      Date.now().toString(36);
-    setTypes((prev) => [
-      ...prev,
-      { id, label: newLabel.trim(), color: newColor, builtIn: false },
-    ]);
-    setNewLabel("");
-    setNewColor("#6366F1");
-    setShowAdd(false);
+  function openEdit(t: ActivityType) {
+    setEditingId(t.id);
+    setFormLabel(t.label);
+    setFormColor(t.color);
+    setShowDialog(true);
+  }
+
+  function saveType() {
+    if (!formLabel.trim()) return;
+    if (editingId) {
+      setTypes((prev) =>
+        prev.map((t) =>
+          t.id === editingId
+            ? { ...t, label: formLabel.trim(), color: formColor }
+            : t
+        )
+      );
+    } else {
+      const id =
+        formLabel.toLowerCase().replace(/[^a-z0-9]/g, "_") +
+        "_" +
+        Date.now().toString(36);
+      setTypes((prev) => [
+        ...prev,
+        { id, label: formLabel.trim(), color: formColor, builtIn: false },
+      ]);
+    }
+    setShowDialog(false);
+    setEditingId(null);
+    setFormLabel("");
   }
 
   return (
@@ -116,10 +121,7 @@ export default function ActivityTypesTab() {
         </div>
         <button
           type="button"
-          onClick={() => {
-            setShowAdd(true);
-            setEditingId(null);
-          }}
+          onClick={openAdd}
           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors flex-shrink-0 shadow-xs"
         >
           <Plus size={12} /> Novo Tipo
@@ -128,122 +130,62 @@ export default function ActivityTypesTab() {
 
       {/* Type list */}
       <Card className="overflow-hidden border-border bg-card">
-        {types.map((t) => {
-          const isEditing = editingId === t.id;
-          return (
-            <div key={t.id} className="border-b border-border/50 last:border-0">
-              {isEditing ? (
-                <div className="p-4 bg-primary/5 border-l-[3px] border-primary space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                        Nome
-                      </label>
-                      <input
-                        value={editLabel}
-                        onChange={(e) => setEditLabel(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && saveEdit()}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-                        placeholder="Nome do tipo"
-                        autoFocus
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                        Pré-visualização
-                      </label>
-                      <div className="flex items-center gap-2 px-3 h-9 rounded-lg border border-border bg-card">
-                        <div
-                          className="w-4 h-4 rounded-sm flex-shrink-0"
-                          style={{ backgroundColor: editColor }}
-                        />
-                        <span className="text-sm font-medium truncate">
-                          {editLabel || t.label}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-2 font-medium">
-                      Cor
-                    </label>
-                    <ColorPicker value={editColor} onChange={setEditColor} />
-                  </div>
-                  <div className="flex gap-2 justify-end pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setEditingId(null)}
-                      className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={saveEdit}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
-                    >
-                      <Save size={11} /> Guardar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors group">
-                  <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: t.color + "22" }}
-                  >
-                    <div
-                      className="w-4 h-4 rounded-sm"
-                      style={{ backgroundColor: t.color }}
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {t.label}
-                    </p>
-                    <span className="text-[10px] font-mono text-muted-foreground">
-                      {t.color.toUpperCase()} ·{" "}
-                      {t.builtIn ? "Nativo" : "Personalizado"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => startEdit(t)}
-                      className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <Edit2 size={13} />
-                    </button>
-                    {!t.builtIn && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setTypes((prev) =>
-                            prev.filter((item) => item.id !== t.id)
-                          )
-                        }
-                        className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
+        {types.map((t) => (
+          <div
+            key={t.id}
+            className="border-b border-border/50 last:border-0 flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors group"
+          >
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ backgroundColor: t.color + "22" }}
+            >
+              <div
+                className="w-4 h-4 rounded-sm"
+                style={{ backgroundColor: t.color }}
+              />
             </div>
-          );
-        })}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">
+                {t.label}
+              </p>
+              <span className="text-[10px] font-mono text-muted-foreground">
+                {t.color.toUpperCase()} ·{" "}
+                {t.builtIn ? "Nativo" : "Personalizado"}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => openEdit(t)}
+                className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Editar tipo"
+              >
+                <Edit2 size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(t)}
+                className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                title="Eliminar tipo"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          </div>
+        ))}
       </Card>
 
-      {/* Add dialog */}
-      <Dialog open={showAdd} onOpenChange={setShowAdd}>
+      {/* Add / Edit dialog */}
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="w-full max-w-md p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
           <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10">
             <DialogTitle className="font-semibold text-foreground text-sm">
-              Novo Tipo de Atividade
+              {editingId ? "Editar Tipo de Atividade" : "Novo Tipo de Atividade"}
             </DialogTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Define nome e cor do tipo de bloco
+              {editingId
+                ? "Altera o nome e a cor do tipo de bloco"
+                : "Define nome e cor do tipo de bloco"}
             </p>
           </DialogHeader>
           <div className="p-5 space-y-4">
@@ -253,9 +195,9 @@ export default function ActivityTypesTab() {
                   Nome *
                 </label>
                 <input
-                  value={newLabel}
-                  onChange={(e) => setNewLabel(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addType()}
+                  value={formLabel}
+                  onChange={(e) => setFormLabel(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && saveType()}
                   className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                   placeholder="Ex: Apoio Refeitório"
                   autoFocus
@@ -268,10 +210,10 @@ export default function ActivityTypesTab() {
                 <div className="flex items-center gap-2 px-3 h-9 rounded-lg border border-border bg-muted/30">
                   <div
                     className="w-4 h-4 rounded-sm flex-shrink-0"
-                    style={{ backgroundColor: newColor }}
+                    style={{ backgroundColor: formColor }}
                   />
                   <span className="text-sm font-medium truncate">
-                    {newLabel || "Novo tipo"}
+                    {formLabel || (editingId ? "Tipo de atividade" : "Novo tipo")}
                   </span>
                 </div>
               </div>
@@ -280,27 +222,28 @@ export default function ActivityTypesTab() {
               <label className="text-xs text-muted-foreground block mb-2 font-medium">
                 Cor
               </label>
-              <ColorPicker value={newColor} onChange={setNewColor} />
+              <ColorPicker value={formColor} onChange={setFormColor} />
             </div>
           </div>
-          <div className="px-5 py-4 border-t border-border flex gap-3 justify-end bg-muted/10">
+          <div className="px-5 py-4 border-t border-border flex gap-3 bg-muted/10">
             <button
               type="button"
               onClick={() => {
-                setShowAdd(false);
-                setNewLabel("");
+                setShowDialog(false);
+                setEditingId(null);
+                setFormLabel("");
               }}
-              className="px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
               Cancelar
             </button>
             <button
               type="button"
-              onClick={addType}
-              disabled={!newLabel.trim()}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
+              onClick={saveType}
+              disabled={!formLabel.trim()}
+              className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
             >
-              <Save size={13} /> Criar Tipo
+              {editingId ? "Guardar Alterações" : "Criar Tipo"}
             </button>
           </div>
         </DialogContent>
@@ -310,11 +253,35 @@ export default function ActivityTypesTab() {
       <div className="flex items-start gap-2 p-3 rounded-xl bg-muted/30 border border-border">
         <Info size={14} className="text-muted-foreground flex-shrink-0 mt-0.5" />
         <p className="text-xs text-muted-foreground leading-relaxed">
-          As alterações são refletidas imediatamente na edição de escalas e nos
-          filtros de substituição inter-escolar. Os tipos <strong>nativos</strong> não
-          podem ser eliminados, mas o nome e a cor podem ser personalizados.
+          As alterações e remoções são refletidas imediatamente na edição de escalas e nos
+          filtros de substituição inter-escolar.
         </p>
       </div>
+
+      {/* Confirmation Modal for deleting activity type */}
+      <ConfirmationModal
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) {
+            setTypes((prev) => prev.filter((item) => item.id !== deleteTarget.id));
+            setDeleteTarget(null);
+          }
+        }}
+        title="Eliminar Tipo de Atividade"
+        description={
+          deleteTarget ? (
+            <>
+              Tem a certeza que pretende eliminar o tipo de atividade{" "}
+              <strong className="text-foreground">{deleteTarget.label}</strong>?
+              Esta ação removerá esta atividade das opções de escala da plataforma.
+            </>
+          ) : ""
+        }
+        confirmLabel="Eliminar Tipo"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
     </div>
   );
 }

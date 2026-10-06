@@ -32,38 +32,69 @@ export type BlockState =
   | "collection"
   | "delivery";
 
-export type ScheduleMatrix = Record<number, BlockState[]>;
+export type EntityId = string | number;
+
+export type ScheduleMatrix = Record<EntityId, BlockState[]>;
 
 export interface SchoolCluster {
-  id: number;
+  id: EntityId;
   name: string;
   code: string;
 }
 
 export interface School {
-  id: number;
+  id: EntityId;
   name: string;
+  acronym?: string;
   address: string;
   phone: string;
+  email?: string;
   active: boolean;
   assistants: number;
+  assistants_count?: number;
+  can_delete?: boolean;
+  cannot_delete_reason?: string | null;
 }
 
+export type DeleteActionType = "hard_delete" | "anonymize";
+
 export interface Assistant {
-  id: number;
+  id: EntityId;
   name: string;
   initials: string;
   staffNumber: string;
   mecanografico?: string;
   exception: string | null;
-  schoolId: number;
+  schoolId: EntityId;
   availableForTransfer: boolean;
+  active: boolean;
+  is_active?: boolean;
+  can_delete?: boolean;
+  cannot_delete_reason?: string | null;
+  delete_action?: DeleteActionType;
+  delete_message?: string;
+}
+
+export interface AdminUser {
+  id: EntityId;
+  first_name: string;
+  last_name: string;
+  email: string;
+  role: "admin" | "staff" | string;
+  role_id?: string;
+  is_active: boolean;
+  active?: boolean;
+  created_at?: string;
+  can_delete?: boolean;
+  cannot_delete_reason?: string | null;
+  delete_action?: DeleteActionType;
+  delete_message?: string;
 }
 
 export type AbsenceStatus = "pending" | "justified" | "unjustified";
 
 export interface Absence {
-  id: number;
+  id: EntityId;
   assistant: string;
   initials: string;
   start: string;
@@ -81,16 +112,16 @@ export interface Absence {
 }
 
 export interface AbsenceType {
-  id: number;
+  id: EntityId;
   name: string;
   requiresDocument: boolean;
   requires_document?: boolean;
 }
 
 export interface Schedule {
-  id: number;
-  assistantId: number;
-  schoolId: number;
+  id: EntityId;
+  assistantId: EntityId;
+  schoolId: EntityId;
   date: string;
   start: string;
   end: string;
@@ -101,7 +132,7 @@ export type NotificationType = "alert" | "absence" | "expiry" | "info";
 export type NotifType = NotificationType;
 
 export interface Notification {
-  id: number;
+  id: EntityId;
   type: NotificationType;
   title: string;
   body: string;
@@ -117,7 +148,7 @@ export interface ActivityType {
 }
 
 export interface ScheduleRule {
-  id: number;
+  id: EntityId;
   activityTypeId: string;
   periodStart: string;
   periodEnd: string;
@@ -125,11 +156,12 @@ export interface ScheduleRule {
   type: "mandatory" | "optional";
   start: string;
   end: string | null;
-  assistantIds: number[];
+  assistantIds: EntityId[];
+  days?: boolean[];
 }
 
 export interface MyAbsence {
-  id: number;
+  id: EntityId;
   start: string;
   end: string;
   days: number;
@@ -144,7 +176,7 @@ export interface MyAbsence {
 }
 
 export interface SwapRequest {
-  id: number;
+  id: EntityId;
   from: string;
   fromInit: string;
   to: string;
@@ -158,7 +190,7 @@ export interface SwapRequest {
 }
 
 export interface Holiday {
-  id: number;
+  id: EntityId;
   name: string;
   date: string;
   type: "national" | "municipal" | "nacional";
@@ -166,7 +198,7 @@ export interface Holiday {
 }
 
 export interface AuditLogEntry {
-  id: number;
+  id: EntityId;
   ts: string;
   user: string;
   action: string;

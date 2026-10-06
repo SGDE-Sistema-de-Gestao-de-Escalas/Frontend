@@ -3,14 +3,14 @@ import type { Role } from "../types";
 import authService, { AuthUser, LoginCredentials } from "../api/services/auth.service";
 
 export interface UserProfile {
-  id?: number;
+  id?: number | string;
   name: string;
   initials: string;
   role: Role;
   roleLabel: string;
   email: string;
-  assistant_id?: number | null;
-  school_id?: number | null;
+  assistant_id?: number | string | null;
+  school_id?: number | string | null;
 }
 
 interface AuthContextType {
@@ -18,6 +18,7 @@ interface AuthContextType {
   user: UserProfile;
   login: (role: Role) => void;
   loginWithCredentials: (credentials: LoginCredentials, remember?: boolean) => Promise<Role>;
+  loginWithToken: (token: string) => Promise<Role>;
   logout: () => Promise<void>;
   switchRole: () => void;
   isAuthenticated: boolean;
@@ -44,8 +45,8 @@ const STAFF_USER: UserProfile = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function extractInitials(name: string): string {
-  if (!name) return "U";
+function extractInitials(name?: string | null): string {
+  if (!name || !name.trim()) return "U";
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -57,10 +58,16 @@ function mapAuthUserToProfile(authUser: AuthUser): UserProfile {
       ? (authUser.role as Role)
       : (authUser.role as any)?.slug || "staff";
 
+  const resolvedName =
+    authUser.name ||
+    [authUser.first_name, authUser.last_name].filter(Boolean).join(" ").trim() ||
+    authUser.email?.split("@")[0] ||
+    "Utilizador";
+
   return {
     id: authUser.id,
-    name: authUser.name,
-    initials: extractInitials(authUser.name),
+    name: resolvedName,
+    initials: extractInitials(resolvedName),
     role: roleSlug,
     roleLabel: roleSlug === "admin" ? "Administrador" : "Assistente",
     email: authUser.email,
@@ -82,24 +89,24 @@ export function AuthProvider({
   );
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check existing session token on application load (localStorage or sessionStorage)
+  // Check existing session on application load (supports HttpOnly cookies or fallback localStorage token)
   useEffect(() => {
     async function checkCurrentSession() {
-      const token =
-        localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-      if (token) {
-        try {
-          const authUser = await authService.getMe();
-          const profile = mapAuthUserToProfile(authUser);
-          setUserProfile(profile);
-          setRole(profile.role);
-        } catch {
-          // Token is invalid or backend unreachable; clear token
-          localStorage.removeItem("auth_token");
-          sessionStorage.removeItem("auth_token");
-        }
+      try {
+        // With HttpOnly cookies enabled (withCredentials: true), getMe() validates the active cookie session.
+        // We use silent: true so unauthenticated visitors or an idle server do not trigger intrusive toast banners on F5.
+        const authUser = await authService.getMe({ silent: true });
+        const profile = mapAuthUserToProfile(authUser);
+        setUserProfile(profile);
+        setRole(profile.role);
+      } catch {
+        // Session expired, unauthenticated or backend idle; clean up storage without showing alert
+        localStorage.removeItem("auth_token");
+        sessionStorage.removeItem("auth_token");
+        setRole(null);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     }
 
     checkCurrentSession();
@@ -111,15 +118,31 @@ export function AuthProvider({
   ): Promise<Role> {
     const isRemember = credentials.remember !== undefined ? credentials.remember : remember;
     const response = await authService.login({ ...credentials, remember: isRemember });
-    if (isRemember) {
-      localStorage.setItem("auth_token", response.token);
-      sessionStorage.removeItem("auth_token");
-    } else {
-      sessionStorage.setItem("auth_token", response.token);
-      localStorage.removeItem("auth_token");
+
+    // Se o backend enviar token no JSON (modo Bearer legado), guardamos; se for HttpOnly, response.token será vazio
+    if (response.token) {
+      if (isRemember) {
+        localStorage.setItem("auth_token", response.token);
+        sessionStorage.removeItem("auth_token");
+      } else {
+        sessionStorage.setItem("auth_token", response.token);
+        localStorage.removeItem("auth_token");
+      }
     }
 
     const profile = mapAuthUserToProfile(response.user);
+    setUserProfile(profile);
+    setRole(profile.role);
+    return profile.role;
+  }
+
+  async function loginWithToken(token: string): Promise<Role> {
+    if (token) {
+      localStorage.setItem("auth_token", token);
+      sessionStorage.removeItem("auth_token");
+    }
+    const authUser = await authService.getMe();
+    const profile = mapAuthUserToProfile(authUser);
     setUserProfile(profile);
     setRole(profile.role);
     return profile.role;
@@ -132,11 +155,8 @@ export function AuthProvider({
 
   async function logout() {
     try {
-      const token =
-        localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-      if (token) {
-        await authService.logout();
-      }
+      // Sempre chamamos /logout para que o backend possa limpar o cookie HttpOnly ou revogar a sessão/token
+      await authService.logout();
     } catch {
       // Ignore network errors on logout
     } finally {
@@ -161,6 +181,7 @@ export function AuthProvider({
         user: userProfile,
         login,
         loginWithCredentials,
+        loginWithToken,
         logout,
         switchRole,
         isAuthenticated: role !== null,

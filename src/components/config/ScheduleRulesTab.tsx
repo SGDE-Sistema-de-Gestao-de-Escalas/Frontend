@@ -12,28 +12,42 @@ import {
   DEFAULT_ACTIVITY_TYPES,
   INITIAL_RULES,
 } from "../../api/mockData";
-import type { ScheduleRule } from "../../types";
+import type { ScheduleRule, EntityId } from "../../types";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import TimePicker from "../common/TimePicker";
+import DatePicker, { formatToIsoDate } from "../common/DatePicker";
+import ConfirmationModal from "../common/ConfirmationModal";
+import { ActionTooltip } from "../common/ActionTooltip";
+
+const DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
 export default function ScheduleRulesTab() {
   const allAssistantIds = ASSISTANTS.map((a) => a.id);
   const [rules, setRules] = useState<ScheduleRule[]>(INITIAL_RULES);
   const [showAdd, setShowAdd] = useState(false);
-  const [editingRuleId, setEditingRuleId] = useState<number | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [editingRuleId, setEditingRuleId] = useState<EntityId | null>(null);
+  const [deleteRuleTarget, setDeleteRuleTarget] = useState<ScheduleRule | null>(null);
 
   // Form state
   const [formActivityId, setFormActivityId] = useState("");
+  const [formDays, setFormDays] = useState<boolean[]>([
+    true,
+    true,
+    true,
+    true,
+    true,
+    false,
+    false,
+  ]);
   const [formPeriodStart, setFormPeriodStart] = useState("07:30");
   const [formPeriodEnd, setFormPeriodEnd] = useState("13:00");
   const [formMinStaff, setFormMinStaff] = useState("3");
   const [formRuleType, setFormRuleType] = useState<"mandatory" | "optional">("mandatory");
   const [formValidityStart, setFormValidityStart] = useState("2026-02-01");
   const [formValidityEnd, setFormValidityEnd] = useState("");
-  const [formAssistantIds, setFormAssistantIds] = useState<number[]>(allAssistantIds);
+  const [formAssistantIds, setFormAssistantIds] = useState<EntityId[]>(allAssistantIds);
   const [formStep, setFormStep] = useState<"form" | "conflict" | "done">("form");
 
   const isEditing = editingRuleId !== null;
@@ -49,9 +63,18 @@ export default function ScheduleRulesTab() {
       )
     : null;
 
+  function toggleDay(i: number) {
+    setFormDays((p) => {
+      const n = [...p];
+      n[i] = !n[i];
+      return n;
+    });
+  }
+
   function openAdd() {
     setEditingRuleId(null);
     setFormActivityId("work");
+    setFormDays([true, true, true, true, true, false, false]);
     setFormPeriodStart("07:30");
     setFormPeriodEnd("13:00");
     setFormMinStaff("3");
@@ -66,18 +89,19 @@ export default function ScheduleRulesTab() {
   function openEdit(rule: ScheduleRule) {
     setEditingRuleId(rule.id);
     setFormActivityId(rule.activityTypeId);
+    setFormDays(rule.days && rule.days.length === 7 ? [...rule.days] : [true, true, true, true, true, false, false]);
     setFormPeriodStart(rule.periodStart);
     setFormPeriodEnd(rule.periodEnd);
     setFormMinStaff(String(rule.min));
     setFormRuleType(rule.type);
-    setFormValidityStart(rule.start.split(" ").reverse().join("-"));
-    setFormValidityEnd(rule.end ?? "");
+    setFormValidityStart(formatToIsoDate(rule.start) || rule.start);
+    setFormValidityEnd(rule.end ? (formatToIsoDate(rule.end) || rule.end) : "");
     setFormAssistantIds(rule.assistantIds);
     setFormStep("form");
     setShowAdd(true);
   }
 
-  function toggleAssistant(id: number) {
+  function toggleAssistant(id: EntityId) {
     setFormAssistantIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
@@ -106,6 +130,7 @@ export default function ScheduleRulesTab() {
                 type: formRuleType,
                 end: formValidityEnd || null,
                 assistantIds: formAssistantIds,
+                days: [...formDays],
               }
             : r
         )
@@ -120,7 +145,7 @@ export default function ScheduleRulesTab() {
     setRules((prev) => [
       ...prev,
       {
-        id: Date.now(),
+        id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
         activityTypeId: formActivityId,
         periodStart: formPeriodStart,
         periodEnd: formPeriodEnd,
@@ -129,6 +154,7 @@ export default function ScheduleRulesTab() {
         start: formValidityStart,
         end: formValidityEnd || null,
         assistantIds: formAssistantIds,
+        days: [...formDays],
       },
     ]);
     setFormStep("done");
@@ -164,6 +190,7 @@ export default function ScheduleRulesTab() {
               <tr className="border-b border-border bg-muted/20">
                 {[
                   "Atividade",
+                  "Dias",
                   "Período",
                   "Mín. pessoas",
                   "Funcionários",
@@ -186,6 +213,10 @@ export default function ScheduleRulesTab() {
                 const activity = DEFAULT_ACTIVITY_TYPES.find(
                   (a) => a.id === rule.activityTypeId
                 );
+                const activeDays = rule.days || [true, true, true, true, true, false, false];
+                const allWeekdays = activeDays.slice(0, 5).every(Boolean) && !activeDays[5] && !activeDays[6];
+                const allDays = activeDays.every(Boolean);
+
                 return (
                   <tr
                     key={rule.id}
@@ -204,6 +235,29 @@ export default function ScheduleRulesTab() {
                         <span className="font-medium text-foreground">
                           {activity?.label ?? rule.activityTypeId}
                         </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-0.5">
+                        {allDays ? (
+                          <span className="text-xs text-muted-foreground font-medium">Todos</span>
+                        ) : allWeekdays ? (
+                          <span className="text-xs text-muted-foreground font-medium">Seg–Sex</span>
+                        ) : (
+                          DAYS.map((d, idx) => (
+                            <span
+                              key={d}
+                              className={`text-[10px] w-5 h-5 flex items-center justify-center rounded font-mono ${
+                                activeDays[idx]
+                                  ? "bg-primary/10 text-primary font-bold"
+                                  : "text-muted-foreground/30"
+                              }`}
+                              title={d}
+                            >
+                              {d[0]}
+                            </span>
+                          ))
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 font-mono text-xs">
@@ -259,54 +313,27 @@ export default function ScheduleRulesTab() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {deleteConfirm === rule.id ? (
-                        <div className="flex items-center gap-1.5 justify-end">
-                          <span className="text-xs text-destructive font-medium">
-                            Confirmar?
-                          </span>
+                      <div className="flex items-center gap-1 justify-end">
+                        <ActionTooltip content="Editar regra">
                           <button
                             type="button"
-                            onClick={() => {
-                              setRules((p) =>
-                                p.filter((r) => r.id !== rule.id)
-                              );
-                              setDeleteConfirm(null);
-                            }}
-                            className="px-2 py-1 rounded text-xs bg-destructive text-destructive-foreground font-semibold"
-                          >
-                            Sim
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteConfirm(null)}
-                            className="px-2 py-1 rounded text-xs border border-border text-muted-foreground"
-                          >
-                            Não
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 justify-end">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDeleteConfirm(null);
-                              openEdit(rule);
-                            }}
+                            onClick={() => openEdit(rule)}
                             className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            title="Editar regra"
                           >
                             <Pencil size={13} />
                           </button>
+                        </ActionTooltip>
+
+                        <ActionTooltip content="Eliminar regra">
                           <button
                             type="button"
-                            onClick={() => setDeleteConfirm(rule.id)}
+                            onClick={() => setDeleteRuleTarget(rule)}
                             className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                            title="Eliminar regra"
                           >
                             <Trash2 size={13} />
                           </button>
-                        </div>
-                      )}
+                        </ActionTooltip>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -318,8 +345,8 @@ export default function ScheduleRulesTab() {
 
       {/* Add / Edit Dialog */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
-        <DialogContent className="w-full max-w-lg p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-          <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10">
+        <DialogContent className="w-full max-w-lg p-0 overflow-visible rounded-xl border border-border bg-card shadow-2xl">
+          <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10 rounded-t-xl">
             <DialogTitle className="font-semibold text-foreground text-sm">
               {formStep === "form"
                 ? isEditing
@@ -350,6 +377,28 @@ export default function ScheduleRulesTab() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground block mb-2 font-medium">
+                  Dias da Semana *
+                </label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {DAYS.map((d, i) => (
+                    <button
+                      key={d}
+                      onClick={() => toggleDay(i)}
+                      type="button"
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                        formDays[i]
+                          ? "bg-primary text-primary-foreground border-primary font-semibold"
+                          : "border-border text-muted-foreground hover:border-primary/50"
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -443,6 +492,33 @@ export default function ScheduleRulesTab() {
                 </div>
               </div>
 
+              {/* Vigência */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                    Início de vigência *
+                  </label>
+                  <DatePicker
+                    value={formValidityStart}
+                    onChange={setFormValidityStart}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                    Fim de vigência
+                  </label>
+                  <DatePicker
+                    value={formValidityEnd}
+                    onChange={setFormValidityEnd}
+                    className="w-full"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Em branco = vigência em aberto
+                  </p>
+                </div>
+              </div>
+
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
@@ -518,6 +594,35 @@ export default function ScheduleRulesTab() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Confirmation Modal for deleting rule */}
+      <ConfirmationModal
+        open={deleteRuleTarget !== null}
+        onClose={() => setDeleteRuleTarget(null)}
+        onConfirm={() => {
+          if (deleteRuleTarget) {
+            setRules((p) => p.filter((r) => r.id !== deleteRuleTarget.id));
+            setDeleteRuleTarget(null);
+          }
+        }}
+        title="Eliminar Regra do Motor"
+        description={
+          deleteRuleTarget ? (
+            <>
+              Tem a certeza que pretende eliminar a regra de{" "}
+              <strong className="text-foreground">
+                {DEFAULT_ACTIVITY_TYPES.find((t) => t.id === deleteRuleTarget.activityTypeId)?.label ?? deleteRuleTarget.activityTypeId}
+              </strong>{" "}
+              (Vigência: {deleteRuleTarget.start}
+              {deleteRuleTarget.end ? ` — ${deleteRuleTarget.end}` : " — Em aberto"})?
+              Esta ação removerá esta restrição no cálculo de escalas do motor.
+            </>
+          ) : ""
+        }
+        confirmLabel="Eliminar Regra"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
     </div>
   );
 }

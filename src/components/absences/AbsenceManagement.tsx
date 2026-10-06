@@ -12,20 +12,21 @@ import {
   X,
 } from "lucide-react";
 import { absences as initialAbsences, assistants as ASSISTANTS, absenceTypes as ABSENCE_TYPES_MOCK } from "../../api/mockData";
-import type { Absence } from "../../types";
+import type { Absence, EntityId } from "../../types";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
+import ConfirmationModal from "../common/ConfirmationModal";
 
 export default function AbsenceManagement() {
   const [absencesList, setAbsencesList] = useState<Absence[]>(initialAbsences);
-  const [selectedId, setSelectedId] = useState<number | null>(1);
+  const [selectedId, setSelectedId] = useState<EntityId | null>(1);
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "justified" | "unjustified">("pending");
   const [showForm, setShowForm] = useState(false);
-  const [editId, setEditId] = useState<number | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
-  const [documentationRequestedIds, setDocumentationRequestedIds] = useState<number[]>([]);
+  const [editId, setEditId] = useState<EntityId | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<EntityId | null>(null);
+  const [documentationRequestedIds, setDocumentationRequestedIds] = useState<EntityId[]>([]);
 
   const [formAssistant, setFormAssistant] = useState("");
   const [formStartDate, setFormStartDate] = useState("");
@@ -101,9 +102,9 @@ export default function AbsenceManagement() {
       if (selectedId === editId) setSelectedId(editId);
     } else {
       const newId =
-        absencesList.length > 0
-          ? Math.max(...absencesList.map((a) => a.id)) + 1
-          : 1;
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : String(Date.now());
       setAbsencesList((prev) => [
         ...prev,
         {
@@ -129,13 +130,13 @@ export default function AbsenceManagement() {
     setShowForm(false);
   }
 
-  function handleDelete(id: number) {
+  function handleDelete(id: EntityId) {
     setAbsencesList((prev) => prev.filter((a) => a.id !== id));
     if (selectedId === id) setSelectedId(null);
     setDeleteConfirmId(null);
   }
 
-  function handleJustify(id: number, justificationStatus: "justified" | "unjustified") {
+  function handleJustify(id: EntityId, justificationStatus: "justified" | "unjustified") {
     setAbsencesList((prev) =>
       prev.map((a) => (a.id === id ? { ...a, status: justificationStatus } : a))
     );
@@ -402,51 +403,34 @@ export default function AbsenceManagement() {
       )}
 
       {/* Delete confirmation modal */}
-      {deleteConfirmId !== null &&
-        (() => {
-          const targetAbsence = absencesList.find((x) => x.id === deleteConfirmId);
-          return (
-            <>
-              <div
-                className="fixed inset-0 z-40 bg-black/30"
-                onClick={() => setDeleteConfirmId(null)}
-              />
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-6 text-center">
-                  <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
-                    <Trash2 size={20} className="text-destructive" />
-                  </div>
-                  <h3 className="font-semibold text-foreground mb-1">
-                    Eliminar ausência?
-                  </h3>
-                  <p className="text-sm text-muted-foreground mb-5">
-                    A ausência de{" "}
-                    <span className="font-medium text-foreground">
-                      {targetAbsence?.assistant}
-                    </span>{" "}
-                    ({targetAbsence?.start} – {targetAbsence?.end}) será permanentemente eliminada.
-                  </p>
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setDeleteConfirmId(null)}
-                      className="flex-1 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(deleteConfirmId)}
-                      className="flex-1 py-2.5 rounded-lg bg-destructive text-white text-sm font-medium hover:bg-destructive/90 transition-colors"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </>
-          );
-        })()}
+      <ConfirmationModal
+        open={deleteConfirmId !== null}
+        onClose={() => setDeleteConfirmId(null)}
+        onConfirm={() => {
+          if (deleteConfirmId !== null) {
+            handleDelete(deleteConfirmId);
+            setDeleteConfirmId(null);
+          }
+        }}
+        title="Eliminar Ausência"
+        description={
+          deleteConfirmId !== null ? (() => {
+            const target = absencesList.find((x) => x.id === deleteConfirmId);
+            return (
+              <>
+                A ausência de{" "}
+                <strong className="text-foreground">
+                  {target?.assistant}
+                </strong>{" "}
+                ({target?.start} – {target?.end}) será permanentemente eliminada.
+              </>
+            );
+          })() : ""
+        }
+        confirmLabel="Eliminar Ausência"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
 
       <div
         className="grid grid-cols-1 lg:grid-cols-5 gap-4"
@@ -493,66 +477,38 @@ export default function AbsenceManagement() {
               </div>
             )}
             {filteredAbsences.map((absence) => (
-              <div
+              <button
                 key={absence.id}
-                className={`w-full text-left px-3 py-3 border-b border-border/50 transition-colors hover:bg-muted/30 group ${
+                type="button"
+                onClick={() => setSelectedId(absence.id)}
+                className={`w-full text-left px-3 py-3 border-b border-border/50 transition-colors hover:bg-muted/30 ${
                   selectedId === absence.id
                     ? "bg-accent/5 border-l-2 border-l-accent"
                     : ""
                 }`}
               >
-                <button
-                  type="button"
-                  className="w-full text-left"
-                  onClick={() => setSelectedId(absence.id)}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <span className="text-[8px] font-bold text-primary font-mono">
-                        {absence.initials}
-                      </span>
-                    </div>
-                    <span className="text-xs font-semibold text-foreground flex-1">
-                      {absence.assistant}
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <span className="text-[8px] font-bold text-primary font-mono">
+                      {absence.initials}
                     </span>
-                    {absence.conflict && (
-                      <AlertTriangle
-                        size={12}
-                        className="text-[#C8291A] flex-shrink-0"
-                      />
-                    )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground font-mono">
-                    {absence.start} – {absence.end} · {absence.days}d ·{" "}
-                    {absence.reason}
-                  </p>
-                  <div className="mt-1.5">{renderStatusBadge(absence.status)}</div>
-                </button>
-                <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenEdit(absence);
-                    }}
-                    className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-muted-foreground hover:text-foreground border border-border hover:bg-muted transition-colors"
-                  >
-                    <Pencil size={10} />
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteConfirmId(absence.id);
-                    }}
-                    className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-muted-foreground hover:text-destructive border border-border hover:border-destructive/30 hover:bg-destructive/5 transition-colors"
-                  >
-                    <Trash2 size={10} />
-                    Eliminar
-                  </button>
+                  <span className="text-xs font-semibold text-foreground flex-1">
+                    {absence.assistant}
+                  </span>
+                  {absence.conflict && (
+                    <AlertTriangle
+                      size={12}
+                      className="text-[#C8291A] flex-shrink-0"
+                    />
+                  )}
                 </div>
-              </div>
+                <p className="text-[11px] text-muted-foreground font-mono">
+                  {absence.start} – {absence.end} · {absence.days}d ·{" "}
+                  {absence.reason}
+                </p>
+                <div className="mt-1.5">{renderStatusBadge(absence.status)}</div>
+              </button>
             ))}
           </div>
         </div>
@@ -600,26 +556,23 @@ export default function AbsenceManagement() {
                     · {selectedAbsence.days} dias · {selectedAbsence.reason}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-1.5 flex-shrink-0">
                   {renderStatusBadge(selectedAbsence.status)}
                   <button
                     type="button"
                     onClick={() => handleOpenEdit(selectedAbsence)}
-                    className="p-1.5 rounded hover:bg-muted transition-colors"
-                    title="Editar"
+                    className="p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    title="Editar ausência"
                   >
-                    <Pencil size={13} className="text-muted-foreground" />
+                    <Pencil size={13} />
                   </button>
                   <button
                     type="button"
                     onClick={() => setDeleteConfirmId(selectedAbsence.id)}
-                    className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
-                    title="Eliminar"
+                    className="p-1.5 rounded-lg border border-border hover:border-destructive/30 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                    title="Eliminar ausência"
                   >
-                    <Trash2
-                      size={13}
-                      className="text-muted-foreground hover:text-destructive"
-                    />
+                    <Trash2 size={13} />
                   </button>
                 </div>
               </div>

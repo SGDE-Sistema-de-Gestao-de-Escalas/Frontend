@@ -1,9 +1,9 @@
-﻿import apiClient from "../client";
+import apiClient from "../client";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import { Assistant } from "../../types";
 
 export interface AssistantFilters {
-  schoolId?: number;
+  schoolId?: number | string;
   active?: boolean;
   search?: string;
   page?: number;

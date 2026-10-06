@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { SWAP_REQUESTS } from "../../api/mockData";
-import type { SwapRequest } from "../../types";
+import type { SwapRequest, EntityId } from "../../types";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 
@@ -18,12 +18,12 @@ export default function ShiftSwapsPage() {
   const [statusFilter, setStatusFilter] = useState<
     "all" | "pending" | "approved" | "rejected"
   >("pending");
-  const [selectedSwapId, setSelectedSwapId] = useState<number | null>(1);
+  const [selectedSwapId, setSelectedSwapId] = useState<EntityId | null>(1);
 
   const filteredSwaps = swaps.filter((s) => statusFilter === "all" || s.status === statusFilter);
   const selectedSwap = swaps.find((s) => s.id === selectedSwapId);
 
-  function handleSwapDecision(id: number, action: "approved" | "rejected") {
+  function handleSwapDecision(id: EntityId, action: "approved" | "rejected") {
     setSwaps((prev) =>
       prev.map((s) => (s.id === id ? { ...s, status: action } : s))
     );

@@ -2,6 +2,7 @@ import type {
   Absence,
   AbsenceType,
   ActivityType,
+  AdminUser,
   Assistant,
   AuditLogEntry,
   BlockState,
@@ -66,6 +67,7 @@ export const assistants: Assistant[] = [
     exception: null,
     schoolId: 1,
     availableForTransfer: false,
+    active: true,
   },
   {
     id: 2,
@@ -76,6 +78,7 @@ export const assistants: Assistant[] = [
     exception: "Licença Parentalidade",
     schoolId: 1,
     availableForTransfer: false,
+    active: false,
   },
   {
     id: 3,
@@ -86,6 +89,7 @@ export const assistants: Assistant[] = [
     exception: null,
     schoolId: 1,
     availableForTransfer: true,
+    active: true,
   },
   {
     id: 4,
@@ -96,6 +100,7 @@ export const assistants: Assistant[] = [
     exception: null,
     schoolId: 1,
     availableForTransfer: false,
+    active: true,
   },
   {
     id: 5,
@@ -106,6 +111,7 @@ export const assistants: Assistant[] = [
     exception: "Carga Horária 6h",
     schoolId: 1,
     availableForTransfer: false,
+    active: true,
   },
   {
     id: 6,
@@ -116,6 +122,7 @@ export const assistants: Assistant[] = [
     exception: null,
     schoolId: 1,
     availableForTransfer: true,
+    active: true,
   },
   {
     id: 7,
@@ -126,6 +133,7 @@ export const assistants: Assistant[] = [
     exception: null,
     schoolId: 2,
     availableForTransfer: true,
+    active: true,
   },
   {
     id: 8,
@@ -136,6 +144,7 @@ export const assistants: Assistant[] = [
     exception: null,
     schoolId: 2,
     availableForTransfer: false,
+    active: true,
   },
   {
     id: 9,
@@ -146,6 +155,7 @@ export const assistants: Assistant[] = [
     exception: null,
     schoolId: 2,
     availableForTransfer: true,
+    active: true,
   },
   {
     id: 10,
@@ -156,6 +166,7 @@ export const assistants: Assistant[] = [
     exception: null,
     schoolId: 3,
     availableForTransfer: true,
+    active: true,
   },
   {
     id: 11,
@@ -166,6 +177,7 @@ export const assistants: Assistant[] = [
     exception: null,
     schoolId: 3,
     availableForTransfer: false,
+    active: true,
   },
   {
     id: 12,
@@ -176,6 +188,40 @@ export const assistants: Assistant[] = [
     exception: null,
     schoolId: 3,
     availableForTransfer: true,
+    active: true,
+  },
+];
+
+export const INITIAL_ADMINS: AdminUser[] = [
+  {
+    id: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+    first_name: "Miguel",
+    last_name: "Silva",
+    email: "admin@sgde.pt",
+    role: "admin",
+    active: true,
+    is_active: true,
+    created_at: "01/09/2024",
+  },
+  {
+    id: "b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e",
+    first_name: "Sofia",
+    last_name: "Carvalho",
+    email: "sofia.carvalho@sgde.pt",
+    role: "admin",
+    active: true,
+    is_active: true,
+    created_at: "15/10/2024",
+  },
+  {
+    id: "c3d4e5f6-a7b8-9c0d-1e2f-3a4b5c6d7e8f",
+    first_name: "Carlos",
+    last_name: "Mendes",
+    email: "carlos.mendes@sgde.pt",
+    role: "admin",
+    active: false,
+    is_active: false,
+    created_at: "05/01/2025",
   },
 ];
 
@@ -263,7 +309,7 @@ export const VIEW_END = 84; // slot 84 = 21:00 (exclusive)
 export const VIEW_SLOTS = VIEW_END - VIEW_START; // 60 slots = 15 hours
 export const HOUR_LABELS = Array.from({ length: 25 }, (_, i) => i.toString().padStart(2, "0") + "h");
 
-export function buildAssistantRow(assistantId: number): BlockState[] {
+export function buildAssistantRow(assistantId: number | string): BlockState[] {
   const row: BlockState[] = Array(96).fill("off");
   const fill = (from: number, to: number, state: BlockState) => {
     for (let i = from; i < to; i++) {

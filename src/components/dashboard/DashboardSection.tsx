@@ -12,12 +12,13 @@ import MatrixGrid from "./MatrixGrid";
 import MonthDashboardView from "./MonthDashboardView";
 import RecalculateModal from "./RecalculateModal";
 import WeekMatrixView from "./WeekMatrixView";
+import type { EntityId } from "../../types";
 
 export type DashViewMode = "day" | "week" | "month";
 
 interface DashboardSectionProps {
-  onSelectAssistant: (id: number) => void;
-  currentSchoolId?: number;
+  onSelectAssistant: (id: EntityId) => void;
+  currentSchoolId?: EntityId;
 }
 
 export default function DashboardSection({

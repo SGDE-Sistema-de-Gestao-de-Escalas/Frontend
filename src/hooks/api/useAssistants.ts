@@ -1,34 +1,46 @@
-﻿import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import assistantsService, { AssistantFilters } from "../../api/services/assistants.service";
 import { assistants as mockAssistants } from "../../api/mockData";
 import { Assistant } from "../../types";
+import { useSchool } from "../../context/SchoolContext";
+import { schoolScopedKey } from "../../lib/queryClient";
 
 export const ASSISTANTS_QUERY_KEY = ["assistants"];
 
+function mockFallback(schoolId: number | string, filters?: AssistantFilters) {
+  // Fallback local enquanto o endpoint do backend não está implementado.
+  let filtered = mockAssistants.filter((a) => String(a.schoolId) === String(schoolId));
+  if (filters?.search) {
+    const s = filters.search.toLowerCase();
+    filtered = filtered.filter(
+      (a) =>
+        a.name.toLowerCase().includes(s) ||
+        a.mecanografico?.toLowerCase().includes(s) ||
+        a.initials.toLowerCase().includes(s)
+    );
+  }
+  return filtered;
+}
+
+/**
+ * Lista de assistentes da escola ativa.
+ * O `selectedSchoolId` faz parte da queryKey: ao trocar de escola no header
+ * a key muda e a lista é pedida de novo (com o novo header X-School-ID).
+ */
 export function useAssistantsList(filters?: AssistantFilters) {
+  const { selectedSchoolId } = useSchool();
+
   return useQuery({
-    queryKey: [...ASSISTANTS_QUERY_KEY, filters],
-    queryFn: async () => {
+    queryKey: schoolScopedKey("assistants", selectedSchoolId, "list", filters ?? {}),
+    queryFn: async (): Promise<Assistant[]> => {
       try {
         const result = await assistantsService.getAll(filters);
-        return result.data;
+        // Se o backend ainda não devolve uma coleção (endpoint vazio), usa o fallback.
+        if (Array.isArray(result?.data)) return result.data;
+        return mockFallback(selectedSchoolId, filters);
       } catch {
-        // Fallback to local mock data during offline/dev transition
-        let filtered = [...mockAssistants];
-        if (filters?.schoolId) {
-          filtered = filtered.filter((a) => a.schoolId === filters.schoolId);
-        }
-        if (filters?.search) {
-          const s = filters.search.toLowerCase();
-          filtered = filtered.filter(
-            (a) =>
-              a.name.toLowerCase().includes(s) ||
-              a.mecanografico?.toLowerCase().includes(s) ||
-              a.initials.toLowerCase().includes(s)
-          );
-        }
-        return filtered;
+        return mockFallback(selectedSchoolId, filters);
       }
     },
   });
@@ -36,7 +48,7 @@ export function useAssistantsList(filters?: AssistantFilters) {
 
 export function useAssistant(id?: number | string) {
   return useQuery({
-    queryKey: [...ASSISTANTS_QUERY_KEY, id],
+    queryKey: [...ASSISTANTS_QUERY_KEY, "detail", id],
     queryFn: async () => {
       if (!id) return null;
       try {
@@ -44,7 +56,7 @@ export function useAssistant(id?: number | string) {
         return result.data;
       } catch {
         // Fallback to local mock data
-        const found = mockAssistants.find((a) => a.id === Number(id));
+        const found = mockAssistants.find((a) => String(a.id) === String(id));
         return found || mockAssistants[0] || null;
       }
     },
@@ -80,7 +92,7 @@ export function useUpdateAssistant() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
       queryClient.invalidateQueries({
-        queryKey: [...ASSISTANTS_QUERY_KEY, variables.id],
+        queryKey: [...ASSISTANTS_QUERY_KEY, "detail", variables.id],
       });
       toast.success("Assistente Atualizado", {
         description: "Os dados do assistente foram guardados.",

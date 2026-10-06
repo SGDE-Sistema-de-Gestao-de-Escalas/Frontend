@@ -7,7 +7,7 @@ import {
   FileText,
 } from "lucide-react";
 import { INITIAL_NOTIFICATIONS } from "../../api/mockData";
-import type { Notification, NotifType } from "../../types";
+import type { Notification, NotifType, EntityId } from "../../types";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
 const NOTIF_STYLES: Record<
@@ -53,7 +53,7 @@ export default function NotificationsDropdown() {
       ? notifications
       : notifications.filter((n) => n.type === filter);
 
-  function markRead(id: number) {
+  function markRead(id: EntityId) {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );

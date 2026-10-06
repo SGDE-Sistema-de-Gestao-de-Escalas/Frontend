@@ -8,12 +8,14 @@ export interface LoginCredentials {
 }
 
 export interface AuthUser {
-  id: number;
-  name: string;
+  id: string | number;
+  name?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
   email: string;
-  role: Role | { id: number; name: string; slug: Role };
-  assistant_id?: number | null;
-  school_id?: number | null;
+  role: Role | { id: string | number; name: string; slug: Role };
+  assistant_id?: string | number | null;
+  school_id?: string | number | null;
 }
 
 export interface BackendLoginResponse {
@@ -25,6 +27,12 @@ export interface BackendLoginResponse {
 export interface AuthResponse {
   token: string;
   user: AuthUser;
+}
+
+export type OAuthProvider = "google" | "azure";
+
+export interface OAuthRedirectResponse {
+  url: string;
 }
 
 export const authService = {
@@ -60,13 +68,14 @@ export const authService = {
     }
   },
 
-  async getMe(): Promise<AuthUser> {
+  async getMe(options?: { silent?: boolean }): Promise<AuthUser> {
+    const config = { silent: options?.silent ?? false };
     try {
-      const response = await apiClient.get<any>("/me");
+      const response = await apiClient.get<any>("/me", config as any);
       return response.data?.data || response.data?.user || response.data;
     } catch (err: any) {
       if (err?.response?.status === 404) {
-        const response = await apiClient.get<any>("/auth/me");
+        const response = await apiClient.get<any>("/auth/me", config as any);
         return response.data?.data || response.data?.user || response.data;
       }
       throw err;
@@ -104,6 +113,17 @@ export const authService = {
       data
     );
     return response.data;
+  },
+
+  /**
+   * Get OAuth redirect authorization URL
+   * GET /api/auth/{provider}/redirect
+   */
+  async getOAuthRedirectUrl(provider: OAuthProvider): Promise<string> {
+    const response = await apiClient.get<OAuthRedirectResponse>(
+      `/auth/${provider}/redirect`
+    );
+    return response.data.url;
   },
 };
 
