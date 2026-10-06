@@ -22,6 +22,8 @@ export interface BackendUserResource {
   created_at?: string;
   can_delete?: boolean;
   cannot_delete_reason?: string | null;
+  delete_action?: "hard_delete" | "anonymize";
+  delete_message?: string;
 }
 
 export const usersService = {
