@@ -79,13 +79,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           data?.error ||
           "Email ou password incorretos.";
         setError(apiErrorMessage);
-        toast.error(apiErrorMessage);
       } else {
         const fallback =
           err?.message ||
           "Não foi possível contactar o servidor em http://localhost:8000/api.";
         setError(fallback);
-        toast.error(fallback);
       }
       setLoading(false);
     }

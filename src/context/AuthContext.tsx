@@ -94,13 +94,13 @@ export function AuthProvider({
     async function checkCurrentSession() {
       try {
         // With HttpOnly cookies enabled (withCredentials: true), getMe() validates the active cookie session.
-        // If the backend still uses Bearer tokens, the request interceptor will attach the token from storage.
-        const authUser = await authService.getMe();
+        // We use silent: true so unauthenticated visitors or an idle server do not trigger intrusive toast banners on F5.
+        const authUser = await authService.getMe({ silent: true });
         const profile = mapAuthUserToProfile(authUser);
         setUserProfile(profile);
         setRole(profile.role);
       } catch {
-        // Session expired or unauthenticated; clean up any legacy storage
+        // Session expired, unauthenticated or backend idle; clean up storage without showing alert
         localStorage.removeItem("auth_token");
         sessionStorage.removeItem("auth_token");
         setRole(null);

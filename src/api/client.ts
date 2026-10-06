@@ -38,14 +38,21 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError<ApiValidationError>) => {
+    const isSilent = (error.config as any)?.silent || (error.config as any)?.skipGlobalErrorHandler;
+    const method = error.config?.method?.toLowerCase();
+
     if (!error.response) {
-      notify.error(
-        "Não foi possível contactar o servidor em " +
-          API_BASE_URL +
-          ". Verifique se o backend está ativo.",
-        undefined,
-        "Erro de Ligação"
-      );
+      // Pedidos GET em background que falham por o backend estar offline não devem incomodar o utilizador com toasts
+      // Notificamos apenas quando o utilizador tenta ativamente uma mutação (POST, PUT, PATCH, DELETE) ou login
+      if (!isSilent && method && method !== "get") {
+        notify.error(
+          "Não foi possível contactar o servidor em " +
+            API_BASE_URL +
+            ". Verifique se o backend está ativo.",
+          undefined,
+          "Erro de Ligação"
+        );
+      }
       (error as any).__alreadyNotified = true;
       return Promise.reject(error);
     }

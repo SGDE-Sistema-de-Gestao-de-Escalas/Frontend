@@ -68,13 +68,14 @@ export const authService = {
     }
   },
 
-  async getMe(): Promise<AuthUser> {
+  async getMe(options?: { silent?: boolean }): Promise<AuthUser> {
+    const config = { silent: options?.silent ?? false };
     try {
-      const response = await apiClient.get<any>("/me");
+      const response = await apiClient.get<any>("/me", config as any);
       return response.data?.data || response.data?.user || response.data;
     } catch (err: any) {
       if (err?.response?.status === 404) {
-        const response = await apiClient.get<any>("/auth/me");
+        const response = await apiClient.get<any>("/auth/me", config as any);
         return response.data?.data || response.data?.user || response.data;
       }
       throw err;
