@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  AGRUPAMENTO,
   schools as INITIAL_SCHOOLS,
   absenceTypes as INITIAL_ABSENCE_TYPES,
   INITIAL_ADMINS,
@@ -554,25 +553,12 @@ export default function PlatformSettingsPage() {
         </h2>
       </div>
       <p className="text-sm text-muted-foreground ml-10 mb-6">
-        Gestão do agrupamento, escolas e parametrizações do sistema
+        Gestão de escolas, utilizadores administradores e parametrizações do sistema
       </p>
 
-      {/* Agrupamento card */}
+      {/* Resumo da plataforma */}
       <div className="mb-6 p-4 rounded-xl border border-border bg-card">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Globe size={18} className="text-primary" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-foreground">
-              {AGRUPAMENTO.name}
-            </p>
-            <p className="text-xs text-muted-foreground font-mono">
-              {AGRUPAMENTO.code}
-            </p>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-border">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             {
               label: "Escolas Ativas",
@@ -583,12 +569,12 @@ export default function PlatformSettingsPage() {
               value: adminsList.filter((a) => a.active).length,
             },
             {
-              label: "Assistentes",
+              label: "Assistentes Registados",
               value: schoolsList.reduce((a, s) => a + s.assistants, 0),
             },
-            { label: "Total Escolas", value: schoolsList.length },
+            { label: "Total de Escolas", value: schoolsList.length },
           ].map((kpi) => (
-            <div key={kpi.label} className="text-center">
+            <div key={kpi.label} className="text-center py-1">
               <p className="text-xl font-mono font-bold text-foreground">
                 {kpi.value}
               </p>
@@ -622,7 +608,7 @@ export default function PlatformSettingsPage() {
         <>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-foreground">
-              Escolas do Agrupamento
+              Escolas Registadas
             </h3>
             <button
               type="button"
@@ -950,7 +936,7 @@ export default function PlatformSettingsPage() {
                 Utilizadores Administradores
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Gestão de utilizadores com permissões de administração do agrupamento
+                Gestão de utilizadores com permissões de administração da plataforma
               </p>
             </div>
             <button

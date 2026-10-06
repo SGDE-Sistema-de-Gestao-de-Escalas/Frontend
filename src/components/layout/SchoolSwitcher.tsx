@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Building2, ChevronDown, Check, Globe, MapPin, Settings } from "lucide-react";
+import { Building2, ChevronDown, Check, MapPin, Settings } from "lucide-react";
 import { useSchool } from "../../context/SchoolContext";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
@@ -9,7 +9,7 @@ interface SchoolSwitcherProps {
 
 export default function SchoolSwitcher({ onPlatformSettings }: SchoolSwitcherProps) {
   const [open, setOpen] = useState(false);
-  const { selectedSchool, schools, setSchoolId, agrupamento } = useSchool();
+  const { selectedSchool, schools, setSchoolId } = useSchool();
   const activeSchools = schools.filter((s) => s.active);
 
   return (
@@ -43,10 +43,6 @@ export default function SchoolSwitcher({ onPlatformSettings }: SchoolSwitcherPro
         <div className="px-3 py-2.5 border-b border-border bg-muted/20">
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
             Selecionar Escola
-          </p>
-          <p className="text-[11px] text-muted-foreground/80 truncate mt-0.5 flex items-center gap-1">
-            <Globe size={10} className="flex-shrink-0" />
-            {agrupamento.name}
           </p>
         </div>
 

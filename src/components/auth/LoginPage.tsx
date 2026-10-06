@@ -481,7 +481,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           {view === "forgot-sent" && (
             <div className="space-y-4">
               <div className="bg-muted/35 border border-border/70 rounded-xl p-3.5 text-xs text-muted-foreground leading-relaxed">
-                Se a conta estiver registada no agrupamento, receberá a ligação em instantes. Verifique também a pasta de <strong>spam</strong>.
+                Se a conta estiver registada no sistema, receberá a ligação em instantes. Verifique também a pasta de <strong>spam</strong>.
               </div>
 
               <button
@@ -550,8 +550,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             />
           </div>
           <blockquote className="text-2xl font-semibold leading-snug mb-4 text-white">
-            "Organização inteligente de horários e equipas para agrupamentos
-            escolares."
+            "Organização inteligente de horários e equipas para estabelecimentos escolares."
           </blockquote>
           <p className="text-sm text-white/80 leading-relaxed">
             Plataforma centralizada para gestão de matrizes semanais,
@@ -578,7 +577,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
         {/* Bottom footer */}
         <div className="relative z-10 flex items-center justify-between text-xs text-white/70 border-t border-white/15 pt-4">
-          <span>Agrupamento de Escolas</span>
+          <span>Gestão de Escolas</span>
           <span>Ano Letivo 2026/2027</span>
         </div>
       </div>

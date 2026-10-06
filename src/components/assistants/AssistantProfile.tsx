@@ -394,7 +394,7 @@ export default function AssistantProfile({
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
                       {availableForTransfer
-                        ? "Pode ser convocado para cobrir noutras escolas do agrupamento."
+                        ? "Pode ser convocado para cobrir noutras escolas da plataforma."
                         : "Não disponível para transferência temporária."}
                     </p>
                   </div>
