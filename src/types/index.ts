@@ -151,6 +151,7 @@ export interface ScheduleRule {
   start: string;
   end: string | null;
   assistantIds: EntityId[];
+  days?: boolean[];
 }
 
 export interface MyAbsence {

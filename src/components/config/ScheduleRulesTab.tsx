@@ -21,6 +21,8 @@ import DatePicker, { formatToIsoDate } from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import { ActionTooltip } from "../common/ActionTooltip";
 
+const DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
 export default function ScheduleRulesTab() {
   const allAssistantIds = ASSISTANTS.map((a) => a.id);
   const [rules, setRules] = useState<ScheduleRule[]>(INITIAL_RULES);
@@ -30,6 +32,15 @@ export default function ScheduleRulesTab() {
 
   // Form state
   const [formActivityId, setFormActivityId] = useState("");
+  const [formDays, setFormDays] = useState<boolean[]>([
+    true,
+    true,
+    true,
+    true,
+    true,
+    false,
+    false,
+  ]);
   const [formPeriodStart, setFormPeriodStart] = useState("07:30");
   const [formPeriodEnd, setFormPeriodEnd] = useState("13:00");
   const [formMinStaff, setFormMinStaff] = useState("3");
@@ -52,9 +63,18 @@ export default function ScheduleRulesTab() {
       )
     : null;
 
+  function toggleDay(i: number) {
+    setFormDays((p) => {
+      const n = [...p];
+      n[i] = !n[i];
+      return n;
+    });
+  }
+
   function openAdd() {
     setEditingRuleId(null);
     setFormActivityId("work");
+    setFormDays([true, true, true, true, true, false, false]);
     setFormPeriodStart("07:30");
     setFormPeriodEnd("13:00");
     setFormMinStaff("3");
@@ -69,6 +89,7 @@ export default function ScheduleRulesTab() {
   function openEdit(rule: ScheduleRule) {
     setEditingRuleId(rule.id);
     setFormActivityId(rule.activityTypeId);
+    setFormDays(rule.days && rule.days.length === 7 ? [...rule.days] : [true, true, true, true, true, false, false]);
     setFormPeriodStart(rule.periodStart);
     setFormPeriodEnd(rule.periodEnd);
     setFormMinStaff(String(rule.min));
@@ -109,6 +130,7 @@ export default function ScheduleRulesTab() {
                 type: formRuleType,
                 end: formValidityEnd || null,
                 assistantIds: formAssistantIds,
+                days: [...formDays],
               }
             : r
         )
@@ -132,6 +154,7 @@ export default function ScheduleRulesTab() {
         start: formValidityStart,
         end: formValidityEnd || null,
         assistantIds: formAssistantIds,
+        days: [...formDays],
       },
     ]);
     setFormStep("done");
@@ -167,6 +190,7 @@ export default function ScheduleRulesTab() {
               <tr className="border-b border-border bg-muted/20">
                 {[
                   "Atividade",
+                  "Dias",
                   "Período",
                   "Mín. pessoas",
                   "Funcionários",
@@ -189,6 +213,10 @@ export default function ScheduleRulesTab() {
                 const activity = DEFAULT_ACTIVITY_TYPES.find(
                   (a) => a.id === rule.activityTypeId
                 );
+                const activeDays = rule.days || [true, true, true, true, true, false, false];
+                const allWeekdays = activeDays.slice(0, 5).every(Boolean) && !activeDays[5] && !activeDays[6];
+                const allDays = activeDays.every(Boolean);
+
                 return (
                   <tr
                     key={rule.id}
@@ -207,6 +235,29 @@ export default function ScheduleRulesTab() {
                         <span className="font-medium text-foreground">
                           {activity?.label ?? rule.activityTypeId}
                         </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-0.5">
+                        {allDays ? (
+                          <span className="text-xs text-muted-foreground font-medium">Todos</span>
+                        ) : allWeekdays ? (
+                          <span className="text-xs text-muted-foreground font-medium">Seg–Sex</span>
+                        ) : (
+                          DAYS.map((d, idx) => (
+                            <span
+                              key={d}
+                              className={`text-[10px] w-5 h-5 flex items-center justify-center rounded font-mono ${
+                                activeDays[idx]
+                                  ? "bg-primary/10 text-primary font-bold"
+                                  : "text-muted-foreground/30"
+                              }`}
+                              title={d}
+                            >
+                              {d[0]}
+                            </span>
+                          ))
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 font-mono text-xs">
@@ -326,6 +377,28 @@ export default function ScheduleRulesTab() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground block mb-2 font-medium">
+                  Dias da Semana *
+                </label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {DAYS.map((d, i) => (
+                    <button
+                      key={d}
+                      onClick={() => toggleDay(i)}
+                      type="button"
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                        formDays[i]
+                          ? "bg-primary text-primary-foreground border-primary font-semibold"
+                          : "border-border text-muted-foreground hover:border-primary/50"
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
