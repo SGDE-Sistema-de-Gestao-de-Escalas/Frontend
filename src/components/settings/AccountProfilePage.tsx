@@ -10,6 +10,7 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import type { Role } from "../../types";
 import { Card } from "../ui/card";
 import DatePicker from "../common/DatePicker";
@@ -17,6 +18,7 @@ import ConfirmationModal from "../common/ConfirmationModal";
 import { notify } from "../common/FeedbackNotification";
 import { useAuth } from "../../context/AuthContext";
 import authService from "../../api/services/auth.service";
+import usersService from "../../api/services/users.service";
 
 interface AccountProfilePageProps {
   role?: Role;
@@ -75,9 +77,78 @@ export default function AccountProfilePage({
     new_password_confirmation?: string;
   }>({});
 
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
   // ── Privacy state ─────────────────────────────────────────────────────────
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRgpdConfirm, setShowRgpdConfirm] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [requestingDeactivation, setRequestingDeactivation] = useState(false);
+  const [deactivationReason, setDeactivationReason] = useState("");
+
+  async function handleRequestDeactivation() {
+    setRequestingDeactivation(true);
+
+    try {
+      const res = await authService.requestDeactivation(deactivationReason.trim() || undefined);
+      setShowRgpdConfirm(false);
+      setDeactivationReason("");
+      notify.success(
+        res?.message || "Pedido de desativação submetido com sucesso. Os administradores foram notificados por email."
+      );
+    } catch (err: any) {
+      setShowRgpdConfirm(false);
+      const msg = err?.response?.data?.message || "Não foi possível submeter o pedido de desativação.";
+      notify.error(msg, undefined, "Erro ao Enviar Pedido");
+    } finally {
+      setRequestingDeactivation(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    setDeletingAccount(true);
+
+    try {
+      // O backend disponibilizou especificamente DELETE /api/me para o utilizador autenticado
+      const res = await authService.deleteMe();
+      setShowDeleteConfirm(false);
+      notify.success(
+        res?.message || "Conta eliminada com sucesso. Os acessos foram revogados."
+      );
+      // Efetua logout e redireciona para a página de login
+      await logout();
+      navigate("/login");
+    } catch (err: any) {
+      setShowDeleteConfirm(false);
+      const status = err?.response?.status;
+      const backendErrors = err?.response?.data?.errors;
+      const userErrorMsg = backendErrors?.user?.[0];
+      const message =
+        userErrorMsg ||
+        err?.response?.data?.message ||
+        "Não foi possível eliminar a conta. Verifique com o administrador da instituição.";
+
+      if (status === 422) {
+        // Validação da regra de proteção: único admin ativo da instituição
+        notify.error(
+          message,
+          undefined,
+          "Operação Não Permitida"
+        );
+      } else if (status === 403) {
+        notify.error(
+          message || "Não tem permissões para eliminar esta conta.",
+          undefined,
+          "Acesso Negado"
+        );
+      } else {
+        notify.error(message, undefined, "Erro ao Eliminar Conta");
+      }
+    } finally {
+      setDeletingAccount(false);
+    }
+  }
 
   // ── Profile save handler ──────────────────────────────────────────────────
   async function handleSaveProfile() {
@@ -531,71 +602,111 @@ export default function AccountProfilePage({
 
       {activeTab === "privacy" && (
         <div className="space-y-4">
-          <Card className="p-5">
-            <h3 className="text-sm font-semibold text-foreground mb-2">
-              Direito ao Esquecimento (RGPD)
-            </h3>
-            <p className="text-xs text-muted-foreground mb-4">
-              Solicitar a eliminação de todos os dados pessoais. Esta operação é
-              irreversível e sujeita a análise.
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowRgpdConfirm(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#C8291A]/30 text-[#C8291A] text-sm font-medium hover:bg-[#FEF2F2] transition-colors"
-            >
-              <XCircle size={14} />
-              Solicitar Eliminação de Dados
-            </button>
-          </Card>
-          <Card className="p-5 border-destructive/20">
-            <h3 className="text-sm font-semibold text-foreground mb-2">
-              Eliminar Conta
-            </h3>
-            <p className="text-xs text-muted-foreground mb-4">
-              Elimina permanentemente esta conta e revoga todos os acessos.
-              Irreversível.
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowDeleteConfirm(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive text-white text-sm font-medium hover:bg-destructive/90 transition-colors shadow-xs"
-            >
-              <X size={14} />
-              Eliminar Conta
-            </button>
-          </Card>
+          {role === "admin" ? (
+            <Card className="p-5 border-destructive/20">
+              <h3 className="text-sm font-semibold text-foreground mb-2">
+                Eliminar Conta de Administrador
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+                Ao eliminar a sua conta de administrador, os seus acessos serão revogados de imediato. Todo o histórico de operações criado por si na instituição (escalas, aprovações de ausências e configurações) será preservado de forma íntegra no sistema, sendo os seus dados de identificação pessoal devidamente anonimizados ao abrigo do RGPD.
+              </p>
+              <div className="p-3 rounded-lg bg-muted/40 border border-border/60 text-xs text-muted-foreground mb-4">
+                <strong>Salvaguarda de Segurança:</strong> Esta operação exige que exista pelo menos mais um administrador ativo na instituição para garantir a continuidade da gestão escolar.
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={deletingAccount}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive text-white text-sm font-medium hover:bg-destructive/90 disabled:opacity-50 transition-colors shadow-xs"
+              >
+                {deletingAccount ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    A processar eliminação...
+                  </>
+                ) : (
+                  <>
+                    <X size={14} />
+                    Eliminar e Anonimizar Conta
+                  </>
+                )}
+              </button>
+            </Card>
+          ) : (
+            <Card className="p-5">
+              <h3 className="text-sm font-semibold text-foreground mb-2">
+                Solicitar Desativação e Anonimização de Dados (RGPD)
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+                Como assistente operacional com registo vinculado à gestão de escalas escolares, a sua conta não pode ser eliminada diretamente para salvaguarda da operação. Pode submeter aqui um pedido formal de desativação e anonimização de dados pessoais, que será enviado por email aos administradores da sua escola para validação do processo.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeactivationReason("");
+                  setShowRgpdConfirm(true);
+                }}
+                disabled={requestingDeactivation}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#C8291A]/30 text-[#C8291A] text-sm font-medium hover:bg-[#FEF2F2] disabled:opacity-50 transition-colors"
+              >
+                {requestingDeactivation ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    A submeter pedido...
+                  </>
+                ) : (
+                  <>
+                    <XCircle size={14} />
+                    Solicitar Desativação de Conta
+                  </>
+                )}
+              </button>
+            </Card>
+          )}
         </div>
       )}
 
-      {/* Confirmation Modal for RGPD Right to be Forgotten */}
+      {/* Confirmation Modal for Staff RGPD Request */}
       <ConfirmationModal
         open={showRgpdConfirm}
         onClose={() => setShowRgpdConfirm(false)}
-        onConfirm={() => {
-          setShowRgpdConfirm(false);
-          notify.success(
-            "Pedido de eliminação de dados (RGPD) registado com sucesso. Os dados pessoais serão anonimizados no BackOffice."
-          );
-        }}
-        title="Direito ao Esquecimento (RGPD)"
-        description="Tem a certeza que pretende solicitar a eliminação dos seus dados pessoais? Os seus dados de identificação serão anonimizados no sistema e os seus acessos revogados, mantendo-se apenas o registo histórico legal e operacional dos turnos e atividades já realizadas."
-        confirmLabel="Confirmar Pedido RGPD"
+        onConfirm={handleRequestDeactivation}
+        title="Solicitar Desativação e Eliminação de Dados (RGPD)"
+        description={
+          <div className="space-y-3">
+            <p>
+              Tem a certeza que pretende solicitar a desativação da sua conta e a anonimização dos seus dados pessoais?
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Os administradores da sua instituição serão notificados por email com o seu pedido para dar seguimento ao processo legal e operacional de desativação.
+            </p>
+            <div>
+              <label className="text-xs font-medium text-foreground block mb-1">
+                Motivo do pedido (opcional):
+              </label>
+              <textarea
+                value={deactivationReason}
+                onChange={(e) => setDeactivationReason(e.target.value)}
+                maxLength={1000}
+                placeholder="Indique o motivo ou observações relevantes para o administrador..."
+                className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring resize-none h-20"
+              />
+            </div>
+          </div>
+        }
+        confirmLabel={requestingDeactivation ? "A enviar..." : "Submeter Pedido aos Administradores"}
         cancelLabel="Cancelar"
         variant="warning"
       />
 
-      {/* Confirmation Modal for account deletion */}
+      {/* Confirmation Modal for Admin account deletion */}
       <ConfirmationModal
         open={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
-        onConfirm={() => {
-          setShowDeleteConfirm(false);
-          notify.success("Conta eliminada com sucesso. Os acessos foram revogados.");
-        }}
-        title="Eliminar Conta"
-        description="Tem a certeza que pretende eliminar permanentemente esta conta? Esta operação é irreversível, revogará todos os acessos e os dados pessoais associados serão anonimizados na plataforma."
-        confirmLabel="Eliminar Definitivamente"
+        onConfirm={handleDeleteAccount}
+        title="Eliminar Conta de Administrador"
+        description="Tem a certeza que pretende eliminar a sua conta? Os seus acessos serão revogados e os seus dados pessoais serão anonimizados, preservando o histórico de todas as operações e escalas criadas por si no sistema. Esta ação não poderá ser concluída caso seja o único administrador ativo desta instituição."
+        confirmLabel="Eliminar e Anonimizar"
         cancelLabel="Cancelar"
         variant="danger"
       />

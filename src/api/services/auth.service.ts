@@ -135,6 +135,29 @@ export const authService = {
   },
 
   /**
+   * Delete own account
+   * DELETE /api/me
+   */
+  async deleteMe(): Promise<{ message: string; delete_action?: "hard_delete" | "anonymize" }> {
+    const response = await apiClient.delete<{ message: string; delete_action?: "hard_delete" | "anonymize" }>(
+      "/me"
+    );
+    return response.data;
+  },
+
+  /**
+   * Request deactivation / privacy deletion (RGPD)
+   * POST /api/privacy/request-deactivation
+   */
+  async requestDeactivation(reason?: string): Promise<{ message: string }> {
+    const response = await apiClient.post<{ message: string }>(
+      "/privacy/request-deactivation",
+      reason ? { reason } : {}
+    );
+    return response.data;
+  },
+
+  /**
    * Get OAuth redirect authorization URL
    * GET /api/auth/{provider}/redirect
    */
