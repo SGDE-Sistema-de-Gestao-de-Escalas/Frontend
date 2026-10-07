@@ -29,6 +29,7 @@ import {
 } from "../../api/mockData";
 import usersService from "../../api/services/users.service";
 import schoolsService, { BackendSchoolResource } from "../../api/services/schools.service";
+import absenceTypesService from "../../api/services/absenceTypes.service";
 import type { School, AbsenceType, AdminUser, EntityId } from "../../types";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
@@ -278,19 +279,52 @@ export default function PlatformSettingsPage() {
   }
 
   // ── Absence types state ───────────────────────────────────────────────────
-  const [absenceTypesList, setAbsenceTypesList] = useState<AbsenceType[]>(
-    INITIAL_ABSENCE_TYPES.map((t) => ({ ...t }))
-  );
+  // ── Absence types state ───────────────────────────────────────────────────
+  const [absenceTypesList, setAbsenceTypesList] = useState<AbsenceType[]>([]);
+  const [loadingAbsenceTypes, setLoadingAbsenceTypes] = useState(false);
+  const [savingAbsenceType, setSavingAbsenceType] = useState(false);
   const [showAbsenceTypeForm, setShowAbsenceTypeForm] = useState(false);
   const [absenceTypeEditId, setAbsenceTypeEditId] = useState<EntityId | null>(null);
   const [absenceTypeDeleteConfirm, setAbsenceTypeDeleteConfirm] = useState<AbsenceType | null>(null);
   const [absenceTypeName, setAbsenceTypeName] = useState("");
   const [absenceTypeRequiresDoc, setAbsenceTypeRequiresDoc] = useState(false);
+  const [absenceTypeFormError, setAbsenceTypeFormError] = useState<string | null>(null);
+
+  const fetchAbsenceTypes = async () => {
+    try {
+      setLoadingAbsenceTypes(true);
+      const res: any = await absenceTypesService.getAll();
+      const rawList = Array.isArray(res) ? res : res?.data || [];
+      if (Array.isArray(rawList)) {
+        const mapped: AbsenceType[] = rawList.map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          requiresDocument: Boolean(item.requires_document),
+          requires_document: Boolean(item.requires_document),
+          can_delete: item.can_delete ?? true,
+          cannot_delete_reason: item.cannot_delete_reason ?? null,
+          created_at: item.created_at,
+          updated_at: item.updated_at,
+        }));
+        setAbsenceTypesList(mapped);
+      }
+    } catch (err) {
+      console.warn("Backend absence-types API not available, using local data fallback:", err);
+      setAbsenceTypesList(INITIAL_ABSENCE_TYPES.map((t) => ({ ...t, can_delete: true })));
+    } finally {
+      setLoadingAbsenceTypes(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAbsenceTypes();
+  }, []);
 
   function openAddAbsenceType() {
     setAbsenceTypeName("");
     setAbsenceTypeRequiresDoc(false);
     setAbsenceTypeEditId(null);
+    setAbsenceTypeFormError(null);
     setShowAbsenceTypeForm(true);
   }
 
@@ -298,44 +332,111 @@ export default function PlatformSettingsPage() {
     setAbsenceTypeName(t.name);
     setAbsenceTypeRequiresDoc(t.requiresDocument ?? t.requires_document ?? false);
     setAbsenceTypeEditId(t.id);
+    setAbsenceTypeFormError(null);
     setShowAbsenceTypeForm(true);
   }
 
-  function handleSaveAbsenceType() {
-    if (!absenceTypeName.trim()) return;
-    if (absenceTypeEditId !== null) {
-      setAbsenceTypesList((p) =>
-        p.map((t) =>
-          t.id === absenceTypeEditId
-            ? {
-                ...t,
-                name: absenceTypeName,
-                requiresDocument: absenceTypeRequiresDoc,
-                requires_document: absenceTypeRequiresDoc,
-              }
-            : t
-        )
-      );
-      notify.success("Tipo de falta atualizado com sucesso");
-    } else {
-      setAbsenceTypesList((p) => [
-        ...p,
-        {
-          id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-          name: absenceTypeName,
-          requiresDocument: absenceTypeRequiresDoc,
-          requires_document: absenceTypeRequiresDoc,
-        },
-      ]);
-      notify.success("Tipo de falta criado com sucesso");
+  async function handleSaveAbsenceType() {
+    const trimmed = absenceTypeName.trim();
+    if (!trimmed) {
+      setAbsenceTypeFormError("O nome do tipo de falta é obrigatório.");
+      return;
     }
-    setShowAbsenceTypeForm(false);
+
+    setAbsenceTypeFormError(null);
+    setSavingAbsenceType(true);
+
+    const isEditing = absenceTypeEditId !== null;
+
+    try {
+      if (isEditing) {
+        const res = await absenceTypesService.update(absenceTypeEditId, {
+          name: trimmed,
+          requires_document: absenceTypeRequiresDoc,
+        });
+        notify.success(res?.message || "Tipo de falta atualizado com sucesso.");
+      } else {
+        const res = await absenceTypesService.create({
+          name: trimmed,
+          requires_document: absenceTypeRequiresDoc,
+        });
+        notify.success(res?.message || "Tipo de falta criado com sucesso.");
+      }
+
+      await fetchAbsenceTypes();
+      setShowAbsenceTypeForm(false);
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const backendErrors = err?.response?.data?.errors;
+      const errorMsg =
+        backendErrors?.name?.[0] ||
+        err?.response?.data?.message ||
+        "Erro ao guardar o tipo de falta.";
+
+      if (status === 422) {
+        setAbsenceTypeFormError(errorMsg);
+      } else {
+        notify.error(errorMsg);
+      }
+
+      // Fallback local se a API estiver offline
+      if (!err?.response) {
+        if (isEditing) {
+          setAbsenceTypesList((p) =>
+            p.map((t) =>
+              t.id === absenceTypeEditId
+                ? {
+                    ...t,
+                    name: trimmed,
+                    requiresDocument: absenceTypeRequiresDoc,
+                    requires_document: absenceTypeRequiresDoc,
+                  }
+                : t
+            )
+          );
+        } else {
+          setAbsenceTypesList((p) => [
+            ...p,
+            {
+              id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+              name: trimmed,
+              requiresDocument: absenceTypeRequiresDoc,
+              requires_document: absenceTypeRequiresDoc,
+              can_delete: true,
+            },
+          ]);
+        }
+        setShowAbsenceTypeForm(false);
+      }
+    } finally {
+      setSavingAbsenceType(false);
+    }
   }
 
-  function deleteAbsenceType(id: EntityId) {
-    setAbsenceTypesList((p) => p.filter((t) => t.id !== id));
-    notify.success("Tipo de falta removido com sucesso");
-    setAbsenceTypeDeleteConfirm(null);
+  async function deleteAbsenceType(id: EntityId) {
+    try {
+      const res = await absenceTypesService.delete(id);
+      setAbsenceTypesList((p) => p.filter((t) => t.id !== id));
+      notify.success(res?.message || "Tipo de falta removido com sucesso.");
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const errorMsg =
+        err?.response?.data?.message ||
+        "Não foi possível remover este tipo de falta.";
+
+      if (status === 409) {
+        // Conflito: existem faltas associadas a este tipo
+        notify.error(
+          errorMsg,
+          undefined,
+          "Impossível Eliminar"
+        );
+      } else {
+        notify.error(errorMsg);
+      }
+    } finally {
+      setAbsenceTypeDeleteConfirm(null);
+    }
   }
 
   // ── Admins state ──────────────────────────────────────────────────────────
@@ -1462,55 +1563,76 @@ export default function PlatformSettingsPage() {
               Novo Tipo
             </button>
           </div>
-          <div className="space-y-2">
-            {absenceTypesList.map((t) => (
-              <div
-                key={t.id}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border bg-card"
-              >
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <FileText size={14} className="text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground">{t.name}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {(t.requiresDocument ?? t.requires_document) ? (
-                      <span className="flex items-center gap-1">
-                        <Paperclip size={10} />
-                        Requer documento comprovativo
-                      </span>
-                    ) : (
-                      "Sem documento obrigatório"
-                    )}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <ActionTooltip content="Editar tipo de falta">
-                    <button
-                      type="button"
-                      onClick={() => openEditAbsenceType(t)}
-                      className="p-1.5 rounded hover:bg-muted transition-colors"
-                    >
-                      <Pencil size={13} className="text-muted-foreground" />
-                    </button>
-                  </ActionTooltip>
+          {loadingAbsenceTypes ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 size={20} className="animate-spin mr-2" />
+              <span className="text-sm">A carregar tipos de falta...</span>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {absenceTypesList.map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border bg-card"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <FileText size={14} className="text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">{t.name}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {(t.requiresDocument ?? t.requires_document) ? (
+                        <span className="flex items-center gap-1">
+                          <Paperclip size={10} />
+                          Requer documento comprovativo
+                        </span>
+                      ) : (
+                        "Sem documento obrigatório"
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <ActionTooltip content="Editar tipo de falta">
+                      <button
+                        type="button"
+                        onClick={() => openEditAbsenceType(t)}
+                        className="p-1.5 rounded hover:bg-muted transition-colors"
+                      >
+                        <Pencil size={13} className="text-muted-foreground" />
+                      </button>
+                    </ActionTooltip>
 
-                  <ActionTooltip content="Eliminar tipo de falta">
-                    <button
-                      type="button"
-                      onClick={() => setAbsenceTypeDeleteConfirm(t)}
-                      className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
-                    >
-                      <Trash2
-                        size={13}
-                        className="text-muted-foreground hover:text-destructive"
-                      />
-                    </button>
-                  </ActionTooltip>
+                    {t.can_delete === false ? (
+                      <ActionTooltip
+                        content={
+                          t.cannot_delete_reason ||
+                          "Este tipo de falta tem faltas associadas e não pode ser eliminado."
+                        }
+                      >
+                        <span className="p-1.5 cursor-not-allowed opacity-40">
+                          <Trash2 size={13} className="text-muted-foreground" />
+                        </span>
+                      </ActionTooltip>
+                    ) : (
+                      <ActionTooltip content="Eliminar tipo de falta">
+                        <button
+                          type="button"
+                          onClick={() => setAbsenceTypeDeleteConfirm(t)}
+                          className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
+                        >
+                          <Trash2
+                            size={13}
+                            className="text-muted-foreground hover:text-destructive"
+                          />
+                        </button>
+                      </ActionTooltip>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
+
           {showAbsenceTypeForm && (
             <Modal
               title={
@@ -1523,16 +1645,28 @@ export default function PlatformSettingsPage() {
             >
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5">
-                    Nome *
+                  <label className="text-xs font-medium text-foreground block mb-1.5">
+                    Nome <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="text"
                     value={absenceTypeName}
-                    onChange={(e) => setAbsenceTypeName(e.target.value)}
+                    onChange={(e) => {
+                      setAbsenceTypeName(e.target.value);
+                      if (absenceTypeFormError) setAbsenceTypeFormError(null);
+                    }}
                     placeholder="Ex: Consulta Médica"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                      absenceTypeFormError
+                        ? "border-destructive focus:ring-destructive"
+                        : "border-border focus:ring-ring"
+                    }`}
                   />
+                  {absenceTypeFormError && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {absenceTypeFormError}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/10">
                   <div>
@@ -1560,10 +1694,19 @@ export default function PlatformSettingsPage() {
                   <button
                     type="button"
                     onClick={handleSaveAbsenceType}
-                    disabled={!absenceTypeName.trim()}
+                    disabled={savingAbsenceType || !absenceTypeName.trim()}
                     className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
                   >
-                    {absenceTypeEditId !== null ? "Guardar Alterações" : "Criar Tipo"}
+                    {savingAbsenceType ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin inline mr-1" />
+                        A guardar...
+                      </>
+                    ) : absenceTypeEditId !== null ? (
+                      "Guardar Alterações"
+                    ) : (
+                      "Criar Tipo"
+                    )}
                   </button>
                 </div>
               </div>
@@ -1582,11 +1725,17 @@ export default function PlatformSettingsPage() {
             title="Eliminar Tipo de Falta"
             description={
               absenceTypeDeleteConfirm ? (
-                <>
-                  Tem a certeza que pretende eliminar permanentemente o tipo de falta{" "}
-                  <strong className="text-foreground">{absenceTypeDeleteConfirm.name}</strong>?
-                  Esta ação removerá esta categoria do catálogo de ausências.
-                </>
+                <div className="space-y-3">
+                  <p>
+                    Tem a certeza que pretende eliminar permanentemente o tipo de falta{" "}
+                    <strong className="text-foreground">{absenceTypeDeleteConfirm.name}</strong>?
+                  </p>
+                  {absenceTypeDeleteConfirm.cannot_delete_reason && (
+                    <div className="py-2.5 px-3.5 rounded-lg border text-xs leading-relaxed bg-amber-500/10 text-amber-900 dark:text-amber-200 border-amber-500/20">
+                      {absenceTypeDeleteConfirm.cannot_delete_reason}
+                    </div>
+                  )}
+                </div>
               ) : ""
             }
             confirmLabel="Eliminar Tipo"
