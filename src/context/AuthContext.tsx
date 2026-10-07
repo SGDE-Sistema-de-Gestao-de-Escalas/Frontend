@@ -5,6 +5,8 @@ import authService, { AuthUser, LoginCredentials } from "../api/services/auth.se
 export interface UserProfile {
   id?: number | string;
   name: string;
+  first_name?: string | null;
+  last_name?: string | null;
   initials: string;
   role: Role;
   roleLabel: string;
@@ -21,6 +23,8 @@ interface AuthContextType {
   loginWithToken: (token: string) => Promise<Role>;
   logout: () => Promise<void>;
   switchRole: () => void;
+  refreshProfile: () => Promise<void>;
+  updateUserLocal: (updated: Partial<UserProfile>) => void;
   isAuthenticated: boolean;
   isLoading: boolean;
 }
@@ -28,6 +32,8 @@ interface AuthContextType {
 const ADMIN_USER: UserProfile = {
   id: 1,
   name: "Miguel Silva",
+  first_name: "Miguel",
+  last_name: "Silva",
   initials: "MS",
   role: "admin",
   roleLabel: "Administrador",
@@ -37,6 +43,8 @@ const ADMIN_USER: UserProfile = {
 const STAFF_USER: UserProfile = {
   id: 2,
   name: "Ana Costa",
+  first_name: "Ana",
+  last_name: "Costa",
   initials: "AC",
   role: "staff",
   roleLabel: "Assistente",
@@ -67,6 +75,8 @@ function mapAuthUserToProfile(authUser: AuthUser): UserProfile {
   return {
     id: authUser.id,
     name: resolvedName,
+    first_name: authUser.first_name || null,
+    last_name: authUser.last_name || null,
     initials: extractInitials(resolvedName),
     role: roleSlug,
     roleLabel: roleSlug === "admin" ? "Administrador" : "Assistente",
@@ -171,6 +181,31 @@ export function AuthProvider({
     });
   }
 
+  async function refreshProfile() {
+    try {
+      const authUser = await authService.getMe({ silent: true });
+      const profile = mapAuthUserToProfile(authUser);
+      setUserProfile(profile);
+      setRole(profile.role);
+    } catch (err) {
+      console.warn("Could not refresh user profile:", err);
+    }
+  }
+
+  function updateUserLocal(updated: Partial<UserProfile>) {
+    setUserProfile((prev) => {
+      const merged = { ...prev, ...updated };
+      if (updated.first_name !== undefined || updated.last_name !== undefined) {
+        const fn = updated.first_name ?? prev.first_name ?? "";
+        const ln = updated.last_name ?? prev.last_name ?? "";
+        const fullName = [fn, ln].filter(Boolean).join(" ").trim() || merged.name;
+        merged.name = fullName;
+        merged.initials = extractInitials(fullName);
+      }
+      return merged;
+    });
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -181,6 +216,8 @@ export function AuthProvider({
         loginWithToken,
         logout,
         switchRole,
+        refreshProfile,
+        updateUserLocal,
         isAuthenticated: role !== null,
         isLoading,
       }}

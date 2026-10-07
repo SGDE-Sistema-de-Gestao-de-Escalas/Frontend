@@ -22,7 +22,6 @@ import {
   UserX,
   XCircle,
 } from "lucide-react";
-import { toast } from "sonner";
 import {
   schools as INITIAL_SCHOOLS,
   absenceTypes as INITIAL_ABSENCE_TYPES,

@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { toast } from "sonner";
+import { notify } from "../common/FeedbackNotification";
 import {
   AlertCircle,
   BarChart2,
@@ -109,7 +108,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         err?.response?.data?.error ||
         `Não foi possível iniciar a autenticação com ${provider === "google" ? "Google" : "Microsoft"}.`;
       setError(apiMsg);
-      toast.error(apiMsg);
+      notify.error(apiMsg);
       setSocialLoading(null);
     }
   }
