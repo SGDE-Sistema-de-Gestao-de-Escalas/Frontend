@@ -43,10 +43,12 @@ import FeedbackNotification, {
   getBackendSuccessMessage,
 } from "../common/FeedbackNotification";
 import { useSchool } from "../../context/SchoolContext";
+import { useAuth } from "../../context/AuthContext";
 
 export default function PlatformSettingsPage() {
   const [activeTab, setActiveTab] = useState<"schools" | "users" | "absence-types">("schools");
   const { refreshSchools: refreshGlobalSchools } = useSchool();
+  const { user: currentUser } = useAuth();
 
   // ── Schools state ─────────────────────────────────────────────────────────
   const [schoolsList, setSchoolsList] = useState<School[]>([]);
@@ -440,10 +442,8 @@ export default function PlatformSettingsPage() {
   }
 
   // ── Admins state ──────────────────────────────────────────────────────────
-  const [adminsList, setAdminsList] = useState<AdminUser[]>(
-    INITIAL_ADMINS.map((a) => ({ ...a }))
-  );
-  const [loadingAdmins, setLoadingAdmins] = useState(false);
+  const [adminsList, setAdminsList] = useState<AdminUser[]>([]);
+  const [loadingAdmins, setLoadingAdmins] = useState(true);
   const [showAdminForm, setShowAdminForm] = useState(false);
   const [adminEditId, setAdminEditId] = useState<EntityId | null>(null);
   const [adminFirstName, setAdminFirstName] = useState("");
@@ -466,10 +466,23 @@ export default function PlatformSettingsPage() {
     try {
       setLoadingAdmins(true);
       const res = await usersService.getAll();
-      if (res?.data && Array.isArray(res.data)) {
-        const mapped: AdminUser[] = res.data
-          .filter((u) => !u.role || u.role === "admin")
-          .map((u) => {
+      const rawList = Array.isArray(res)
+        ? res
+        : Array.isArray((res as any)?.data)
+        ? (res as any).data
+        : null;
+
+      if (rawList !== null) {
+        const mapped: AdminUser[] = rawList
+          .filter((u: any) => {
+            // Regra 1: Apenas administradores
+            if (u.role && u.role !== "admin") return false;
+            // Regra 2: Excluir o utilizador atualmente autenticado (por ID ou email)
+            if (currentUser?.id && String(u.id) === String(currentUser.id)) return false;
+            if (currentUser?.email && u.email?.toLowerCase() === currentUser.email?.toLowerCase()) return false;
+            return true;
+          })
+          .map((u: any) => {
             const fName = u.first_name || (u.name ? u.name.split(" ")[0] : "");
             const lName = u.last_name || (u.name ? u.name.split(" ").slice(1).join(" ") : "");
             return {
@@ -487,12 +500,17 @@ export default function PlatformSettingsPage() {
               delete_message: u.delete_message,
             };
           });
-        if (mapped.length > 0) {
-          setAdminsList(mapped);
-        }
+
+        setAdminsList(mapped);
       }
     } catch (err) {
       console.warn("Backend users API not ready, using local data fallback:", err);
+      const fallback = INITIAL_ADMINS.filter((a) => {
+        if (currentUser?.id && String(a.id) === String(currentUser.id)) return false;
+        if (currentUser?.email && a.email?.toLowerCase() === currentUser.email?.toLowerCase()) return false;
+        return true;
+      });
+      setAdminsList(fallback);
     } finally {
       setLoadingAdmins(false);
     }
@@ -500,7 +518,7 @@ export default function PlatformSettingsPage() {
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [currentUser?.id, currentUser?.email]);
 
   function openAddAdmin() {
     setAdminFirstName("");
@@ -1205,7 +1223,23 @@ export default function PlatformSettingsPage() {
           </div>
 
           <div className="space-y-3">
-            {adminsList.map((admin) => (
+            {loadingAdmins ? (
+              <div className="p-8 text-center border border-border rounded-xl bg-card flex flex-col items-center justify-center gap-2">
+                <Loader2 size={20} className="animate-spin text-primary" />
+                <p className="text-xs text-muted-foreground">A carregar administradores...</p>
+              </div>
+            ) : adminsList.length === 0 ? (
+              <div className="p-8 text-center border border-dashed border-border rounded-xl bg-card/50">
+                <Shield size={28} className="mx-auto text-muted-foreground/50 mb-2" />
+                <p className="text-sm font-medium text-foreground">
+                  Nenhum outro administrador registado
+                </p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                  Para além da sua conta, não existem outros utilizadores com perfil de administrador na plataforma.
+                </p>
+              </div>
+            ) : (
+              adminsList.map((admin) => (
               <div
                 key={admin.id}
                 className={`p-4 rounded-xl border transition-colors ${
@@ -1331,7 +1365,7 @@ export default function PlatformSettingsPage() {
                   </div>
                 </div>
               </div>
-            ))}
+            )))}
           </div>
 
           {/* Modal: Criar / Editar Administrador */}
