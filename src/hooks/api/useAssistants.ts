@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { notify } from "../../components/common/FeedbackNotification";
 import assistantsService, { AssistantFilters } from "../../api/services/assistants.service";
 import { assistants as mockAssistants } from "../../api/mockData";
 import { Assistant } from "../../types";
@@ -71,14 +71,10 @@ export function useCreateAssistant() {
     mutationFn: (data: Partial<Assistant>) => assistantsService.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
-      toast.success("Assistente Criado", {
-        description: "O assistente foi registado com sucesso.",
-      });
+      notify.success("O assistente foi registado com sucesso.", "Assistente Criado");
     },
     onError: () => {
-      toast.error("Erro ao Criar", {
-        description: "Não foi possível criar o assistente.",
-      });
+      notify.error("Não foi possível criar o assistente.", "Erro ao Criar");
     },
   });
 }
@@ -94,14 +90,10 @@ export function useUpdateAssistant() {
       queryClient.invalidateQueries({
         queryKey: [...ASSISTANTS_QUERY_KEY, "detail", variables.id],
       });
-      toast.success("Assistente Atualizado", {
-        description: "Os dados do assistente foram guardados.",
-      });
+      notify.success("Os dados do assistente foram guardados.", "Assistente Atualizado");
     },
     onError: () => {
-      toast.error("Erro ao Atualizar", {
-        description: "Não foi possível guardar as alterações.",
-      });
+      notify.error("Não foi possível guardar as alterações.", "Erro ao Atualizar");
     },
   });
 }
@@ -113,14 +105,10 @@ export function useDeleteAssistant() {
     mutationFn: (id: number | string) => assistantsService.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
-      toast.success("Assistente Eliminado", {
-        description: "O registo do assistente foi removido.",
-      });
+      notify.success("O registo do assistente foi removido.", "Assistente Eliminado");
     },
     onError: () => {
-      toast.error("Erro ao Eliminar", {
-        description: "Não foi possível remover o assistente.",
-      });
+      notify.error("Não foi possível remover o assistente.", "Erro ao Eliminar");
     },
   });
 }

@@ -9,8 +9,7 @@ export type AdminPage =
   | "assistants"
   | "reports"
   | "account"
-  | "platform-settings"
-  | "gantt";
+  | "platform-settings";
 
 export type StaffPage =
   | "schedule"
@@ -114,8 +113,12 @@ export interface Absence {
 export interface AbsenceType {
   id: EntityId;
   name: string;
-  requiresDocument: boolean;
+  requiresDocument?: boolean;
   requires_document?: boolean;
+  can_delete?: boolean;
+  cannot_delete_reason?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Schedule {

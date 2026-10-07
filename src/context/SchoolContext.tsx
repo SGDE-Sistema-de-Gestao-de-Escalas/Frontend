@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AGRUPAMENTO, schools as initialSchools } from "../api/mockData";
+import { AGRUPAMENTO } from "../api/mockData";
 import schoolsService, { BackendSchoolResource } from "../api/services/schools.service";
 import type { School } from "../types";
+import { useAuth } from "./AuthContext";
 
 export interface OperatingHours {
   startHour: number;
@@ -12,8 +13,9 @@ export interface OperatingHours {
 }
 
 interface SchoolContextType {
-  selectedSchoolId: number | string;
-  selectedSchool: School;
+  selectedSchoolId: number | string | null;
+  currentSchoolId: number | string | null;
+  selectedSchool: School | null;
   schools: School[];
   setSchoolId: (id: number | string) => void;
   agrupamento: typeof AGRUPAMENTO;
@@ -22,15 +24,21 @@ interface SchoolContextType {
   refreshSchools: () => Promise<void>;
   operatingHours: OperatingHours;
   updateOperatingHours: (hours: Partial<OperatingHours>) => void;
+  canSwitchSchool: boolean;
 }
 
 const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
 export function SchoolProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
-  const [schoolsList, setSchoolsList] = useState<School[]>(initialSchools);
-  const [selectedSchoolId, setSelectedSchoolId] = useState<number | string>(() => {
-    return localStorage.getItem("selected_school_id") || 1;
+  const { role, user } = useAuth();
+  const isStaff = role === "staff";
+  const isAdmin = role === "admin";
+  const canSwitchSchool = isAdmin;
+
+  const [schoolsList, setSchoolsList] = useState<School[]>([]);
+  const [selectedSchoolId, setSelectedSchoolId] = useState<number | string | null>(() => {
+    return localStorage.getItem("selected_school_id") || null;
   });
   const [operatingHours, setOperatingHours] = useState<OperatingHours>({
     startHour: 7,
@@ -38,6 +46,19 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
     open: "07:30",
     close: "21:00",
   });
+
+  // Sincronização do contexto escolar consoante o papel do utilizador:
+  // - Assistentes (Staff): pertencem obrigatoriamente a uma escola atribuída (user.school_id)
+  // - Administradores (Admin): têm acesso global a todas as escolas do agrupamento
+  useEffect(() => {
+    if (isStaff && user?.school_id) {
+      const staffSchoolId = String(user.school_id);
+      if (String(selectedSchoolId) !== staffSchoolId) {
+        localStorage.setItem("selected_school_id", staffSchoolId);
+        setSelectedSchoolId(user.school_id);
+      }
+    }
+  }, [isStaff, user?.school_id]);
 
   const refreshSchools = async () => {
     try {
@@ -59,7 +80,13 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
         }));
         setSchoolsList(mapped);
 
-        if (mapped.length > 0) {
+        if (isStaff && user?.school_id) {
+          // Assistentes ficam restritos à sua escola
+          const staffSchoolId = String(user.school_id);
+          localStorage.setItem("selected_school_id", staffSchoolId);
+          setSelectedSchoolId(user.school_id);
+        } else if (mapped.length > 0) {
+          // Administradores: valida se o ID atual existe na base de dados
           setSelectedSchoolId((currId) => {
             const exists = mapped.some((s) => String(s.id) === String(currId));
             if (!exists) {
@@ -69,6 +96,9 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
             }
             return currId;
           });
+        } else {
+          setSelectedSchoolId(null);
+          localStorage.removeItem("selected_school_id");
         }
       }
     } catch (err) {
@@ -78,13 +108,21 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     refreshSchools();
-  }, []);
+  }, [isStaff, user?.school_id]);
 
   const selectedSchool =
-    schoolsList.find((s) => String(s.id) === String(selectedSchoolId)) || schoolsList[0] || initialSchools[0];
+    schoolsList.find((s) => String(s.id) === String(selectedSchoolId)) ||
+    (schoolsList.length > 0 ? schoolsList[0] : null);
 
   function setSchoolId(id: number | string) {
     if (String(id) === String(selectedSchoolId)) return;
+
+    // Verificação de Acesso Frontend:
+    // Assistentes não podem selecionar escolas arbitrárias; apenas a sua escola atribuída
+    if (isStaff && user?.school_id && String(id) !== String(user.school_id)) {
+      console.warn("Acesso negado: Assistentes apenas têm acesso à sua escola atribuída.");
+      return;
+    }
 
     // 1) Gravar primeiro no localStorage: o interceptor do Axios lê daqui o
     //    header X-School-ID, por isso tem de estar atualizado antes de qualquer refetch.
@@ -121,6 +159,7 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
     <SchoolContext.Provider
       value={{
         selectedSchoolId,
+        currentSchoolId: selectedSchoolId,
         selectedSchool,
         schools: schoolsList,
         setSchoolId,
@@ -130,6 +169,7 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
         refreshSchools,
         operatingHours,
         updateOperatingHours,
+        canSwitchSchool,
       }}
     >
       {children}

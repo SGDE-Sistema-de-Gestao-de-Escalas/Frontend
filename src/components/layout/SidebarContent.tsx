@@ -4,7 +4,6 @@ import {
   Calendar,
   ChevronRight,
   FileText,
-  GanttChart,
   Inbox,
   Layers,
   LogOut,
@@ -31,7 +30,6 @@ export const ADMIN_NAV: NavItemConfig[] = [
   { id: "assistants", label: "Assistentes", icon: <Users size={16} />, group: "Diário", to: "/assistants" },
   { id: "absences", label: "Ausências", icon: <Inbox size={16} />, badge: 3, group: "Diário", to: "/absences" },
   { id: "reports", label: "Relatórios", icon: <BarChart2 size={16} />, group: "Análise", to: "/reports" },
-  { id: "gantt", label: "Mapa de Gantt", icon: <GanttChart size={16} />, group: "Análise", to: "/gantt" },
   { id: "config", label: "Regras do Motor", icon: <SlidersHorizontal size={16} />, group: "Configuração", to: "/config" },
   { id: "platform-settings", label: "Definições", icon: <Settings size={16} />, group: "Configuração", to: "/platform-settings" },
 ];

@@ -5,6 +5,8 @@ import authService, { AuthUser, LoginCredentials } from "../api/services/auth.se
 export interface UserProfile {
   id?: number | string;
   name: string;
+  first_name?: string | null;
+  last_name?: string | null;
   initials: string;
   role: Role;
   roleLabel: string;
@@ -21,26 +23,21 @@ interface AuthContextType {
   loginWithToken: (token: string) => Promise<Role>;
   logout: () => Promise<void>;
   switchRole: () => void;
+  refreshProfile: () => Promise<void>;
+  updateUserLocal: (updated: Partial<UserProfile>) => void;
   isAuthenticated: boolean;
   isLoading: boolean;
 }
 
-const ADMIN_USER: UserProfile = {
-  id: 1,
-  name: "Miguel Silva",
-  initials: "MS",
+const EMPTY_USER: UserProfile = {
+  id: "",
+  name: "",
+  first_name: "",
+  last_name: "",
+  initials: "",
   role: "admin",
-  roleLabel: "Administrador",
-  email: "admin@sgde.pt",
-};
-
-const STAFF_USER: UserProfile = {
-  id: 2,
-  name: "Ana Costa",
-  initials: "AC",
-  role: "staff",
-  roleLabel: "Assistente",
-  email: "assistente@sgde.pt",
+  roleLabel: "",
+  email: "",
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -67,6 +64,8 @@ function mapAuthUserToProfile(authUser: AuthUser): UserProfile {
   return {
     id: authUser.id,
     name: resolvedName,
+    first_name: authUser.first_name || null,
+    last_name: authUser.last_name || null,
     initials: extractInitials(resolvedName),
     role: roleSlug,
     roleLabel: roleSlug === "admin" ? "Administrador" : "Assistente",
@@ -78,15 +77,13 @@ function mapAuthUserToProfile(authUser: AuthUser): UserProfile {
 
 export function AuthProvider({
   children,
-  initialRole = "admin",
+  initialRole = null,
 }: {
   children: React.ReactNode;
   initialRole?: Role | null;
 }) {
   const [role, setRole] = useState<Role | null>(initialRole);
-  const [userProfile, setUserProfile] = useState<UserProfile>(
-    initialRole === "admin" ? ADMIN_USER : STAFF_USER
-  );
+  const [userProfile, setUserProfile] = useState<UserProfile>(EMPTY_USER);
   const [isLoading, setIsLoading] = useState(true);
 
   // Check existing session on application load (supports HttpOnly cookies or fallback localStorage token)
@@ -119,7 +116,6 @@ export function AuthProvider({
     const isRemember = credentials.remember !== undefined ? credentials.remember : remember;
     const response = await authService.login({ ...credentials, remember: isRemember });
 
-    // Se o backend enviar token no JSON (modo Bearer legado), guardamos; se for HttpOnly, response.token será vazio
     if (response.token) {
       if (isRemember) {
         localStorage.setItem("auth_token", response.token);
@@ -139,7 +135,6 @@ export function AuthProvider({
   async function loginWithToken(token: string): Promise<Role> {
     if (token) {
       localStorage.setItem("auth_token", token);
-      sessionStorage.removeItem("auth_token");
     }
     const authUser = await authService.getMe();
     const profile = mapAuthUserToProfile(authUser);
@@ -150,7 +145,11 @@ export function AuthProvider({
 
   function login(newRole: Role) {
     setRole(newRole);
-    setUserProfile(newRole === "admin" ? ADMIN_USER : STAFF_USER);
+    setUserProfile((prev) => ({
+      ...prev,
+      role: newRole,
+      roleLabel: newRole === "admin" ? "Administrador" : "Assistente",
+    }));
   }
 
   async function logout() {
@@ -162,6 +161,8 @@ export function AuthProvider({
     } finally {
       localStorage.removeItem("auth_token");
       sessionStorage.removeItem("auth_token");
+      localStorage.removeItem("selected_school_id");
+      setUserProfile(EMPTY_USER);
       setRole(null);
     }
   }
@@ -169,8 +170,37 @@ export function AuthProvider({
   function switchRole() {
     setRole((prev) => {
       const next = prev === "admin" ? "staff" : "admin";
-      setUserProfile(next === "admin" ? ADMIN_USER : STAFF_USER);
+      setUserProfile((prevProfile) => ({
+        ...prevProfile,
+        role: next,
+        roleLabel: next === "admin" ? "Administrador" : "Assistente",
+      }));
       return next;
+    });
+  }
+
+  async function refreshProfile() {
+    try {
+      const authUser = await authService.getMe({ silent: true });
+      const profile = mapAuthUserToProfile(authUser);
+      setUserProfile(profile);
+      setRole(profile.role);
+    } catch (err) {
+      console.warn("Could not refresh user profile:", err);
+    }
+  }
+
+  function updateUserLocal(updated: Partial<UserProfile>) {
+    setUserProfile((prev) => {
+      const merged = { ...prev, ...updated };
+      if (updated.first_name !== undefined || updated.last_name !== undefined) {
+        const fn = updated.first_name ?? prev.first_name ?? "";
+        const ln = updated.last_name ?? prev.last_name ?? "";
+        const fullName = [fn, ln].filter(Boolean).join(" ").trim() || merged.name;
+        merged.name = fullName;
+        merged.initials = extractInitials(fullName);
+      }
+      return merged;
     });
   }
 
@@ -184,6 +214,8 @@ export function AuthProvider({
         loginWithToken,
         logout,
         switchRole,
+        refreshProfile,
+        updateUserLocal,
         isAuthenticated: role !== null,
         isLoading,
       }}

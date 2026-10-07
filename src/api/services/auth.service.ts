@@ -108,10 +108,61 @@ export const authService = {
     new_password: string;
     new_password_confirmation: string;
   }): Promise<{ message: string }> {
-    const response = await apiClient.put<{ message: string }>(
+    const response = await apiClient.post<{ message: string }>(
       "/update-password",
       data
     );
+    return response.data;
+  },
+
+  async updateProfile(data: {
+    first_name: string;
+    last_name: string;
+    email: string;
+  }, userId?: string | number): Promise<AuthUser> {
+    // 1) Tenta o endpoint específico de perfil PUT /me
+    try {
+      const res = await apiClient.put<any>("/me", data);
+      return res.data?.data || res.data?.user || res.data;
+    } catch (err: any) {
+      // 2) Se /me der 404/405 e tivermos o userId, tenta PUT /users/{id}
+      if ((err?.response?.status === 404 || err?.response?.status === 405) && userId) {
+        const res = await apiClient.put<any>(`/users/${userId}`, data);
+        return res.data?.data || res.data?.user || res.data;
+      }
+      throw err;
+    }
+  },
+
+  /**
+   * Delete own account
+   * DELETE /api/me
+   */
+  async deleteMe(): Promise<{ message: string; delete_action?: "hard_delete" | "anonymize" }> {
+    const response = await apiClient.delete<{ message: string; delete_action?: "hard_delete" | "anonymize" }>(
+      "/me"
+    );
+    return response.data;
+  },
+
+  /**
+   * Request deactivation / privacy deletion (RGPD)
+   * POST /api/privacy/request-deactivation
+   */
+  async requestDeactivation(reason?: string): Promise<{ message: string }> {
+    const response = await apiClient.post<{ message: string }>(
+      "/privacy/request-deactivation",
+      reason ? { reason } : {}
+    );
+    return response.data;
+  },
+
+  /**
+   * Export own personal data (RGPD portability)
+   * GET /api/me/export
+   */
+  async exportPersonalData(): Promise<any> {
+    const response = await apiClient.get<any>("/me/export");
     return response.data;
   },
 

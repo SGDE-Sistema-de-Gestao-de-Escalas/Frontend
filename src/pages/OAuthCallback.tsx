@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { toast } from "sonner";
+import { notify } from "../components/common/FeedbackNotification";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import appIcon from "../assets/icon.svg";
@@ -23,7 +23,7 @@ export default function OAuthCallback() {
       if (errorParam) {
         const decodedError = decodeURIComponent(errorParam);
         console.warn("[OAuth] Erro retornado pelo BackOffice:", decodedError);
-        toast.error(decodedError, { duration: Infinity });
+        notify.error(decodedError, undefined, undefined, { duration: Infinity });
         navigate(`/login?error=${encodeURIComponent(decodedError)}`, { replace: true });
         return;
       }
@@ -32,7 +32,7 @@ export default function OAuthCallback() {
       if (tokenParam) {
         try {
           const role = await loginWithToken(tokenParam);
-          toast.success("Autenticação efetuada com sucesso!");
+          notify.success("Autenticação efetuada com sucesso!");
           if (role === "admin") {
             navigate("/dashboard", { replace: true });
           } else {
@@ -44,7 +44,7 @@ export default function OAuthCallback() {
             err?.response?.data?.message ||
             err?.response?.data?.error ||
             "Não foi possível validar a sessão do utilizador com o servidor.";
-          toast.error(backendMessage);
+          notify.error(backendMessage);
           navigate(`/login?error=${encodeURIComponent(backendMessage)}`, { replace: true });
         }
         return;
@@ -52,7 +52,7 @@ export default function OAuthCallback() {
 
       // Se não vier nem token nem erro
       const fallbackMsg = "Nenhum parâmetro de autenticação foi recebido do fornecedor.";
-      toast.error(fallbackMsg);
+      notify.error(fallbackMsg);
       navigate(`/login?error=${encodeURIComponent(fallbackMsg)}`, { replace: true });
     }
 

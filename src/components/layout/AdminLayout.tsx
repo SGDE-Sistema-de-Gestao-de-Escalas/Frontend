@@ -14,16 +14,15 @@ import AssistantProfile from "../assistants/AssistantProfile";
 import AssistantsPageWrapper from "../assistants/AssistantsPageWrapper";
 import AbsenceManagement from "../absences/AbsenceManagement";
 import ReportsPage from "../reports/ReportsPage";
-import GanttPage from "../gantt/GanttPage";
 import AccountProfilePage from "../settings/AccountProfilePage";
 import PlatformSettingsPage from "../settings/PlatformSettingsPage";
+import NoSchoolPlaceholder from "../common/NoSchoolPlaceholder";
 
 export const ADMIN_PAGE_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
   assistants: "Assistentes",
   absences: "Ausências",
   reports: "Relatórios",
-  gantt: "Mapa de Gantt",
   config: "Regras do Motor",
   profile: "Perfil do Assistente",
   "add-assistant": "Novo Assistente",
@@ -57,7 +56,7 @@ export default function AdminLayout({
   );
   const [absenceFor, setAbsenceFor] = useState<string | null>(null);
 
-  const { currentSchoolId } = useSchool();
+  const { currentSchoolId, selectedSchool } = useSchool();
   const activePage = currentPage || internalPage;
 
   function handleNavigate(pageId: string) {
@@ -115,31 +114,60 @@ export default function AdminLayout({
           ) : (
             <>
               {activePage === "dashboard" && (
-                <DashboardSection
-                  onSelectAssistant={(id) => setSelectedAssistantId(id)}
-                  currentSchoolId={currentSchoolId}
-                />
+                !selectedSchool ? (
+                  <NoSchoolPlaceholder moduleName="o Dashboard" />
+                ) : (
+                  <DashboardSection
+                    onSelectAssistant={(id) => setSelectedAssistantId(id)}
+                    currentSchoolId={currentSchoolId}
+                  />
+                )
               )}
-              {activePage === "config" && <ConfigEngine />}
+              {activePage === "config" && (
+                !selectedSchool ? (
+                  <NoSchoolPlaceholder moduleName="as Regras do Motor" />
+                ) : (
+                  <ConfigEngine />
+                )
+              )}
               {activePage === "profile" && (
                 <AssistantProfile
                   onBack={() => handleNavigate("assistants")}
                 />
               )}
-              {activePage === "absences" && <AbsenceManagement />}
+              {activePage === "absences" && (
+                !selectedSchool ? (
+                  <NoSchoolPlaceholder moduleName="as Ausências" />
+                ) : (
+                  <AbsenceManagement />
+                )
+              )}
               {activePage === "assistants" && (
-                <AssistantsPageWrapper
-                  onViewProfile={() => handleNavigate("profile")}
-                />
+                !selectedSchool ? (
+                  <NoSchoolPlaceholder moduleName="os Assistentes" />
+                ) : (
+                  <AssistantsPageWrapper
+                    onViewProfile={() => handleNavigate("profile")}
+                  />
+                )
               )}
               {activePage === "add-assistant" && (
-                <AssistantsPageWrapper
-                  onViewProfile={() => handleNavigate("profile")}
-                  initialAdd
-                />
+                !selectedSchool ? (
+                  <NoSchoolPlaceholder moduleName="os Assistentes" />
+                ) : (
+                  <AssistantsPageWrapper
+                    onViewProfile={() => handleNavigate("profile")}
+                    initialAdd
+                  />
+                )
               )}
-              {activePage === "reports" && <ReportsPage />}
-              {activePage === "gantt" && <GanttPage />}
+              {activePage === "reports" && (
+                !selectedSchool ? (
+                  <NoSchoolPlaceholder moduleName="os Relatórios" />
+                ) : (
+                  <ReportsPage />
+                )
+              )}
               {activePage === "account" && <AccountProfilePage role="admin" />}
               {activePage === "platform-settings" && <PlatformSettingsPage />}
             </>

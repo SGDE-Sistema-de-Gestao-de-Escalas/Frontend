@@ -12,14 +12,21 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <SchoolProvider>
-          <AuthProvider>
+        <AuthProvider>
+          <SchoolProvider>
             <BrowserRouter>
               <AppRouter />
-              <Toaster position="top-right" richColors />
+              <Toaster
+                position="top-right"
+                richColors
+                style={{
+                  top: "70px",
+                  right: "24px",
+                }}
+              />
             </BrowserRouter>
-          </AuthProvider>
-        </SchoolProvider>
+          </SchoolProvider>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

@@ -9,7 +9,6 @@ import Assistants from "../pages/Assistants";
 import Absences from "../pages/Absences";
 import Reports from "../pages/Reports";
 import Config from "../pages/Config";
-import Gantt from "../pages/Gantt";
 import Profile from "../pages/Profile";
 import PlatformSettings from "../pages/PlatformSettings";
 import Account from "../pages/Account";
@@ -19,17 +18,53 @@ import StaffRegisterAbsence from "../pages/StaffRegisterAbsence";
 import LegacyApp from "../pages/LegacyApp";
 
 import TitleUpdater from "./TitleUpdater";
+import { Loader2 } from "lucide-react";
 
 function ProtectedLayout() {
-  const { role } = useAuth();
+  const { role, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-background gap-3">
+        <Loader2 size={32} className="animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">A verificar sessão...</p>
+      </div>
+    );
+  }
+
   if (!role) {
     return <Navigate to="/login" replace />;
   }
   return <MainLayout />;
 }
 
-export default function AppRouter() {
+function AdminRoute({ children }: { children: React.ReactNode }) {
   const { role } = useAuth();
+  if (role !== "admin") {
+    return <Navigate to="/staff/schedule" replace />;
+  }
+  return <>{children}</>;
+}
+
+function StaffRoute({ children }: { children: React.ReactNode }) {
+  const { role } = useAuth();
+  if (role !== "staff") {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
+export default function AppRouter() {
+  const { role, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-background gap-3">
+        <Loader2 size={32} className="animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">A carregar...</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -51,26 +86,25 @@ export default function AppRouter() {
           }
         />
         {/* Admin Routes */}
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/schedules" element={<Dashboard />} />
-        <Route path="/assistants" element={<Assistants />} />
-        <Route path="/absences" element={<Absences />} />
-        <Route path="/reports" element={<Reports />} />
-        <Route path="/config" element={<Config />} />
-        <Route path="/gantt" element={<Gantt />} />
+        <Route path="/dashboard" element={<AdminRoute><Dashboard /></AdminRoute>} />
+        <Route path="/schedules" element={<AdminRoute><Dashboard /></AdminRoute>} />
+        <Route path="/assistants" element={<AdminRoute><Assistants /></AdminRoute>} />
+        <Route path="/absences" element={<AdminRoute><Absences /></AdminRoute>} />
+        <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
+        <Route path="/config" element={<AdminRoute><Config /></AdminRoute>} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/platform-settings" element={<PlatformSettings />} />
+        <Route path="/platform-settings" element={<AdminRoute><PlatformSettings /></AdminRoute>} />
         <Route path="/account" element={<Account />} />
 
         {/* Staff Routes */}
-        <Route path="/staff/schedule" element={<StaffSchedule />} />
-        <Route path="/staff/absences" element={<StaffAbsences />} />
-        <Route path="/staff/absence" element={<StaffAbsences />} />
+        <Route path="/staff/schedule" element={<StaffRoute><StaffSchedule /></StaffRoute>} />
+        <Route path="/staff/absences" element={<StaffRoute><StaffAbsences /></StaffRoute>} />
+        <Route path="/staff/absence" element={<StaffRoute><StaffAbsences /></StaffRoute>} />
         <Route
           path="/staff/register-absence"
-          element={<StaffRegisterAbsence />}
+          element={<StaffRoute><StaffRegisterAbsence /></StaffRoute>}
         />
-        <Route path="/staff/account" element={<Account />} />
+        <Route path="/staff/account" element={<StaffRoute><Account /></StaffRoute>} />
       </Route>
 
       {/* Legacy route preserved for 1:1 diff and comparison */}

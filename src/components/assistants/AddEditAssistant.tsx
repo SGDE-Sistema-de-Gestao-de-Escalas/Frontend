@@ -15,13 +15,13 @@ import {
   Upload,
   User,
 } from "lucide-react";
-import { toast } from "sonner";
 import { Card } from "../ui/card";
 import { Switch } from "../ui/switch";
 import Modal from "../common/Modal";
 import ConfirmationModal from "../common/ConfirmationModal";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
+import { notify } from "../common/FeedbackNotification";
 import {
   BLOCK_STYLES,
   slotsToBlocks,
@@ -369,7 +369,7 @@ export default function AddEditAssistant({
       setSchedules((prev) =>
         prev.map((s) => (s.id === editingSchedule.id ? { ...s, to: endVal } : s))
       );
-      toast.success("Data de fim de vigência atualizada!");
+      notify.success("Data de fim de vigência atualizada!");
       setShowAddScheduleModal(false);
       setEditingScheduleId(null);
       return;
@@ -462,7 +462,7 @@ export default function AddEditAssistant({
       return list.sort((a, b) => (b.from > a.from ? 1 : -1));
     });
 
-    toast.success(
+    notify.success(
       editingScheduleId
         ? "Horário atualizado com sucesso!"
         : "Novo horário adicionado com sucesso!"
@@ -475,7 +475,7 @@ export default function AddEditAssistant({
     if (!scheduleToDelete) return;
 
     if (getScheduleTypeStatus(scheduleToDelete, schedules) === "active") {
-      toast.error(
+      notify.error(
         "Não é possível eliminar o horário em vigor. O assistente tem de ter sempre um horário ativo."
       );
       setScheduleToDelete(null);
@@ -483,7 +483,7 @@ export default function AddEditAssistant({
     }
 
     if (schedules.length <= 1) {
-      toast.error("O assistente tem de ter pelo menos um horário registado.");
+      notify.error("O assistente tem de ter pelo menos um horário registado.");
       setScheduleToDelete(null);
       return;
     }
@@ -504,7 +504,7 @@ export default function AddEditAssistant({
       return nextList;
     });
 
-    toast.success(
+    notify.success(
       isFuture
         ? "Horário agendado eliminado. A vigência do horário atual ficou em aberto."
         : "Registo histórico de horário eliminado com sucesso."
@@ -900,13 +900,13 @@ export default function AddEditAssistant({
                       type="button"
                       onClick={() => {
                         if (isActiveSchedule) {
-                          toast.error(
+                          notify.error(
                             "Não é possível eliminar o horário em vigor. O assistente tem de ter sempre um horário ativo."
                           );
                           return;
                         }
                         if (schedules.length <= 1) {
-                          toast.error("O assistente tem de ter pelo menos um horário.");
+                          notify.error("O assistente tem de ter pelo menos um horário.");
                           return;
                         }
                         setScheduleToDelete(h);
