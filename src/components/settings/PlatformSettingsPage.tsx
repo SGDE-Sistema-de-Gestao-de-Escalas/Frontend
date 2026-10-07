@@ -334,47 +334,44 @@ export default function PlatformSettingsPage() {
   // Delete confirm modal state
   const [adminDeleteConfirm, setAdminDeleteConfirm] = useState<AdminUser | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
-    async function fetchUsers() {
-      try {
-        setLoadingAdmins(true);
-        const res = await usersService.getAll();
-        if (isMounted && res?.data && Array.isArray(res.data)) {
-          const mapped: AdminUser[] = res.data
-            .filter((u) => !u.role || u.role === "admin")
-            .map((u) => {
-              const fName = u.first_name || (u.name ? u.name.split(" ")[0] : "");
-              const lName = u.last_name || (u.name ? u.name.split(" ").slice(1).join(" ") : "");
-              return {
-                id: u.id,
-                first_name: fName,
-                last_name: lName,
-                email: u.email,
-                role: (u.role as "admin") || "admin",
-                is_active: u.is_active,
-                active: u.is_active,
-                created_at: u.created_at ? new Date(u.created_at).toLocaleDateString("pt-PT") : undefined,
-                can_delete: u.can_delete ?? true,
-                cannot_delete_reason: u.cannot_delete_reason ?? null,
-                delete_action: u.delete_action,
-                delete_message: u.delete_message,
-              };
-            });
-          if (mapped.length > 0) {
-            setAdminsList(mapped);
-          }
+  const fetchUsers = async () => {
+    try {
+      setLoadingAdmins(true);
+      const res = await usersService.getAll();
+      if (res?.data && Array.isArray(res.data)) {
+        const mapped: AdminUser[] = res.data
+          .filter((u) => !u.role || u.role === "admin")
+          .map((u) => {
+            const fName = u.first_name || (u.name ? u.name.split(" ")[0] : "");
+            const lName = u.last_name || (u.name ? u.name.split(" ").slice(1).join(" ") : "");
+            return {
+              id: u.id,
+              first_name: fName,
+              last_name: lName,
+              email: u.email,
+              role: (u.role as "admin") || "admin",
+              is_active: u.is_active,
+              active: u.is_active,
+              created_at: u.created_at ? new Date(u.created_at).toLocaleDateString("pt-PT") : undefined,
+              can_delete: u.can_delete ?? true,
+              cannot_delete_reason: u.cannot_delete_reason ?? null,
+              delete_action: u.delete_action || "hard_delete",
+              delete_message: u.delete_message,
+            };
+          });
+        if (mapped.length > 0) {
+          setAdminsList(mapped);
         }
-      } catch (err) {
-        console.warn("Backend users API not ready, using local data fallback:", err);
-      } finally {
-        if (isMounted) setLoadingAdmins(false);
       }
+    } catch (err) {
+      console.warn("Backend users API not ready, using local data fallback:", err);
+    } finally {
+      setLoadingAdmins(false);
     }
+  };
+
+  useEffect(() => {
     fetchUsers();
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   function openAddAdmin() {
@@ -399,7 +396,6 @@ export default function PlatformSettingsPage() {
     const fName = adminFirstName.trim();
     const lName = adminLastName.trim();
     if (!fName || !adminEmail.trim()) return;
-    const fullName = [fName, lName].filter(Boolean).join(" ");
     const isEditing = adminEditId !== null;
 
     if (isEditing) {
@@ -416,6 +412,7 @@ export default function PlatformSettingsPage() {
 
         const res = await usersService.update(adminEditId, updatePayload);
         notify.success(res);
+        await fetchUsers();
       } catch (err: any) {
         console.warn("API update failed:", err);
         if (!(err as any)?.__alreadyNotified) {
@@ -454,24 +451,28 @@ export default function PlatformSettingsPage() {
           createdId = res.data.id;
         }
         notify.success(res);
+        await fetchUsers();
       } catch (err: any) {
         console.warn("API create failed:", err);
         if (!(err as any)?.__alreadyNotified) {
           notify.error(err);
         }
-      }
 
-      const newAdmin: AdminUser = {
-        id: createdId,
-        first_name: fName,
-        last_name: lName,
-        email: adminEmail.trim(),
-        role: "admin",
-        active: adminActive,
-        is_active: adminActive,
-        created_at: new Date().toLocaleDateString("pt-PT"),
-      };
-      setAdminsList((prev) => [...prev, newAdmin]);
+        // Fallback local caso offline
+        const newAdmin: AdminUser = {
+          id: createdId,
+          first_name: fName,
+          last_name: lName,
+          email: adminEmail.trim(),
+          role: "admin",
+          active: adminActive,
+          is_active: adminActive,
+          created_at: new Date().toLocaleDateString("pt-PT"),
+          can_delete: true,
+          delete_action: "hard_delete",
+        };
+        setAdminsList((prev) => [...prev, newAdmin]);
+      }
     }
     setShowAdminForm(false);
   }
