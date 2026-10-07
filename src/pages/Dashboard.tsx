@@ -4,14 +4,19 @@ import { useSchool } from "../context/SchoolContext";
 import DashboardSection from "../components/dashboard/DashboardSection";
 import AssistantDayModal from "../components/dashboard/AssistantDayModal";
 import QuickAbsenceModal from "../components/dashboard/QuickAbsenceModal";
+import NoSchoolPlaceholder from "../components/common/NoSchoolPlaceholder";
 
 export default function Dashboard() {
   const [selectedAssistantId, setSelectedAssistantId] = useState<number | null>(
     null
   );
   const [absenceFor, setAbsenceFor] = useState<string | null>(null);
-  const { currentSchoolId } = useSchool();
+  const { currentSchoolId, selectedSchool } = useSchool();
   const navigate = useNavigate();
+
+  if (!selectedSchool) {
+    return <NoSchoolPlaceholder moduleName="o Dashboard" />;
+  }
 
   return (
     <>

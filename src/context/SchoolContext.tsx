@@ -12,8 +12,9 @@ export interface OperatingHours {
 }
 
 interface SchoolContextType {
-  selectedSchoolId: number | string;
-  selectedSchool: School;
+  selectedSchoolId: number | string | null;
+  currentSchoolId: number | string | null;
+  selectedSchool: School | null;
   schools: School[];
   setSchoolId: (id: number | string) => void;
   agrupamento: typeof AGRUPAMENTO;
@@ -28,9 +29,9 @@ const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
 export function SchoolProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
-  const [schoolsList, setSchoolsList] = useState<School[]>(initialSchools);
-  const [selectedSchoolId, setSelectedSchoolId] = useState<number | string>(() => {
-    return localStorage.getItem("selected_school_id") || 1;
+  const [schoolsList, setSchoolsList] = useState<School[]>([]);
+  const [selectedSchoolId, setSelectedSchoolId] = useState<number | string | null>(() => {
+    return localStorage.getItem("selected_school_id") || null;
   });
   const [operatingHours, setOperatingHours] = useState<OperatingHours>({
     startHour: 7,
@@ -69,10 +70,15 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
             }
             return currId;
           });
+        } else {
+          setSelectedSchoolId(null);
+          localStorage.removeItem("selected_school_id");
         }
       }
     } catch (err) {
       console.warn("Could not fetch schools from API in SchoolContext:", err);
+      // Mantém fallback caso a API esteja offline e ainda não haja escolas carregadas
+      setSchoolsList((prev) => (prev.length > 0 ? prev : initialSchools));
     }
   };
 
@@ -81,7 +87,8 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const selectedSchool =
-    schoolsList.find((s) => String(s.id) === String(selectedSchoolId)) || schoolsList[0] || initialSchools[0];
+    schoolsList.find((s) => String(s.id) === String(selectedSchoolId)) ||
+    (schoolsList.length > 0 ? schoolsList[0] : null);
 
   function setSchoolId(id: number | string) {
     if (String(id) === String(selectedSchoolId)) return;
@@ -121,6 +128,7 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
     <SchoolContext.Provider
       value={{
         selectedSchoolId,
+        currentSchoolId: selectedSchoolId,
         selectedSchool,
         schools: schoolsList,
         setSchoolId,

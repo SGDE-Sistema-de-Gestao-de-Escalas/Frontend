@@ -49,9 +49,7 @@ export default function PlatformSettingsPage() {
   const { refreshSchools: refreshGlobalSchools } = useSchool();
 
   // ── Schools state ─────────────────────────────────────────────────────────
-  const [schoolsList, setSchoolsList] = useState<School[]>(
-    INITIAL_SCHOOLS.map((s) => ({ ...s }))
-  );
+  const [schoolsList, setSchoolsList] = useState<School[]>([]);
   const [loadingSchools, setLoadingSchools] = useState(false);
   const [savingSchool, setSavingSchool] = useState(false);
   const [showSchoolForm, setShowSchoolForm] = useState(false);
@@ -94,6 +92,7 @@ export default function PlatformSettingsPage() {
       }
     } catch (err) {
       console.warn("Backend schools API offline or error, using local data fallback:", err);
+      setSchoolsList((prev) => (prev.length > 0 ? prev : INITIAL_SCHOOLS.map((s) => ({ ...s }))));
     } finally {
       setLoadingSchools(false);
     }
@@ -704,9 +703,24 @@ export default function PlatformSettingsPage() {
               <span className="text-xs">A carregar escolas...</span>
             </div>
           ) : schoolsList.length === 0 ? (
-            <div className="text-center py-12 border border-dashed border-border rounded-xl">
-              <Building2 size={24} className="mx-auto text-muted-foreground/40 mb-2" />
-              <p className="text-xs text-muted-foreground">Nenhuma escola registada.</p>
+            <div className="text-center py-12 px-4 border border-dashed border-border rounded-xl flex flex-col items-center justify-center">
+              <div className="w-12 h-12 rounded-xl bg-muted/60 flex items-center justify-center text-muted-foreground mb-3">
+                <Building2 size={24} />
+              </div>
+              <h4 className="text-sm font-semibold text-foreground mb-1">
+                Nenhuma escola registada
+              </h4>
+              <p className="text-xs text-muted-foreground max-w-sm mb-4">
+                Comece por criar a primeira escola para poder gerir assistentes, horários e configurações.
+              </p>
+              <button
+                type="button"
+                onClick={openAddSchool}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+              >
+                <Plus size={14} />
+                Criar Primeira Escola
+              </button>
             </div>
           ) : (
             <div className="space-y-3">

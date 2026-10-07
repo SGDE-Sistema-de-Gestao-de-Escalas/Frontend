@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Building2, ChevronDown, Check, MapPin, Settings } from "lucide-react";
+import { Building2, ChevronDown, Check, MapPin, Settings, Plus } from "lucide-react";
 import { useSchool } from "../../context/SchoolContext";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
@@ -14,7 +14,7 @@ export default function SchoolSwitcher({ onPlatformSettings }: SchoolSwitcherPro
   const inactiveSchools = schools.filter((s) => !s.active);
 
   const renderSchoolItem = (s: typeof schools[0], isInactive = false) => {
-    const isSelected = s.id === selectedSchool.id;
+    const isSelected = selectedSchool ? s.id === selectedSchool.id : false;
     return (
       <button
         key={s.id}
@@ -76,11 +76,13 @@ export default function SchoolSwitcher({ onPlatformSettings }: SchoolSwitcherPro
           className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-full border border-border bg-card hover:bg-muted transition-colors max-w-[220px] text-left"
           aria-label="Selecionar escola"
         >
-          <span className="w-6 h-6 rounded-full bg-primary/12 flex items-center justify-center flex-shrink-0">
-            <Building2 size={13} className="text-primary" />
+          <span className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
+            selectedSchool ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground"
+          }`}>
+            <Building2 size={13} />
           </span>
           <span className="text-xs font-medium text-foreground truncate hidden sm:block">
-            {selectedSchool.name}
+            {selectedSchool ? selectedSchool.name : "Nenhuma escola"}
           </span>
           <ChevronDown
             size={13}
@@ -96,28 +98,60 @@ export default function SchoolSwitcher({ onPlatformSettings }: SchoolSwitcherPro
         sideOffset={8}
         className="w-80 p-0 rounded-xl border border-border bg-popover shadow-xl overflow-hidden"
       >
-        <div className="px-3 py-2.5 border-b border-border bg-muted/20">
+        <div className="px-3 py-2.5 border-b border-border bg-muted/20 flex items-center justify-between">
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
             Selecionar Escola
           </p>
+          <span className="text-[10px] text-muted-foreground font-mono">
+            {schools.length} {schools.length === 1 ? "escola" : "escolas"}
+          </span>
         </div>
 
         <div className="py-1 max-h-72 overflow-y-auto">
-          {activeSchools.map((s) => renderSchoolItem(s, false))}
-
-          {inactiveSchools.length > 0 && (
-            <>
-              <div className="px-3 py-1.5 mt-1 border-t border-border/60 bg-muted/30">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  Escolas Inativas
-                </p>
+          {schools.length === 0 ? (
+            <div className="p-4 text-center">
+              <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center mx-auto mb-2 text-muted-foreground">
+                <Building2 size={16} />
               </div>
-              {inactiveSchools.map((s) => renderSchoolItem(s, true))}
+              <p className="text-xs font-medium text-foreground">
+                Nenhuma escola registada
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 mb-3">
+                Crie a primeira escola para começar a utilizar a plataforma.
+              </p>
+              {onPlatformSettings && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onPlatformSettings();
+                    setOpen(false);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+                >
+                  <Plus size={13} />
+                  Criar Primeira Escola
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              {activeSchools.map((s) => renderSchoolItem(s, false))}
+
+              {inactiveSchools.length > 0 && (
+                <>
+                  <div className="px-3 py-1.5 mt-1 border-t border-border/60 bg-muted/30">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Escolas Inativas
+                    </p>
+                  </div>
+                  {inactiveSchools.map((s) => renderSchoolItem(s, true))}
+                </>
+              )}
             </>
           )}
         </div>
 
-        {onPlatformSettings && (
+        {onPlatformSettings && schools.length > 0 && (
           <div className="border-t border-border px-2 py-1.5 bg-muted/10">
             <button
               type="button"
