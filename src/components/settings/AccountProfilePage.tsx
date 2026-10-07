@@ -108,7 +108,7 @@ export default function AccountProfilePage({
     setSavingProfile(true);
 
     try {
-      await authService.updateProfile(
+      const res = await authService.updateProfile(
         { first_name: fName, last_name: lName, email: mail },
         user.id
       );
@@ -116,19 +116,35 @@ export default function AccountProfilePage({
       await refreshProfile();
       notify.success("Dados pessoais atualizados com sucesso.");
     } catch (err: any) {
+      const status = err?.response?.status;
       const backendErrors = err?.response?.data?.errors;
-      if (backendErrors) {
+      const message = err?.response?.data?.message;
+
+      if (status === 422 && backendErrors) {
         setProfileErrors({
           first_name: backendErrors.first_name?.[0],
           last_name: backendErrors.last_name?.[0],
           email: backendErrors.email?.[0],
         });
-      }
-
-      if (err?.response?.status !== 422) {
-        // Fallback local caso o endpoint não esteja acessível
+        if (message) {
+          notify.error(message, undefined, "Erro de Validação");
+        }
+      } else if (status === 403) {
+        notify.error(
+          message || "Não tem permissão para alterar estes dados.",
+          undefined,
+          "Acesso Negado"
+        );
+      } else if (!err?.response) {
+        // Fallback local se estiver offline
         updateUserLocal({ first_name: fName, last_name: lName, email: mail });
-        notify.success("Dados pessoais guardados localmente.");
+        notify.success("Dados pessoais guardados localmente (modo offline).");
+      } else {
+        notify.error(
+          message || "Não foi possível atualizar os dados pessoais.",
+          undefined,
+          "Erro"
+        );
       }
     } finally {
       setSavingProfile(false);

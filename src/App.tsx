@@ -20,7 +20,7 @@ export default function App() {
                 position="top-right"
                 richColors
                 style={{
-                  top: "76px",
+                  top: "70px",
                   right: "24px",
                 }}
               />
