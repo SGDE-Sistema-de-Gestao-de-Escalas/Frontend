@@ -1,13 +1,14 @@
 import apiClient from "../client";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
-import { Assistant } from "../../types";
+import { Assistant, CreateAssistantPayload, UpdateAssistantPayload } from "../../types";
 
 export interface AssistantFilters {
-  schoolId?: number | string;
-  active?: boolean;
+  status?: "active" | "inactive" | "all";
   search?: string;
   page?: number;
   per_page?: number;
+  schoolId?: number | string;
+  active?: boolean;
 }
 
 export const assistantsService = {
@@ -23,19 +24,21 @@ export const assistantsService = {
     return response.data;
   },
 
-  async create(data: Partial<Assistant>): Promise<ApiResponse<Assistant>> {
+  async create(data: CreateAssistantPayload): Promise<ApiResponse<Assistant>> {
     const response = await apiClient.post<ApiResponse<Assistant>>("/assistants", data);
     return response.data;
   },
 
-  async update(id: number | string, data: Partial<Assistant>): Promise<ApiResponse<Assistant>> {
+  async update(id: number | string, data: UpdateAssistantPayload): Promise<ApiResponse<Assistant>> {
     const response = await apiClient.put<ApiResponse<Assistant>>(`/assistants/${id}`, data);
     return response.data;
   },
 
-  async delete(id: number | string): Promise<void> {
-    await apiClient.delete(`/assistants/${id}`);
+  async delete(id: number | string): Promise<{ message: string }> {
+    const response = await apiClient.delete<{ message: string }>(`/assistants/${id}`);
+    return response.data;
   },
 };
 
 export default assistantsService;
+

@@ -57,22 +57,75 @@ export interface School {
 
 export type DeleteActionType = "hard_delete" | "anonymize";
 
-export interface Assistant {
+export interface AssistantSchool {
   id: EntityId;
   name: string;
+  acronym?: string;
+}
+
+export interface Assistant {
+  id: EntityId;
+  user_id?: EntityId;
+  school_id?: EntityId;
+  schoolId?: EntityId;
+  first_name?: string;
+  last_name?: string;
+  name: string;
   initials: string;
-  staffNumber: string;
-  mecanografico?: string;
-  exception: string | null;
-  schoolId: EntityId;
-  availableForTransfer: boolean;
-  active: boolean;
   is_active?: boolean;
+  active?: boolean;
+  internal_number?: string;
+  mecanografico?: string;
+  staffNumber?: string;
+  email?: string;
+  phone?: string;
+  nif?: string;
+  social_security_number?: string;
+  birth_date?: string;
+  admission_date?: string;
+  has_criminal_record?: boolean;
+  criminal_record_expiry?: string;
+  address_street?: string;
+  address_zip_code?: string;
+  address_city?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  emergency_contact_kinship?: string;
+  available_for_transfer?: boolean;
+  availableForTransfer?: boolean;
+  exception?: string | null;
+  school?: AssistantSchool;
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string | null;
   can_delete?: boolean;
   cannot_delete_reason?: string | null;
   delete_action?: DeleteActionType;
   delete_message?: string;
 }
+
+export interface CreateAssistantPayload {
+  first_name: string;
+  last_name: string;
+  email: string;
+  internal_number: string;
+  phone?: string;
+  nif?: string;
+  social_security_number?: string;
+  birth_date?: string;
+  admission_date?: string;
+  criminal_record_expiry?: string;
+  address_street?: string;
+  address_zip_code?: string;
+  address_city?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  emergency_contact_kinship?: string;
+  available_for_transfer?: boolean;
+}
+
+export type UpdateAssistantPayload = Partial<CreateAssistantPayload>;
+
 
 export interface AdminUser {
   id: EntityId;

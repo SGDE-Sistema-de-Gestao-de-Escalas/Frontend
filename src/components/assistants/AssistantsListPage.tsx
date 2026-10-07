@@ -17,10 +17,11 @@ export default function AssistantsListPage({
   const [tab, setTab] = useState<"ativos" | "inativos">("ativos");
   const { selectedSchool } = useSchool();
   // Muda automaticamente quando se troca de escola no header (schoolId na queryKey).
-  const { data: assistants = [], isLoading, isFetching } = useAssistantsList();
+  const { data: assistants = [], isLoading, isFetching } = useAssistantsList({ status: "all" });
   const active = assistants.filter((a) => (a.active ?? a.is_active ?? true));
   const inactive = assistants.filter((a) => !(a.active ?? a.is_active ?? true));
   const list = tab === "ativos" ? active : inactive;
+
 
   return (
     <div className="space-y-6">
@@ -138,15 +139,15 @@ export default function AssistantsListPage({
                         : "text-muted-foreground"
                     }`}
                   >
-                    {a.initials}
+                    {a.initials || `${a.first_name?.[0] || ""}${a.last_name?.[0] || ""}`.toUpperCase() || "AS"}
                   </span>
                 </div>
                 <div className="min-w-0">
                   <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate block">
-                    {a.name}
+                    {a.name || `${a.first_name || ""} ${a.last_name || ""}`.trim()}
                   </span>
                   <span className="text-[10px] font-mono text-muted-foreground">
-                    {a.mecanografico}
+                    {a.internal_number || a.mecanografico || a.staffNumber || "—"}
                   </span>
                 </div>
               </div>

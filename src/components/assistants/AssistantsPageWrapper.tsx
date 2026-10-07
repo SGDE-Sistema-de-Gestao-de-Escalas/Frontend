@@ -2,10 +2,13 @@ import React, { useState } from "react";
 import AssistantsListPage from "./AssistantsListPage";
 import AddEditAssistant from "./AddEditAssistant";
 
+import type { EntityId } from "../../types";
+
 interface AssistantsPageWrapperProps {
-  onViewProfile: () => void;
+  onViewProfile: (id?: EntityId) => void;
   initialAdd?: boolean;
 }
+
 
 export default function AssistantsPageWrapper({
   onViewProfile,
@@ -16,11 +19,17 @@ export default function AssistantsPageWrapper({
   if (showCreate) {
     return (
       <AddEditAssistant
-        onSave={() => setShowCreate(false)}
+        onSave={(newId?: EntityId) => {
+          setShowCreate(false);
+          if (newId) {
+            onViewProfile(newId);
+          }
+        }}
         onCancel={() => setShowCreate(false)}
       />
     );
   }
+
 
   return (
     <AssistantsListPage
