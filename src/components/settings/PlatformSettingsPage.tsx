@@ -404,13 +404,17 @@ export default function PlatformSettingsPage() {
 
     if (isEditing) {
       try {
-        const res = await usersService.update(adminEditId, {
-          name: fullName,
+        const updatePayload: any = {
           first_name: fName,
           last_name: lName,
           email: adminEmail.trim(),
-          is_active: adminActive,
-        });
+        };
+        // UpdateUserRequest aceita is_active apenas se for boolean e true (accepted)
+        if (adminActive) {
+          updatePayload.is_active = true;
+        }
+
+        const res = await usersService.update(adminEditId, updatePayload);
         notify.success(res);
       } catch (err: any) {
         console.warn("API update failed:", err);
@@ -440,12 +444,11 @@ export default function PlatformSettingsPage() {
           : `admin-${Date.now()}`;
 
       try {
+        // StoreUserRequest do backend espera first_name, last_name e email
         const res = await usersService.create({
-          name: fullName,
           first_name: fName,
           last_name: lName,
           email: adminEmail.trim(),
-          is_active: adminActive,
         });
         if (res?.data?.id) {
           createdId = res.data.id;
@@ -481,28 +484,30 @@ export default function PlatformSettingsPage() {
 
     try {
       if (!newStatus) {
-        // Deactivating calls DELETE /api/users/{id} in Laravel UserController
-        const res = await usersService.delete(target.id);
+        // Desativar conta usa POST /api/users/{id}/deactivate
+        const res = await usersService.deactivate(target.id);
         notify.success(res);
       } else {
+        // Reativar conta usa PUT /api/users/{id} com is_active: true
         const res = await usersService.update(target.id, { is_active: true });
         notify.success(res);
       }
+
+      setAdminsList((prev) =>
+        prev.map((a) =>
+          a.id === target.id
+            ? { ...a, active: newStatus, is_active: newStatus }
+            : a
+        )
+      );
     } catch (err: any) {
       console.warn("API status toggle failed:", err);
       if (!(err as any)?.__alreadyNotified) {
         notify.error(err);
       }
+    } finally {
+      setAdminStatusConfirm(null);
     }
-
-    setAdminsList((prev) =>
-      prev.map((a) =>
-        a.id === target.id
-          ? { ...a, active: newStatus, is_active: newStatus }
-          : a
-      )
-    );
-    setAdminStatusConfirm(null);
   }
 
   async function handleConfirmDeleteAdmin() {

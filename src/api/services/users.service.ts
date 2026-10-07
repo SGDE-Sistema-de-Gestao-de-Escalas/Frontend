@@ -64,11 +64,21 @@ export const usersService = {
   },
 
   /**
-   * Inactivate user (Backend sets is_active = false)
+   * Deactivate user (Inactivate account without deleting)
+   * POST /api/users/{id}/deactivate
+   */
+  async deactivate(id: EntityId): Promise<ApiResponse<null>> {
+    const response = await apiClient.post<ApiResponse<null>>(`/users/${id}/deactivate`);
+    return response.data;
+  },
+
+  /**
+   * Delete or anonymize user (Hard delete or GDPR anonymize)
    * DELETE /api/users/{id}
    */
-  async delete(id: EntityId): Promise<void> {
-    await apiClient.delete(`/users/${id}`);
+  async delete(id: EntityId): Promise<{ message: string; delete_action: "hard_delete" | "anonymize" }> {
+    const response = await apiClient.delete<{ message: string; delete_action: "hard_delete" | "anonymize" }>(`/users/${id}`);
+    return response.data;
   },
 };
 
