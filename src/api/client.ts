@@ -98,7 +98,7 @@ apiClient.interceptors.response.use(
       case 401:
         localStorage.removeItem("auth_token");
         sessionStorage.removeItem("auth_token");
-        if (window.location.pathname !== "/login" && window.location.pathname !== "/auth/callback") {
+        if (!isSilent && window.location.pathname !== "/login" && window.location.pathname !== "/auth/callback") {
           window.location.href = "/login";
         }
         break;

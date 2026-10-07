@@ -18,9 +18,20 @@ import StaffRegisterAbsence from "../pages/StaffRegisterAbsence";
 import LegacyApp from "../pages/LegacyApp";
 
 import TitleUpdater from "./TitleUpdater";
+import { Loader2 } from "lucide-react";
 
 function ProtectedLayout() {
-  const { role } = useAuth();
+  const { role, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-background gap-3">
+        <Loader2 size={32} className="animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">A verificar sessão...</p>
+      </div>
+    );
+  }
+
   if (!role) {
     return <Navigate to="/login" replace />;
   }
@@ -44,7 +55,16 @@ function StaffRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function AppRouter() {
-  const { role } = useAuth();
+  const { role, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-background gap-3">
+        <Loader2 size={32} className="animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">A carregar...</p>
+      </div>
+    );
+  }
 
   return (
     <>
