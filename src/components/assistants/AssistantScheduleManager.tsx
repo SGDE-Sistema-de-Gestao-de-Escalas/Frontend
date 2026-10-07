@@ -484,7 +484,7 @@ export default function AssistantScheduleManager({
   return (
     <Card className="p-5 col-span-1 md:col-span-2 lg:col-span-3">
       {/* Box Header */}
-      <div className="flex items-center justify-between pb-4 mb-4 border-b border-border/50 flex-wrap gap-3">
+      <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-border/50 flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
           <div className="p-2 rounded-lg bg-primary/10 text-primary">
             <Clock size={16} />

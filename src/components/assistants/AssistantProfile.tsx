@@ -420,10 +420,10 @@ export default function AssistantProfile({
 
       {/* ── Informações Gerais tab ── */}
       {activeTab === "info" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Card 1: Identificação & Contactos */}
           <Card className="p-5 md:col-span-2 lg:col-span-2">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-border/50">
+            <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-border/50">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-md bg-primary/10 text-primary">
                   <User size={15} />
@@ -434,10 +434,7 @@ export default function AssistantProfile({
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setEditingSection("personal");
-                  setEditing(true);
-                }}
+                onClick={() => setEditing(true)}
                 className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
               >
                 <Edit2 size={11} />
@@ -527,7 +524,7 @@ export default function AssistantProfile({
 
           {/* Card 2: Enquadramento Fiscal & Institucional */}
           <Card className="p-5">
-            <div className="flex items-center gap-2 pb-3 mb-4 border-b border-border/50">
+            <div className="flex items-center gap-2 pb-2 mb-2.5 border-b border-border/50">
               <div className="p-1.5 rounded-md bg-primary/10 text-primary">
                 <FileText size={15} />
               </div>
@@ -560,7 +557,7 @@ export default function AssistantProfile({
 
           {/* Card 3: Morada Residencial */}
           <Card className="p-5">
-            <div className="flex items-center gap-2 pb-3 mb-4 border-b border-border/50">
+            <div className="flex items-center gap-2 pb-2 mb-2.5 border-b border-border/50">
               <div className="p-1.5 rounded-md bg-primary/10 text-primary">
                 <MapPin size={15} />
               </div>
@@ -595,7 +592,7 @@ export default function AssistantProfile({
 
           {/* Card 4: Contacto de Emergência */}
           <Card className="p-5">
-            <div className="flex items-center gap-2 pb-3 mb-4 border-b border-border/50">
+            <div className="flex items-center gap-2 pb-2 mb-2.5 border-b border-border/50">
               <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-600">
                 <HeartHandshake size={15} />
               </div>
@@ -643,7 +640,7 @@ export default function AssistantProfile({
 
           {/* Card 5: Registo Criminal & Validade */}
           <Card className="p-5">
-            <div className="flex items-center gap-2 pb-3 mb-4 border-b border-border/50">
+            <div className="flex items-center gap-2 pb-2 mb-2.5 border-b border-border/50">
               <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-600">
                 <ShieldCheck size={15} />
               </div>
