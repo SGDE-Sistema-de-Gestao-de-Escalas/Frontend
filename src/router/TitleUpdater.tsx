@@ -10,7 +10,6 @@ export const ROUTE_TITLES: Record<string, string> = {
   "/absences": "Ausências",
   "/reports": "Relatórios",
   "/config": "Regras do Motor",
-  "/gantt": "Mapa de Gantt",
   "/profile": "Perfil do Assistente",
   "/platform-settings": "Definições",
   "/account": "A Minha Conta",

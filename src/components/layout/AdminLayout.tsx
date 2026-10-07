@@ -14,7 +14,6 @@ import AssistantProfile from "../assistants/AssistantProfile";
 import AssistantsPageWrapper from "../assistants/AssistantsPageWrapper";
 import AbsenceManagement from "../absences/AbsenceManagement";
 import ReportsPage from "../reports/ReportsPage";
-import GanttPage from "../gantt/GanttPage";
 import AccountProfilePage from "../settings/AccountProfilePage";
 import PlatformSettingsPage from "../settings/PlatformSettingsPage";
 import NoSchoolPlaceholder from "../common/NoSchoolPlaceholder";
@@ -24,7 +23,6 @@ export const ADMIN_PAGE_LABELS: Record<string, string> = {
   assistants: "Assistentes",
   absences: "Ausências",
   reports: "Relatórios",
-  gantt: "Mapa de Gantt",
   config: "Regras do Motor",
   profile: "Perfil do Assistente",
   "add-assistant": "Novo Assistente",
@@ -170,7 +168,6 @@ export default function AdminLayout({
                   <ReportsPage />
                 )
               )}
-              {activePage === "gantt" && <GanttPage />}
               {activePage === "account" && <AccountProfilePage role="admin" />}
               {activePage === "platform-settings" && <PlatformSettingsPage />}
             </>

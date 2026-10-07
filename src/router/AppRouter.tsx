@@ -9,7 +9,6 @@ import Assistants from "../pages/Assistants";
 import Absences from "../pages/Absences";
 import Reports from "../pages/Reports";
 import Config from "../pages/Config";
-import Gantt from "../pages/Gantt";
 import Profile from "../pages/Profile";
 import PlatformSettings from "../pages/PlatformSettings";
 import Account from "../pages/Account";
@@ -57,7 +56,6 @@ export default function AppRouter() {
         <Route path="/absences" element={<Absences />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/config" element={<Config />} />
-        <Route path="/gantt" element={<Gantt />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/platform-settings" element={<PlatformSettings />} />
         <Route path="/account" element={<Account />} />

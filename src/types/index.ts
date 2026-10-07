@@ -9,8 +9,7 @@ export type AdminPage =
   | "assistants"
   | "reports"
   | "account"
-  | "platform-settings"
-  | "gantt";
+  | "platform-settings";
 
 export type StaffPage =
   | "schedule"
