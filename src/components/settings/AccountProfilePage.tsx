@@ -5,6 +5,7 @@ import {
   Save,
   Shield,
   Upload,
+  Download,
   X,
   XCircle,
   Eye,
@@ -86,6 +87,32 @@ export default function AccountProfilePage({
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [requestingDeactivation, setRequestingDeactivation] = useState(false);
   const [deactivationReason, setDeactivationReason] = useState("");
+  const [exportingData, setExportingData] = useState(false);
+
+  async function handleExportData() {
+    setExportingData(true);
+    try {
+      const data = await authService.exportPersonalData();
+      // Criar blob para download do ficheiro JSON
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `dados-pessoais-${user?.id || "rgpd"}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      notify.success("Exportação concluída. O ficheiro com os seus dados foi descarregado.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || "Não foi possível exportar os seus dados pessoais.";
+      notify.error(msg, undefined, "Erro na Exportação");
+    } finally {
+      setExportingData(false);
+    }
+  }
 
   async function handleRequestDeactivation() {
     setRequestingDeactivation(true);
@@ -602,6 +629,34 @@ export default function AccountProfilePage({
 
       {activeTab === "privacy" && (
         <div className="space-y-4">
+          {/* Cartão de Portabilidade RGPD (disponível para todos os utilizadores) */}
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-foreground mb-2">
+              Portabilidade de Dados (RGPD)
+            </h3>
+            <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+              Descarregue uma cópia integral de todos os seus dados pessoais e de registo guardados na plataforma (perfil de utilizador, dados profissionais e contactos de emergência) em formato estruturado JSON.
+            </p>
+            <button
+              type="button"
+              onClick={handleExportData}
+              disabled={exportingData}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-foreground text-sm font-medium hover:bg-muted/60 disabled:opacity-50 transition-colors shadow-xs"
+            >
+              {exportingData ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  A descarregar dados...
+                </>
+              ) : (
+                <>
+                  <Download size={14} />
+                  Descarregar os Meus Dados (JSON)
+                </>
+              )}
+            </button>
+          </Card>
+
           {role === "admin" ? (
             <Card className="p-5 border-destructive/20">
               <h3 className="text-sm font-semibold text-foreground mb-2">

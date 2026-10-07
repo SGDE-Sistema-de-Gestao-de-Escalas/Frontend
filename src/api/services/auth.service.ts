@@ -158,6 +158,15 @@ export const authService = {
   },
 
   /**
+   * Export own personal data (RGPD portability)
+   * GET /api/me/export
+   */
+  async exportPersonalData(): Promise<any> {
+    const response = await apiClient.get<any>("/me/export");
+    return response.data;
+  },
+
+  /**
    * Get OAuth redirect authorization URL
    * GET /api/auth/{provider}/redirect
    */
