@@ -9,9 +9,26 @@ interface SchoolSwitcherProps {
 
 export default function SchoolSwitcher({ onPlatformSettings }: SchoolSwitcherProps) {
   const [open, setOpen] = useState(false);
-  const { selectedSchool, schools, setSchoolId } = useSchool();
+  const { selectedSchool, schools, setSchoolId, canSwitchSchool } = useSchool();
   const activeSchools = schools.filter((s) => s.active);
   const inactiveSchools = schools.filter((s) => !s.active);
+
+  // Assistentes pertencem a uma escola atribuída e visualizam apenas o badge sem dropdown de seleção
+  if (!canSwitchSchool) {
+    return (
+      <div
+        className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-full border border-border bg-card max-w-[220px] select-none cursor-default"
+        title={selectedSchool ? `Escola atribuída: ${selectedSchool.name}` : undefined}
+      >
+        <span className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 bg-primary/12 text-primary">
+          <Building2 size={13} />
+        </span>
+        <span className="text-xs font-medium text-foreground truncate hidden sm:block">
+          {selectedSchool ? selectedSchool.name : "A sua escola"}
+        </span>
+      </div>
+    );
+  }
 
   const renderSchoolItem = (s: typeof schools[0], isInactive = false) => {
     const isSelected = selectedSchool ? s.id === selectedSchool.id : false;

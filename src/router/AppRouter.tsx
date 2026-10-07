@@ -27,6 +27,22 @@ function ProtectedLayout() {
   return <MainLayout />;
 }
 
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { role } = useAuth();
+  if (role !== "admin") {
+    return <Navigate to="/staff/schedule" replace />;
+  }
+  return <>{children}</>;
+}
+
+function StaffRoute({ children }: { children: React.ReactNode }) {
+  const { role } = useAuth();
+  if (role !== "staff") {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
 export default function AppRouter() {
   const { role } = useAuth();
 
@@ -50,25 +66,25 @@ export default function AppRouter() {
           }
         />
         {/* Admin Routes */}
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/schedules" element={<Dashboard />} />
-        <Route path="/assistants" element={<Assistants />} />
-        <Route path="/absences" element={<Absences />} />
-        <Route path="/reports" element={<Reports />} />
-        <Route path="/config" element={<Config />} />
+        <Route path="/dashboard" element={<AdminRoute><Dashboard /></AdminRoute>} />
+        <Route path="/schedules" element={<AdminRoute><Dashboard /></AdminRoute>} />
+        <Route path="/assistants" element={<AdminRoute><Assistants /></AdminRoute>} />
+        <Route path="/absences" element={<AdminRoute><Absences /></AdminRoute>} />
+        <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
+        <Route path="/config" element={<AdminRoute><Config /></AdminRoute>} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/platform-settings" element={<PlatformSettings />} />
+        <Route path="/platform-settings" element={<AdminRoute><PlatformSettings /></AdminRoute>} />
         <Route path="/account" element={<Account />} />
 
         {/* Staff Routes */}
-        <Route path="/staff/schedule" element={<StaffSchedule />} />
-        <Route path="/staff/absences" element={<StaffAbsences />} />
-        <Route path="/staff/absence" element={<StaffAbsences />} />
+        <Route path="/staff/schedule" element={<StaffRoute><StaffSchedule /></StaffRoute>} />
+        <Route path="/staff/absences" element={<StaffRoute><StaffAbsences /></StaffRoute>} />
+        <Route path="/staff/absence" element={<StaffRoute><StaffAbsences /></StaffRoute>} />
         <Route
           path="/staff/register-absence"
-          element={<StaffRegisterAbsence />}
+          element={<StaffRoute><StaffRegisterAbsence /></StaffRoute>}
         />
-        <Route path="/staff/account" element={<Account />} />
+        <Route path="/staff/account" element={<StaffRoute><Account /></StaffRoute>} />
       </Route>
 
       {/* Legacy route preserved for 1:1 diff and comparison */}

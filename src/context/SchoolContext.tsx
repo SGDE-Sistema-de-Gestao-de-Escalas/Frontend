@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AGRUPAMENTO, schools as initialSchools } from "../api/mockData";
 import schoolsService, { BackendSchoolResource } from "../api/services/schools.service";
 import type { School } from "../types";
+import { useAuth } from "./AuthContext";
 
 export interface OperatingHours {
   startHour: number;
@@ -23,12 +24,18 @@ interface SchoolContextType {
   refreshSchools: () => Promise<void>;
   operatingHours: OperatingHours;
   updateOperatingHours: (hours: Partial<OperatingHours>) => void;
+  canSwitchSchool: boolean;
 }
 
 const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
 export function SchoolProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
+  const { role, user } = useAuth();
+  const isStaff = role === "staff";
+  const isAdmin = role === "admin";
+  const canSwitchSchool = isAdmin;
+
   const [schoolsList, setSchoolsList] = useState<School[]>([]);
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | string | null>(() => {
     return localStorage.getItem("selected_school_id") || null;
@@ -39,6 +46,19 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
     open: "07:30",
     close: "21:00",
   });
+
+  // Sincronização do contexto escolar consoante o papel do utilizador:
+  // - Assistentes (Staff): pertencem obrigatoriamente a uma escola atribuída (user.school_id)
+  // - Administradores (Admin): têm acesso global a todas as escolas do agrupamento
+  useEffect(() => {
+    if (isStaff && user?.school_id) {
+      const staffSchoolId = String(user.school_id);
+      if (String(selectedSchoolId) !== staffSchoolId) {
+        localStorage.setItem("selected_school_id", staffSchoolId);
+        setSelectedSchoolId(user.school_id);
+      }
+    }
+  }, [isStaff, user?.school_id]);
 
   const refreshSchools = async () => {
     try {
@@ -60,7 +80,13 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
         }));
         setSchoolsList(mapped);
 
-        if (mapped.length > 0) {
+        if (isStaff && user?.school_id) {
+          // Assistentes ficam restritos à sua escola
+          const staffSchoolId = String(user.school_id);
+          localStorage.setItem("selected_school_id", staffSchoolId);
+          setSelectedSchoolId(user.school_id);
+        } else if (mapped.length > 0) {
+          // Administradores: valida se o ID atual existe na base de dados
           setSelectedSchoolId((currId) => {
             const exists = mapped.some((s) => String(s.id) === String(currId));
             if (!exists) {
@@ -84,7 +110,7 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     refreshSchools();
-  }, []);
+  }, [isStaff, user?.school_id]);
 
   const selectedSchool =
     schoolsList.find((s) => String(s.id) === String(selectedSchoolId)) ||
@@ -92,6 +118,13 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
 
   function setSchoolId(id: number | string) {
     if (String(id) === String(selectedSchoolId)) return;
+
+    // Verificação de Acesso Frontend:
+    // Assistentes não podem selecionar escolas arbitrárias; apenas a sua escola atribuída
+    if (isStaff && user?.school_id && String(id) !== String(user.school_id)) {
+      console.warn("Acesso negado: Assistentes apenas têm acesso à sua escola atribuída.");
+      return;
+    }
 
     // 1) Gravar primeiro no localStorage: o interceptor do Axios lê daqui o
     //    header X-School-ID, por isso tem de estar atualizado antes de qualquer refetch.
@@ -138,6 +171,7 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
         refreshSchools,
         operatingHours,
         updateOperatingHours,
+        canSwitchSchool,
       }}
     >
       {children}

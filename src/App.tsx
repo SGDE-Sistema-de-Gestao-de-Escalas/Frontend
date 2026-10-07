@@ -12,8 +12,8 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <SchoolProvider>
-          <AuthProvider>
+        <AuthProvider>
+          <SchoolProvider>
             <BrowserRouter>
               <AppRouter />
               <Toaster
@@ -25,8 +25,8 @@ export default function App() {
                 }}
               />
             </BrowserRouter>
-          </AuthProvider>
-        </SchoolProvider>
+          </SchoolProvider>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

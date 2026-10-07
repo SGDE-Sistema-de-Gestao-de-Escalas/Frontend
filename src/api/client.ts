@@ -25,7 +25,16 @@ apiClient.interceptors.request.use(
     }
 
     const schoolId = localStorage.getItem("selected_school_id");
-    if (schoolId) {
+    const url = config.url || "";
+    // Rotas globais que não dependem do contexto de uma escola específica
+    const isGlobalRoute =
+      url.includes("/schools") ||
+      url.includes("/absence-types") ||
+      url.includes("/roles") ||
+      url.includes("/users") ||
+      url.includes("/me");
+
+    if (schoolId && !isGlobalRoute) {
       config.headers["X-School-ID"] = schoolId;
     }
 
@@ -59,6 +68,13 @@ apiClient.interceptors.response.use(
 
     const { status, data } = error.response;
     const backendMessage = data?.message || (data as any)?.error;
+
+    // Se o backend responder que a escola selecionada é inválida/sem acesso, limpamos a cache
+    if (status === 403 && typeof backendMessage === "string" && backendMessage.includes("Não tem acesso a esta escola")) {
+      localStorage.removeItem("selected_school_id");
+      (error as any).__alreadyNotified = true;
+      return Promise.reject(error);
+    }
 
     // Se o BackOffice enviou uma mensagem específica de negócio, exibimos com o FeedbackNotification
     if (backendMessage && status !== 401 && status !== 422) {

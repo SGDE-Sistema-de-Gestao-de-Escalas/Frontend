@@ -67,12 +67,8 @@ export default function TopHeader({
           </span>
         </div>
 
-        {!isStaff && (
-          <>
-            <div className="hidden md:block h-5 w-px bg-border" />
-            <SchoolSwitcher onPlatformSettings={onPlatformSettings} />
-          </>
-        )}
+        <div className="hidden md:block h-5 w-px bg-border" />
+        <SchoolSwitcher onPlatformSettings={onPlatformSettings} />
       </div>
 
       {/* Right: controls + avatar */}

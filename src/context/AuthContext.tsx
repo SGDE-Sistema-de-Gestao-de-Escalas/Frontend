@@ -169,6 +169,7 @@ export function AuthProvider({
     } finally {
       localStorage.removeItem("auth_token");
       sessionStorage.removeItem("auth_token");
+      localStorage.removeItem("selected_school_id");
       setRole(null);
     }
   }
