@@ -16,7 +16,14 @@ export default function App() {
           <AuthProvider>
             <BrowserRouter>
               <AppRouter />
-              <Toaster position="top-right" richColors />
+              <Toaster
+                position="top-right"
+                richColors
+                style={{
+                  top: "76px",
+                  right: "24px",
+                }}
+              />
             </BrowserRouter>
           </AuthProvider>
         </SchoolProvider>
