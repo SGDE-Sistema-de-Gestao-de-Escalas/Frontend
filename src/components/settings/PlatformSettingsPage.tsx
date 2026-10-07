@@ -22,11 +22,6 @@ import {
   UserX,
   XCircle,
 } from "lucide-react";
-import {
-  schools as INITIAL_SCHOOLS,
-  absenceTypes as INITIAL_ABSENCE_TYPES,
-  INITIAL_ADMINS,
-} from "../../api/mockData";
 import usersService from "../../api/services/users.service";
 import schoolsService, { BackendSchoolResource } from "../../api/services/schools.service";
 import absenceTypesService from "../../api/services/absenceTypes.service";
@@ -52,7 +47,7 @@ export default function PlatformSettingsPage() {
 
   // ── Schools state ─────────────────────────────────────────────────────────
   const [schoolsList, setSchoolsList] = useState<School[]>([]);
-  const [loadingSchools, setLoadingSchools] = useState(false);
+  const [loadingSchools, setLoadingSchools] = useState(true);
   const [savingSchool, setSavingSchool] = useState(false);
   const [showSchoolForm, setShowSchoolForm] = useState(false);
   const [schoolEditId, setSchoolEditId] = useState<EntityId | null>(null);
@@ -93,8 +88,7 @@ export default function PlatformSettingsPage() {
         setSchoolsList(mapped);
       }
     } catch (err) {
-      console.warn("Backend schools API offline or error, using local data fallback:", err);
-      setSchoolsList((prev) => (prev.length > 0 ? prev : INITIAL_SCHOOLS.map((s) => ({ ...s }))));
+      console.warn("Backend schools API offline or error:", err);
     } finally {
       setLoadingSchools(false);
     }
@@ -283,7 +277,7 @@ export default function PlatformSettingsPage() {
   // ── Absence types state ───────────────────────────────────────────────────
   // ── Absence types state ───────────────────────────────────────────────────
   const [absenceTypesList, setAbsenceTypesList] = useState<AbsenceType[]>([]);
-  const [loadingAbsenceTypes, setLoadingAbsenceTypes] = useState(false);
+  const [loadingAbsenceTypes, setLoadingAbsenceTypes] = useState(true);
   const [savingAbsenceType, setSavingAbsenceType] = useState(false);
   const [showAbsenceTypeForm, setShowAbsenceTypeForm] = useState(false);
   const [absenceTypeEditId, setAbsenceTypeEditId] = useState<EntityId | null>(null);
@@ -311,8 +305,7 @@ export default function PlatformSettingsPage() {
         setAbsenceTypesList(mapped);
       }
     } catch (err) {
-      console.warn("Backend absence-types API not available, using local data fallback:", err);
-      setAbsenceTypesList(INITIAL_ABSENCE_TYPES.map((t) => ({ ...t, can_delete: true })));
+      console.warn("Backend absence-types API not available:", err);
     } finally {
       setLoadingAbsenceTypes(false);
     }
@@ -504,13 +497,7 @@ export default function PlatformSettingsPage() {
         setAdminsList(mapped);
       }
     } catch (err) {
-      console.warn("Backend users API not ready, using local data fallback:", err);
-      const fallback = INITIAL_ADMINS.filter((a) => {
-        if (currentUser?.id && String(a.id) === String(currentUser.id)) return false;
-        if (currentUser?.email && a.email?.toLowerCase() === currentUser.email?.toLowerCase()) return false;
-        return true;
-      });
-      setAdminsList(fallback);
+      console.warn("Backend users API not ready or error:", err);
     } finally {
       setLoadingAdmins(false);
     }
@@ -1601,6 +1588,26 @@ export default function PlatformSettingsPage() {
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 size={20} className="animate-spin mr-2" />
               <span className="text-sm">A carregar tipos de falta...</span>
+            </div>
+          ) : absenceTypesList.length === 0 ? (
+            <div className="text-center py-12 px-4 border border-dashed border-border rounded-xl flex flex-col items-center justify-center">
+              <div className="w-12 h-12 rounded-xl bg-muted/60 flex items-center justify-center text-muted-foreground mb-3">
+                <FileText size={24} />
+              </div>
+              <h4 className="text-sm font-semibold text-foreground mb-1">
+                Nenhum tipo de falta registado
+              </h4>
+              <p className="text-xs text-muted-foreground max-w-sm mb-4">
+                Comece por criar os tipos de falta para que assistentes e administradores possam justificar e registar ausências.
+              </p>
+              <button
+                type="button"
+                onClick={openAddAbsenceType}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+              >
+                <Plus size={14} />
+                Criar Primeiro Tipo
+              </button>
             </div>
           ) : (
             <div className="space-y-2">

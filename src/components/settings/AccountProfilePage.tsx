@@ -14,12 +14,10 @@ import {
 import { useNavigate } from "react-router-dom";
 import type { Role } from "../../types";
 import { Card } from "../ui/card";
-import DatePicker from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import { notify } from "../common/FeedbackNotification";
 import { useAuth } from "../../context/AuthContext";
 import authService from "../../api/services/auth.service";
-import usersService from "../../api/services/users.service";
 
 interface AccountProfilePageProps {
   role?: Role;
@@ -28,7 +26,7 @@ interface AccountProfilePageProps {
 export default function AccountProfilePage({
   role: propRole,
 }: AccountProfilePageProps) {
-  const { user, role: contextRole, refreshProfile, updateUserLocal } = useAuth();
+  const { user, role: contextRole, refreshProfile, updateUserLocal, isLoading } = useAuth();
   const role = propRole || contextRole || "admin";
 
   const [activeTab, setActiveTab] = useState<
@@ -234,9 +232,7 @@ export default function AccountProfilePage({
           "Acesso Negado"
         );
       } else if (!err?.response) {
-        // Fallback local se estiver offline
-        updateUserLocal({ first_name: fName, last_name: lName, email: mail });
-        notify.success("Dados pessoais guardados localmente (modo offline).");
+        notify.error("Não foi possível contactar o servidor para atualizar os dados pessoais.", undefined, "Erro de Ligação");
       } else {
         notify.error(
           message || "Não foi possível atualizar os dados pessoais.",
@@ -310,6 +306,15 @@ export default function AccountProfilePage({
     } finally {
       setSavingPassword(false);
     }
+  }
+
+  if (isLoading || !user?.email) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[350px] gap-3">
+        <Loader2 size={24} className="animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">A carregar os seus dados de conta...</p>
+      </div>
+    );
   }
 
   return (
@@ -454,46 +459,6 @@ export default function AccountProfilePage({
               )}
             </button>
           </Card>
-
-          {role === "staff" && (
-            <Card className="p-5 border-[#D97706]/30 bg-[#FEF9EC]/50">
-              <div className="flex items-start gap-3 mb-4">
-                <AlertTriangle
-                  size={16}
-                  className="text-[#D97706] flex-shrink-0 mt-0.5"
-                />
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Registo Criminal
-                  </h3>
-                  <p className="text-xs text-[#D97706] mt-0.5">
-                    O seu registo criminal expira em 15 Mar 2026. Submeta um novo
-                    documento.
-                  </p>
-                </div>
-              </div>
-              <div className="border-2 border-dashed border-border rounded-lg p-4 flex items-center gap-3 cursor-pointer hover:border-accent/50 transition-colors mb-3">
-                <Upload
-                  size={16}
-                  className="text-muted-foreground flex-shrink-0"
-                />
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    Clique para submeter novo registo criminal
-                  </p>
-                  <p className="text-xs text-muted-foreground/60">
-                    PDF, JPG · Max 5MB
-                  </p>
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1.5">
-                  Data de Validade
-                </label>
-                <DatePicker value="" onChange={() => {}} className="w-full" />
-              </div>
-            </Card>
-          )}
         </div>
       )}
 

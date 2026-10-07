@@ -29,26 +29,15 @@ interface AuthContextType {
   isLoading: boolean;
 }
 
-const ADMIN_USER: UserProfile = {
-  id: 1,
-  name: "Miguel Silva",
-  first_name: "Miguel",
-  last_name: "Silva",
-  initials: "MS",
+const EMPTY_USER: UserProfile = {
+  id: "",
+  name: "",
+  first_name: "",
+  last_name: "",
+  initials: "",
   role: "admin",
-  roleLabel: "Administrador",
-  email: "admin@sgde.pt",
-};
-
-const STAFF_USER: UserProfile = {
-  id: 2,
-  name: "Ana Costa",
-  first_name: "Ana",
-  last_name: "Costa",
-  initials: "AC",
-  role: "staff",
-  roleLabel: "Assistente",
-  email: "assistente@sgde.pt",
+  roleLabel: "",
+  email: "",
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -88,15 +77,13 @@ function mapAuthUserToProfile(authUser: AuthUser): UserProfile {
 
 export function AuthProvider({
   children,
-  initialRole = "admin",
+  initialRole = null,
 }: {
   children: React.ReactNode;
   initialRole?: Role | null;
 }) {
   const [role, setRole] = useState<Role | null>(initialRole);
-  const [userProfile, setUserProfile] = useState<UserProfile>(
-    initialRole === "admin" ? ADMIN_USER : STAFF_USER
-  );
+  const [userProfile, setUserProfile] = useState<UserProfile>(EMPTY_USER);
   const [isLoading, setIsLoading] = useState(true);
 
   // Check existing session on application load (supports HttpOnly cookies or fallback localStorage token)
@@ -157,7 +144,11 @@ export function AuthProvider({
 
   function login(newRole: Role) {
     setRole(newRole);
-    setUserProfile(newRole === "admin" ? ADMIN_USER : STAFF_USER);
+    setUserProfile((prev) => ({
+      ...prev,
+      role: newRole,
+      roleLabel: newRole === "admin" ? "Administrador" : "Assistente",
+    }));
   }
 
   async function logout() {
@@ -170,6 +161,7 @@ export function AuthProvider({
       localStorage.removeItem("auth_token");
       sessionStorage.removeItem("auth_token");
       localStorage.removeItem("selected_school_id");
+      setUserProfile(EMPTY_USER);
       setRole(null);
     }
   }
@@ -177,7 +169,11 @@ export function AuthProvider({
   function switchRole() {
     setRole((prev) => {
       const next = prev === "admin" ? "staff" : "admin";
-      setUserProfile(next === "admin" ? ADMIN_USER : STAFF_USER);
+      setUserProfile((prevProfile) => ({
+        ...prevProfile,
+        role: next,
+        roleLabel: next === "admin" ? "Administrador" : "Assistente",
+      }));
       return next;
     });
   }

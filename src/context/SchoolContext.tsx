@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AGRUPAMENTO, schools as initialSchools } from "../api/mockData";
+import { AGRUPAMENTO } from "../api/mockData";
 import schoolsService, { BackendSchoolResource } from "../api/services/schools.service";
 import type { School } from "../types";
 import { useAuth } from "./AuthContext";
@@ -103,8 +103,6 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (err) {
       console.warn("Could not fetch schools from API in SchoolContext:", err);
-      // Mantém fallback caso a API esteja offline e ainda não haja escolas carregadas
-      setSchoolsList((prev) => (prev.length > 0 ? prev : initialSchools));
     }
   };
 
