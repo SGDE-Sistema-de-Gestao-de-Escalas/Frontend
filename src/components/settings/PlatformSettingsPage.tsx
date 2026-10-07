@@ -63,7 +63,13 @@ export default function PlatformSettingsPage() {
   const [schoolAddress, setSchoolAddress] = useState("");
   const [schoolPhone, setSchoolPhone] = useState("");
   const [schoolEmail, setSchoolEmail] = useState("");
-  const [schoolFormError, setSchoolFormError] = useState<string | null>(null);
+  const [schoolFormErrors, setSchoolFormErrors] = useState<{
+    name?: string;
+    acronym?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+  }>({});
 
   const fetchSchools = async () => {
     try {
@@ -104,7 +110,7 @@ export default function PlatformSettingsPage() {
     setSchoolPhone("");
     setSchoolEmail("");
     setSchoolEditId(null);
-    setSchoolFormError(null);
+    setSchoolFormErrors({});
     setShowSchoolForm(true);
   }
 
@@ -115,48 +121,58 @@ export default function PlatformSettingsPage() {
     setSchoolPhone(s.phone || "");
     setSchoolEmail(s.email || "");
     setSchoolEditId(s.id);
-    setSchoolFormError(null);
+    setSchoolFormErrors({});
     setShowSchoolForm(true);
   }
 
   async function handleSaveSchool() {
-    if (!schoolName.trim()) {
-      notify.error("O nome da escola é obrigatório.", "Dados Incompletos");
+    const sName = schoolName.trim();
+    const sAcronym = schoolAcronym.trim();
+    const sEmail = schoolEmail.trim();
+
+    const errors: { name?: string; acronym?: string; email?: string } = {};
+
+    if (!sName) {
+      errors.name = "O nome da escola é obrigatório.";
+    }
+
+    if (!sAcronym) {
+      errors.acronym = "A sigla ou código é obrigatória.";
+    } else if (sAcronym.length > 20) {
+      errors.acronym = "A sigla não pode ter mais de 20 caracteres.";
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (sEmail && !emailRegex.test(sEmail)) {
+      errors.email = "Por favor introduza um endereço de email válido.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setSchoolFormErrors(errors);
       return;
     }
 
-    const derivedAcronym = (
-      schoolAcronym.trim() ||
-      schoolName
-        .trim()
-        .split(" ")
-        .map((w) => w[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 10)
-    );
-
+    setSchoolFormErrors({});
     const isEditing = schoolEditId !== null;
     setSavingSchool(true);
-    setSchoolFormError(null);
 
     try {
       if (isEditing) {
         const res = await schoolsService.update(schoolEditId, {
-          name: schoolName.trim(),
-          acronym: derivedAcronym,
+          name: sName,
+          acronym: sAcronym,
           address: schoolAddress.trim() || null,
           phone: schoolPhone.trim() || null,
-          email: schoolEmail.trim() || null,
+          email: sEmail || null,
         });
         notify.success(res);
       } else {
         const res = await schoolsService.create({
-          name: schoolName.trim(),
-          acronym: derivedAcronym,
+          name: sName,
+          acronym: sAcronym,
           address: schoolAddress.trim() || null,
           phone: schoolPhone.trim() || null,
-          email: schoolEmail.trim() || null,
+          email: sEmail || null,
           active: true,
         });
         notify.success(res);
@@ -165,11 +181,19 @@ export default function PlatformSettingsPage() {
       refreshGlobalSchools().catch(() => {});
       setShowSchoolForm(false);
     } catch (err: any) {
-      const msg = getBackendErrorMessage(err);
-      if (msg) {
-        setSchoolFormError(msg);
+      const backendErrors = err?.response?.data?.errors;
+      if (backendErrors) {
+        setSchoolFormErrors({
+          name: backendErrors.name?.[0],
+          acronym: backendErrors.acronym?.[0],
+          email: backendErrors.email?.[0],
+          phone: backendErrors.phone?.[0],
+          address: backendErrors.address?.[0],
+        });
       }
-      if (!(err as any)?.__alreadyNotified) {
+
+      // Notifica com toast apenas se não for erro de validação (422)
+      if (err?.response?.status !== 422 && !(err as any)?.__alreadyNotified) {
         notify.error(err);
       }
 
@@ -181,11 +205,11 @@ export default function PlatformSettingsPage() {
               s.id === schoolEditId
                 ? {
                     ...s,
-                    name: schoolName.trim(),
-                    acronym: derivedAcronym,
+                    name: sName,
+                    acronym: sAcronym,
                     address: schoolAddress.trim(),
                     phone: schoolPhone.trim(),
-                    email: schoolEmail.trim() || undefined,
+                    email: sEmail || undefined,
                   }
                 : s
             )
@@ -195,11 +219,11 @@ export default function PlatformSettingsPage() {
             ...p,
             {
               id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-              name: schoolName.trim(),
-              acronym: derivedAcronym,
+              name: sName,
+              acronym: sAcronym,
               address: schoolAddress.trim(),
               phone: schoolPhone.trim(),
-              email: schoolEmail.trim() || undefined,
+              email: sEmail || undefined,
               active: true,
               assistants: 0,
               can_delete: true,
@@ -327,6 +351,11 @@ export default function PlatformSettingsPage() {
   const [adminLastName, setAdminLastName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminActive, setAdminActive] = useState(true);
+  const [adminFormErrors, setAdminFormErrors] = useState<{
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+  }>({});
 
   // Status toggle confirm modal state
   const [adminStatusConfirm, setAdminStatusConfirm] = useState<AdminUser | null>(null);
@@ -380,6 +409,7 @@ export default function PlatformSettingsPage() {
     setAdminEmail("");
     setAdminActive(true);
     setAdminEditId(null);
+    setAdminFormErrors({});
     setShowAdminForm(true);
   }
 
@@ -389,13 +419,38 @@ export default function PlatformSettingsPage() {
     setAdminEmail(admin.email);
     setAdminActive(admin.is_active ?? admin.active ?? true);
     setAdminEditId(admin.id);
+    setAdminFormErrors({});
     setShowAdminForm(true);
   }
 
   async function handleSaveAdmin() {
     const fName = adminFirstName.trim();
     const lName = adminLastName.trim();
-    if (!fName || !adminEmail.trim()) return;
+    const emailVal = adminEmail.trim();
+
+    const errors: { first_name?: string; last_name?: string; email?: string } = {};
+
+    if (!fName) {
+      errors.first_name = "O primeiro nome é obrigatório.";
+    }
+
+    if (!lName) {
+      errors.last_name = "O último nome é obrigatório.";
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailVal) {
+      errors.email = "O email institucional é obrigatório.";
+    } else if (!emailRegex.test(emailVal)) {
+      errors.email = "Por favor introduza um endereço de email válido.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setAdminFormErrors(errors);
+      return;
+    }
+
+    setAdminFormErrors({});
     const isEditing = adminEditId !== null;
 
     if (isEditing) {
@@ -403,7 +458,7 @@ export default function PlatformSettingsPage() {
         const updatePayload: any = {
           first_name: fName,
           last_name: lName,
-          email: adminEmail.trim(),
+          email: emailVal,
         };
         // UpdateUserRequest aceita is_active apenas se for boolean e true (accepted)
         if (adminActive) {
@@ -413,8 +468,17 @@ export default function PlatformSettingsPage() {
         const res = await usersService.update(adminEditId, updatePayload);
         notify.success(res);
         await fetchUsers();
+        setShowAdminForm(false);
       } catch (err: any) {
         console.warn("API update failed:", err);
+        const backendErrors = err?.response?.data?.errors;
+        if (backendErrors) {
+          setAdminFormErrors({
+            first_name: backendErrors.first_name?.[0],
+            last_name: backendErrors.last_name?.[0],
+            email: backendErrors.email?.[0],
+          });
+        }
         if (!(err as any)?.__alreadyNotified) {
           notify.error(err);
         }
@@ -427,7 +491,7 @@ export default function PlatformSettingsPage() {
                 ...a,
                 first_name: fName,
                 last_name: lName,
-                email: adminEmail.trim(),
+                email: emailVal,
                 active: adminActive,
                 is_active: adminActive,
               }
@@ -445,15 +509,24 @@ export default function PlatformSettingsPage() {
         const res = await usersService.create({
           first_name: fName,
           last_name: lName,
-          email: adminEmail.trim(),
+          email: emailVal,
         });
         if (res?.data?.id) {
           createdId = res.data.id;
         }
         notify.success(res);
         await fetchUsers();
+        setShowAdminForm(false);
       } catch (err: any) {
         console.warn("API create failed:", err);
+        const backendErrors = err?.response?.data?.errors;
+        if (backendErrors) {
+          setAdminFormErrors({
+            first_name: backendErrors.first_name?.[0],
+            last_name: backendErrors.last_name?.[0],
+            email: backendErrors.email?.[0],
+          });
+        }
         if (!(err as any)?.__alreadyNotified) {
           notify.error(err);
         }
@@ -463,7 +536,7 @@ export default function PlatformSettingsPage() {
           id: createdId,
           first_name: fName,
           last_name: lName,
-          email: adminEmail.trim(),
+          email: emailVal,
           role: "admin",
           active: adminActive,
           is_active: adminActive,
@@ -472,9 +545,9 @@ export default function PlatformSettingsPage() {
           delete_action: "hard_delete",
         };
         setAdminsList((prev) => [...prev, newAdmin]);
+        setShowAdminForm(false);
       }
     }
-    setShowAdminForm(false);
   }
 
   async function handleConfirmStatusToggle() {
@@ -780,77 +853,139 @@ export default function PlatformSettingsPage() {
               onClose={() => !savingSchool && setShowSchoolForm(false)}
             >
               <div className="space-y-4">
-                {schoolFormError && (
-                  <FeedbackNotification
-                    type="error"
-                    title="Erro ao guardar"
-                    message={schoolFormError}
-                    onClose={() => setSchoolFormError(null)}
-                  />
-                )}
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                    Nome da Escola *
+                  <label className="text-xs font-medium text-foreground block mb-1.5">
+                    Nome da Escola <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="text"
                     value={schoolName}
-                    onChange={(e) => setSchoolName(e.target.value)}
+                    onChange={(e) => {
+                      setSchoolName(e.target.value);
+                      if (schoolFormErrors.name) {
+                        setSchoolFormErrors((prev) => ({ ...prev, name: undefined }));
+                      }
+                    }}
                     placeholder="Ex: EB1 Quinta das Flores"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                      schoolFormErrors.name
+                        ? "border-destructive focus:ring-destructive"
+                        : "border-border focus:ring-ring"
+                    }`}
                     autoFocus
                   />
+                  {schoolFormErrors.name && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {schoolFormErrors.name}
+                    </p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                      Sigla / Código *
+                    <label className="text-xs font-medium text-foreground block mb-1.5">
+                      Sigla / Código <span className="text-destructive">*</span>
                     </label>
                     <input
                       type="text"
                       value={schoolAcronym}
-                      onChange={(e) => setSchoolAcronym(e.target.value)}
+                      onChange={(e) => {
+                        setSchoolAcronym(e.target.value);
+                        if (schoolFormErrors.acronym) {
+                          setSchoolFormErrors((prev) => ({ ...prev, acronym: undefined }));
+                        }
+                      }}
                       placeholder="Ex: EB1QF"
                       maxLength={20}
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background uppercase font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                      className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background uppercase font-mono focus:outline-none focus:ring-1 ${
+                        schoolFormErrors.acronym
+                          ? "border-destructive focus:ring-destructive"
+                          : "border-border focus:ring-ring"
+                      }`}
                     />
+                    {schoolFormErrors.acronym && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {schoolFormErrors.acronym}
+                      </p>
+                    )}
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                    <label className="text-xs font-medium text-foreground block mb-1.5">
                       Telefone
                     </label>
                     <input
                       type="tel"
                       value={schoolPhone}
-                      onChange={(e) => setSchoolPhone(e.target.value)}
+                      onChange={(e) => {
+                        setSchoolPhone(e.target.value);
+                        if (schoolFormErrors.phone) {
+                          setSchoolFormErrors((prev) => ({ ...prev, phone: undefined }));
+                        }
+                      }}
                       placeholder="213 000 000"
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                      className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background font-mono focus:outline-none focus:ring-1 ${
+                        schoolFormErrors.phone
+                          ? "border-destructive focus:ring-destructive"
+                          : "border-border focus:ring-ring"
+                      }`}
                     />
+                    {schoolFormErrors.phone && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {schoolFormErrors.phone}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                  <label className="text-xs font-medium text-foreground block mb-1.5">
                     Morada
                   </label>
                   <input
                     type="text"
                     value={schoolAddress}
-                    onChange={(e) => setSchoolAddress(e.target.value)}
+                    onChange={(e) => {
+                      setSchoolAddress(e.target.value);
+                      if (schoolFormErrors.address) {
+                        setSchoolFormErrors((prev) => ({ ...prev, address: undefined }));
+                      }
+                    }}
                     placeholder="Rua, número, localidade"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                      schoolFormErrors.address
+                        ? "border-destructive focus:ring-destructive"
+                        : "border-border focus:ring-ring"
+                    }`}
                   />
+                  {schoolFormErrors.address && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {schoolFormErrors.address}
+                    </p>
+                  )}
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                  <label className="text-xs font-medium text-foreground block mb-1.5">
                     Email
                   </label>
                   <input
                     type="email"
                     value={schoolEmail}
-                    onChange={(e) => setSchoolEmail(e.target.value)}
+                    onChange={(e) => {
+                      setSchoolEmail(e.target.value);
+                      if (schoolFormErrors.email) {
+                        setSchoolFormErrors((prev) => ({ ...prev, email: undefined }));
+                      }
+                    }}
                     placeholder="escola@sgde.pt"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                      schoolFormErrors.email
+                        ? "border-destructive focus:ring-destructive"
+                        : "border-border focus:ring-ring"
+                    }`}
                   />
+                  {schoolFormErrors.email && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {schoolFormErrors.email}
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-3 pt-2">
                   <button
@@ -864,7 +999,7 @@ export default function PlatformSettingsPage() {
                   <button
                     type="button"
                     onClick={handleSaveSchool}
-                    disabled={!schoolName.trim() || savingSchool}
+                    disabled={!schoolName.trim() || !schoolAcronym.trim() || savingSchool}
                     className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-2"
                   >
                     {savingSchool && <Loader2 size={14} className="animate-spin" />}
@@ -1101,22 +1236,50 @@ export default function PlatformSettingsPage() {
                     <input
                       type="text"
                       value={adminFirstName}
-                      onChange={(e) => setAdminFirstName(e.target.value)}
+                      onChange={(e) => {
+                        setAdminFirstName(e.target.value);
+                        if (adminFormErrors.first_name) {
+                          setAdminFormErrors((prev) => ({ ...prev, first_name: undefined }));
+                        }
+                      }}
                       placeholder="Ex: Miguel"
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                        adminFormErrors.first_name
+                          ? "border-destructive focus:ring-destructive"
+                          : "border-border focus:ring-ring"
+                      }`}
                     />
+                    {adminFormErrors.first_name && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {adminFormErrors.first_name}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="text-xs font-medium text-foreground block mb-1.5">
-                      Último Nome
+                      Último Nome <span className="text-destructive">*</span>
                     </label>
                     <input
                       type="text"
                       value={adminLastName}
-                      onChange={(e) => setAdminLastName(e.target.value)}
+                      onChange={(e) => {
+                        setAdminLastName(e.target.value);
+                        if (adminFormErrors.last_name) {
+                          setAdminFormErrors((prev) => ({ ...prev, last_name: undefined }));
+                        }
+                      }}
                       placeholder="Ex: Silva"
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                        adminFormErrors.last_name
+                          ? "border-destructive focus:ring-destructive"
+                          : "border-border focus:ring-ring"
+                      }`}
                     />
+                    {adminFormErrors.last_name && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {adminFormErrors.last_name}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1127,10 +1290,24 @@ export default function PlatformSettingsPage() {
                   <input
                     type="email"
                     value={adminEmail}
-                    onChange={(e) => setAdminEmail(e.target.value)}
+                    onChange={(e) => {
+                      setAdminEmail(e.target.value);
+                      if (adminFormErrors.email) {
+                        setAdminFormErrors((prev) => ({ ...prev, email: undefined }));
+                      }
+                    }}
                     placeholder="admin@sgde.pt"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                      adminFormErrors.email
+                        ? "border-destructive focus:ring-destructive"
+                        : "border-border focus:ring-ring"
+                    }`}
                   />
+                  {adminFormErrors.email && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {adminFormErrors.email}
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/10">
@@ -1159,7 +1336,7 @@ export default function PlatformSettingsPage() {
                   <button
                     type="button"
                     onClick={handleSaveAdmin}
-                    disabled={!adminFirstName.trim() || !adminEmail.trim()}
+                    disabled={!adminFirstName.trim() || !adminLastName.trim() || !adminEmail.trim()}
                     className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
                   >
                     {adminEditId !== null ? "Guardar Alterações" : "Criar Administrador"}
