@@ -146,4 +146,37 @@ export function useToggleAssistantStatus() {
   });
 }
 
+export function useAnonymizeAssistant() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      assistantId,
+    }: {
+      userId: EntityId;
+      assistantId: EntityId;
+    }) => {
+      return await usersService.delete(userId);
+    },
+    onSuccess: (res, variables) => {
+      queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
+      queryClient.invalidateQueries({
+        queryKey: [...ASSISTANTS_QUERY_KEY, "detail", variables.assistantId],
+      });
+      notify.success(
+        res?.message || "Os dados pessoais do assistente foram anonimizados.",
+        "Dados Anonimizados"
+      );
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message ||
+        "Não foi possível anonimizar os dados do assistente.";
+      notify.error(message, "Erro ao Anonimizar");
+    },
+  });
+}
+
+
 

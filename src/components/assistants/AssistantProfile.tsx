@@ -16,6 +16,7 @@ import {
   Pencil,
   Phone,
   Plus,
+  ShieldAlert,
   ShieldCheck,
   Trash2,
   User,
@@ -38,6 +39,7 @@ import {
   useUpdateAssistant,
   useDeleteAssistant,
   useToggleAssistantStatus,
+  useAnonymizeAssistant,
 } from "../../hooks/api/useAssistants";
 import type { EntityId } from "../../types";
 
@@ -109,6 +111,7 @@ export default function AssistantProfile({
   const updateAssistantMutation = useUpdateAssistant();
   const deleteAssistantMutation = useDeleteAssistant();
   const toggleStatusMutation = useToggleAssistantStatus();
+  const anonymizeMutation = useAnonymizeAssistant();
 
   const resolvedName =
     assistant?.name ||
@@ -136,6 +139,7 @@ export default function AssistantProfile({
   const [isActive, setIsActive] = useState<boolean>(initialActive);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showAnonymizeModal, setShowAnonymizeModal] = useState(false);
 
   useDocumentTitle(`${resolvedName} - Perfil`);
 
@@ -310,7 +314,9 @@ export default function AssistantProfile({
     );
   }
 
-  if (editing) {
+  const isDeletedOrAnonymized = !!(assistant?.deleted_at || assistant?.is_anonymized);
+
+  if (editing && !isDeletedOrAnonymized) {
     return (
       <AddEditAssistant
         isEdit
@@ -322,7 +328,6 @@ export default function AssistantProfile({
       />
     );
   }
-
 
   return (
     <div>
@@ -351,14 +356,22 @@ export default function AssistantProfile({
               <Badge
                 variant="outline"
                 className={
-                  assistant?.deleted_at
+                  assistant?.is_anonymized
+                    ? "bg-muted text-muted-foreground border-border"
+                    : assistant?.deleted_at
                     ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
                     : currentIsActive
                     ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
                     : "bg-amber-500/10 text-amber-600 border-amber-500/20"
                 }
               >
-                {assistant?.deleted_at ? "Eliminado" : currentIsActive ? "Ativo" : "Inativo"}
+                {assistant?.is_anonymized
+                  ? "Anonimizado"
+                  : assistant?.deleted_at
+                  ? "Eliminado"
+                  : currentIsActive
+                  ? "Ativo"
+                  : "Inativo"}
               </Badge>
               {assistant?.exception && (
                 <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
@@ -370,7 +383,7 @@ export default function AssistantProfile({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {!assistant?.deleted_at && (
+          {!isDeletedOrAnonymized && (
             <>
               <button
                 type="button"
@@ -409,17 +422,34 @@ export default function AssistantProfile({
         </div>
       </div>
 
-      {assistant?.deleted_at && (
-        <div className="flex items-center gap-3 p-3.5 mb-6 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400 text-sm">
-          <AlertTriangle size={18} className="shrink-0" />
-          <div>
-            <p className="font-semibold">Registo Eliminado</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Este assistente encontra-se eliminado (soft-delete). O histórico e a ficha são mantidos em arquivo para conformidade legal e eventual pedido de anonimização (RGPD).
-            </p>
-          </div>
+      {assistant?.is_anonymized ? (
+        <div className="flex items-center gap-2.5 px-3.5 py-2.5 mb-6 rounded-lg border border-border/70 bg-muted/40 text-muted-foreground text-xs">
+          <ShieldCheck size={15} className="shrink-0 text-muted-foreground" />
+          <span>
+            <strong className="text-foreground font-medium">Registo Anonimizado:</strong> Os dados pessoais deste assistente foram anonimizados permanentemente ao abrigo do RGPD. O histórico de escalas e turnos permanece preservado de forma anónima.
+          </span>
         </div>
-      )}
+      ) : assistant?.deleted_at ? (
+        <div className="flex items-center justify-between gap-3 p-3.5 mb-6 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400 text-sm flex-wrap">
+          <div className="flex items-center gap-3">
+            <AlertTriangle size={18} className="shrink-0" />
+            <div>
+              <p className="font-semibold">Registo Eliminado</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Este assistente encontra-se eliminado (soft-delete). O histórico permanece em arquivo e pode proceder à anonimização total dos dados pessoais para efeitos de RGPD.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAnonymizeModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 text-xs font-medium transition-colors ml-auto shadow-xs"
+          >
+            <ShieldAlert size={13} />
+            Anonimizar Agora
+          </button>
+        </div>
+      ) : null}
 
       {/* Tabs */}
       <div className="flex gap-px border-b border-border mb-6">
@@ -730,6 +760,7 @@ export default function AssistantProfile({
               <Switch
                 checked={currentAvailableForTransfer}
                 onCheckedChange={handleToggleTransfer}
+                disabled={isDeletedOrAnonymized}
                 className="data-[state=checked]:bg-primary"
               />
             </div>
@@ -747,14 +778,16 @@ export default function AssistantProfile({
               <h3 className="text-sm font-semibold text-foreground">
                 Regras de Exceção e Vigências
               </h3>
-              <button
-                type="button"
-                onClick={openAddException}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
-              >
-                <Plus size={12} />
-                Nova Exceção
-              </button>
+              {!isDeletedOrAnonymized && (
+                <button
+                  type="button"
+                  onClick={openAddException}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+                >
+                  <Plus size={12} />
+                  Nova Exceção
+                </button>
+              )}
             </div>
 
             {showAddException && (
@@ -1056,6 +1089,39 @@ export default function AssistantProfile({
           ) : ""
         }
         confirmLabel="Eliminar Exceção"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
+
+      {/* Modal: Confirmar Anonimização (RGPD) */}
+      <ConfirmationModal
+        open={showAnonymizeModal}
+        onClose={() => setShowAnonymizeModal(false)}
+        isLoading={anonymizeMutation.isPending}
+        onConfirm={async () => {
+          if (assistant?.user_id && assistant?.id) {
+            try {
+              await anonymizeMutation.mutateAsync({
+                userId: assistant.user_id,
+                assistantId: assistant.id,
+              });
+              setShowAnonymizeModal(false);
+            } catch {
+              // Erro tratado no hook
+            }
+          }
+        }}
+        title="Anonimizar Dados Pessoais (RGPD)"
+        description={
+          <>
+            Tem a certeza que pretende anonimizar permanentemente os dados de{" "}
+            <strong className="text-foreground">{resolvedName}</strong>?
+            <br />
+            <br />
+            Esta ação é <strong>irreversível</strong> ao abrigo do RGPD. Todos os dados pessoais (email, telefone, NIF, morada e registo criminal) serão limpos ou substituídos por registos anónimos, mantendo apenas o histórico operacional de escalas.
+          </>
+        }
+        confirmLabel="Confirmar Anonimização"
         cancelLabel="Cancelar"
         variant="danger"
       />

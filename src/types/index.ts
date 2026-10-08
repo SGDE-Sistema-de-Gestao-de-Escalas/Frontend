@@ -98,6 +98,8 @@ export interface Assistant {
   created_at?: string;
   updated_at?: string;
   deleted_at?: string | null;
+  is_anonymized?: boolean;
+  anonymized_at?: string | null;
   can_delete?: boolean;
   cannot_delete_reason?: string | null;
   delete_action?: DeleteActionType;
