@@ -17,11 +17,11 @@ export default function AssistantsListPage({
   const [tab, setTab] = useState<"ativos" | "inativos">("ativos");
   const { selectedSchool } = useSchool();
   // Muda automaticamente quando se troca de escola no header (schoolId na queryKey).
-  const { data: assistants = [], isLoading, isFetching } = useAssistantsList({ status: "all" });
-  const active = assistants.filter((a) => (a.active ?? a.is_active ?? true));
-  const inactive = assistants.filter((a) => !(a.active ?? a.is_active ?? true));
+  const { data: assistants = [], isLoading, isFetching } = useAssistantsList();
+  const nonDeleted = assistants.filter((a) => !a.deleted_at);
+  const active = nonDeleted.filter((a) => (a.active ?? a.is_active ?? true));
+  const inactive = nonDeleted.filter((a) => !(a.active ?? a.is_active ?? true));
   const list = tab === "ativos" ? active : inactive;
-
 
   return (
     <div className="space-y-6">
@@ -32,7 +32,7 @@ export default function AssistantsListPage({
             Equipa de Assistentes
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5">
-            {assistants.length} assistentes registados em {selectedSchool.name}
+            {nonDeleted.length} assistentes registados em {selectedSchool.name}
             {isFetching && !isLoading && (
               <Loader2 size={12} className="animate-spin" />
             )}

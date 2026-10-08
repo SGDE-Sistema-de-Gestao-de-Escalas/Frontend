@@ -33,7 +33,12 @@ import ConfirmationModal from "../common/ConfirmationModal";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
-import { useAssistant, useUpdateAssistant, useDeleteAssistant } from "../../hooks/api/useAssistants";
+import {
+  useAssistant,
+  useUpdateAssistant,
+  useDeleteAssistant,
+  useToggleAssistantStatus,
+} from "../../hooks/api/useAssistants";
 import type { EntityId } from "../../types";
 
 
@@ -103,6 +108,7 @@ export default function AssistantProfile({
   const { data: assistant, isLoading } = useAssistant(assistantId);
   const updateAssistantMutation = useUpdateAssistant();
   const deleteAssistantMutation = useDeleteAssistant();
+  const toggleStatusMutation = useToggleAssistantStatus();
 
   const resolvedName =
     assistant?.name ||
@@ -150,10 +156,11 @@ export default function AssistantProfile({
 
   async function handleConfirmDelete() {
     if (assistant?.id) {
+      const idToDelete = assistant.id;
+      setShowDeleteModal(false);
+      if (onBack) onBack();
       try {
-        await deleteAssistantMutation.mutateAsync(assistant.id);
-        setShowDeleteModal(false);
-        if (onBack) onBack();
+        await deleteAssistantMutation.mutateAsync(idToDelete);
       } catch {
         // Handled in mutation onError
       }
@@ -957,9 +964,23 @@ export default function AssistantProfile({
       <ConfirmationModal
         open={showStatusModal}
         onClose={() => setShowStatusModal(false)}
-        onConfirm={() => {
-          setIsActive(!currentIsActive);
-          setShowStatusModal(false);
+        isLoading={toggleStatusMutation.isPending}
+        onConfirm={async () => {
+          if (assistant?.user_id && assistant?.id) {
+            try {
+              await toggleStatusMutation.mutateAsync({
+                userId: assistant.user_id,
+                assistantId: assistant.id,
+                activate: !currentIsActive,
+              });
+              setShowStatusModal(false);
+            } catch {
+              // Notificação de erro já tratada no hook
+            }
+          } else {
+            setIsActive(!currentIsActive);
+            setShowStatusModal(false);
+          }
         }}
         title={currentIsActive ? "Inativar Assistente" : "Reativar Assistente"}
         description={

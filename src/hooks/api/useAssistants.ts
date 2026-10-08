@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notify } from "../../components/common/FeedbackNotification";
 import assistantsService, { AssistantFilters } from "../../api/services/assistants.service";
-import { Assistant, CreateAssistantPayload, UpdateAssistantPayload } from "../../types";
+import usersService from "../../api/services/users.service";
+import { Assistant, CreateAssistantPayload, UpdateAssistantPayload, EntityId } from "../../types";
 import { useSchool } from "../../context/SchoolContext";
 import { schoolScopedKey } from "../../lib/queryClient";
 
@@ -34,6 +35,7 @@ export function useAssistant(id?: number | string) {
       return result.data ?? null;
     },
     enabled: !!id,
+    retry: false,
   });
 }
 
@@ -78,8 +80,26 @@ export function useDeleteAssistant() {
 
   return useMutation({
     mutationFn: (id: number | string) => assistantsService.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
+    onSuccess: (_, id) => {
+      // 1. Cancelar e remover o detalhe da cache para evitar refetch automático 404
+      queryClient.cancelQueries({ queryKey: [...ASSISTANTS_QUERY_KEY, "detail", id] });
+      queryClient.removeQueries({ queryKey: [...ASSISTANTS_QUERY_KEY, "detail", id] });
+
+      // 2. Invalidar apenas as listas de assistentes, excluindo o detalhe que acabou de ser eliminado
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          if (
+            Array.isArray(key) &&
+            key[0] === "assistants" &&
+            key[1] === "detail" &&
+            key[2] === id
+          ) {
+            return false;
+          }
+          return Array.isArray(key) && key.includes("assistants");
+        },
+      });
       notify.success("O registo do assistente foi removido.", "Assistente Eliminado");
     },
     onError: (error: any) => {
@@ -88,4 +108,42 @@ export function useDeleteAssistant() {
     },
   });
 }
+
+export function useToggleAssistantStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      assistantId,
+      activate,
+    }: {
+      userId: EntityId;
+      assistantId: EntityId;
+      activate: boolean;
+    }) => {
+      if (activate) {
+        return await usersService.update(userId, { is_active: true });
+      } else {
+        return await usersService.deactivate(userId);
+      }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
+      queryClient.invalidateQueries({
+        queryKey: [...ASSISTANTS_QUERY_KEY, "detail", variables.assistantId],
+      });
+      if (variables.activate) {
+        notify.success("O assistente foi reativado com sucesso.", "Assistente Ativo");
+      } else {
+        notify.success("O assistente foi inativado com sucesso.", "Assistente Inativo");
+      }
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || "Não foi possível alterar o estado do assistente.";
+      notify.error(message, "Erro ao alterar estado");
+    },
+  });
+}
+
 
