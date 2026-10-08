@@ -17,10 +17,9 @@ export default function AssistantsListPage({
   const [tab, setTab] = useState<"ativos" | "inativos">("ativos");
   const { selectedSchool } = useSchool();
   // Muda automaticamente quando se troca de escola no header (schoolId na queryKey).
-  const { data: assistants = [], isLoading, isFetching } = useAssistantsList();
-  const nonDeleted = assistants.filter((a) => !a.deleted_at);
-  const active = nonDeleted.filter((a) => (a.active ?? a.is_active ?? true));
-  const inactive = nonDeleted.filter((a) => !(a.active ?? a.is_active ?? true));
+  const { data: assistants = [], isLoading, isFetching } = useAssistantsList({ status: "all" });
+  const active = assistants.filter((a) => !a.deleted_at && (a.active ?? a.is_active ?? true));
+  const inactive = assistants.filter((a) => a.deleted_at || !(a.active ?? a.is_active ?? true));
   const list = tab === "ativos" ? active : inactive;
 
   return (
@@ -32,7 +31,7 @@ export default function AssistantsListPage({
             Equipa de Assistentes
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5">
-            {nonDeleted.length} assistentes registados em {selectedSchool.name}
+            {assistants.length} assistentes registados em {selectedSchool.name}
             {isFetching && !isLoading && (
               <Loader2 size={12} className="animate-spin" />
             )}
@@ -60,7 +59,7 @@ export default function AssistantsListPage({
             },
             {
               id: "inativos" as const,
-              label: "Inativos / Em Licença",
+              label: "Inativos e Eliminados",
               count: inactive.length,
               color: "bg-muted-foreground",
             },
@@ -155,14 +154,26 @@ export default function AssistantsListPage({
                 {a.exception ?? "—"}
               </span>
               <span className="hidden sm:flex items-center gap-1.5">
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    tab === "ativos" ? "bg-[#0E7C59]" : "bg-muted-foreground"
-                  }`}
-                />
-                <span className="text-xs text-muted-foreground">
-                  {tab === "ativos" ? "Ativo" : "Inativo"}
-                </span>
+                {a.deleted_at ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                    <span className="text-xs text-rose-600 dark:text-rose-400 font-medium">
+                      Eliminado
+                    </span>
+                  </>
+                ) : !(a.active ?? a.is_active ?? true) ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                      Inativo
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#0E7C59]" />
+                    <span className="text-xs text-muted-foreground">Ativo</span>
+                  </>
+                )}
               </span>
               <ChevronRight
                 size={14}

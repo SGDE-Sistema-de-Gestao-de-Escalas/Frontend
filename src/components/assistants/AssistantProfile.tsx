@@ -351,12 +351,14 @@ export default function AssistantProfile({
               <Badge
                 variant="outline"
                 className={
-                  currentIsActive
+                  assistant?.deleted_at
+                    ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                    : currentIsActive
                     ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                    : "bg-muted text-muted-foreground border-border"
+                    : "bg-amber-500/10 text-amber-600 border-amber-500/20"
                 }
               >
-                {currentIsActive ? "Ativo" : "Inativo"}
+                {assistant?.deleted_at ? "Eliminado" : currentIsActive ? "Ativo" : "Inativo"}
               </Badge>
               {assistant?.exception && (
                 <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
@@ -368,40 +370,56 @@ export default function AssistantProfile({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setShowStatusModal(true)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-              currentIsActive
-                ? "border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
-                : "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
-            }`}
-            title={currentIsActive ? "Inativar Assistente" : "Reativar Assistente"}
-          >
-            {currentIsActive ? <UserX size={14} /> : <UserCheck size={14} />}
-            {currentIsActive ? "Inativar" : "Reativar"}
-          </button>
+          {!assistant?.deleted_at && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowStatusModal(true)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  currentIsActive
+                    ? "border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
+                    : "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+                }`}
+                title={currentIsActive ? "Inativar Assistente" : "Reativar Assistente"}
+              >
+                {currentIsActive ? <UserX size={14} /> : <UserCheck size={14} />}
+                {currentIsActive ? "Inativar" : "Reativar"}
+              </button>
 
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
-          >
-            <Edit2 size={13} />
-            Editar Perfil
-          </button>
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+              >
+                <Edit2 size={13} />
+                Editar Perfil
+              </button>
 
-          <button
-            type="button"
-            onClick={() => setShowDeleteModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-destructive/20 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-            title="Eliminar Assistente"
-          >
-            <Trash2 size={13} />
-            Eliminar
-          </button>
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-destructive/20 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                title="Eliminar Assistente"
+              >
+                <Trash2 size={13} />
+                Eliminar
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {assistant?.deleted_at && (
+        <div className="flex items-center gap-3 p-3.5 mb-6 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400 text-sm">
+          <AlertTriangle size={18} className="shrink-0" />
+          <div>
+            <p className="font-semibold">Registo Eliminado</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Este assistente encontra-se eliminado (soft-delete). O histórico e a ficha são mantidos em arquivo para conformidade legal e eventual pedido de anonimização (RGPD).
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-px border-b border-border mb-6">
