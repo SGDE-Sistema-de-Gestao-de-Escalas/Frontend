@@ -14,6 +14,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { BLOCK_STYLES } from "./blockStyles";
 import DatePicker from "../common/DatePicker";
+import CustomSelect from "../common/CustomSelect";
 import type { EntityId } from "../../types";
 
 interface RecalculateModalProps {
@@ -166,19 +167,24 @@ export default function RecalculateModal({
               <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                 Estratégia de Recálculo
               </label>
-              <select
+              <CustomSelect
                 value={strategy}
-                onChange={(e) => setStrategy(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <option value="auto">
-                  Automático (respeitar regras em vigor)
-                </option>
-                <option value="fill">Preencher lacunas de cobertura</option>
-                <option value="full">
-                  Recálculo completo (ignorar ajustes manuais)
-                </option>
-              </select>
+                onChange={(e: any) => setStrategy(typeof e === "string" ? e : e.target.value)}
+                options={[
+                  {
+                    value: "auto",
+                    label: "Automático (respeitar regras em vigor)",
+                  },
+                  {
+                    value: "fill",
+                    label: "Preencher lacunas de cobertura",
+                  },
+                  {
+                    value: "full",
+                    label: "Recálculo completo (ignorar ajustes manuais)",
+                  },
+                ]}
+              />
             </div>
 
             <label className="flex items-center gap-2.5 cursor-pointer">

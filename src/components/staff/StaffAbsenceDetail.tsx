@@ -306,9 +306,9 @@ export default function StaffAbsenceDetail() {
         <button
           type="button"
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent text-white text-xs font-medium hover:bg-accent/90 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs"
         >
-          <Plus size={13} />
+          <Plus size={14} />
           Registar Falta
         </button>
       </div>

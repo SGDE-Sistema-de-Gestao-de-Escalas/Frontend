@@ -1,5 +1,6 @@
 import React from "react";
 import { useSchool } from "../../context/SchoolContext";
+import CustomSelect from "./CustomSelect";
 
 const QUARTER_MINUTES = [0, 15, 30, 45];
 
@@ -77,31 +78,29 @@ export default function TimePicker({
 
   return (
     <div className={`flex items-center gap-1.5 ${className}`}>
-      <select
-        value={hVal}
+      <CustomSelect
+        value={String(hVal)}
         disabled={disabled}
-        onChange={(e) => setHour(Number(e.target.value))}
-        className="flex-1 px-2.5 py-2 text-sm rounded-lg border border-border bg-input-background font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-      >
-        {hours.map((h) => (
-          <option key={h} value={h}>
-            {String(h).padStart(2, "0")}h
-          </option>
-        ))}
-      </select>
+        onValueChange={(val) => setHour(Number(val))}
+        className="flex-1"
+        triggerClassName="font-mono text-sm py-2 px-2.5 rounded-lg border-border"
+        options={hours.map((h) => ({
+          value: String(h),
+          label: `${String(h).padStart(2, "0")}h`,
+        }))}
+      />
       <span className="text-muted-foreground text-sm font-mono font-bold">:</span>
-      <select
-        value={mVal}
+      <CustomSelect
+        value={String(mVal)}
         disabled={disabled}
-        onChange={(e) => setMinute(Number(e.target.value))}
-        className="flex-1 px-2.5 py-2 text-sm rounded-lg border border-border bg-input-background font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-      >
-        {minutes.map((m) => (
-          <option key={m} value={m}>
-            {String(m).padStart(2, "0")}
-          </option>
-        ))}
-      </select>
+        onValueChange={(val) => setMinute(Number(val))}
+        className="flex-1"
+        triggerClassName="font-mono text-sm py-2 px-2.5 rounded-lg border-border"
+        options={minutes.map((m) => ({
+          value: String(m),
+          label: String(m).padStart(2, "0"),
+        }))}
+      />
     </div>
   );
 }

@@ -507,9 +507,9 @@ export default function AssistantScheduleManager({
         <button
           type="button"
           onClick={handleOpenAddSchedule}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
         >
-          <Plus size={13} />
+          <Plus size={12} />
           Adicionar Horário
         </button>
       </div>

@@ -18,6 +18,7 @@ import { Badge } from "../ui/badge";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
+import CustomSelect from "../common/CustomSelect";
 
 export default function AbsenceManagement() {
   const [absencesList, setAbsencesList] = useState<Absence[]>(initialAbsences);
@@ -184,7 +185,7 @@ export default function AbsenceManagement() {
         </div>
         <button
           onClick={handleOpenAdd}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs"
         >
           <Plus size={14} />
           Nova Ausência
@@ -217,18 +218,15 @@ export default function AbsenceManagement() {
                   <label className="text-xs text-muted-foreground block mb-1.5">
                     Assistente *
                   </label>
-                  <select
+                  <CustomSelect
                     value={formAssistant}
-                    onChange={(e) => setFormAssistant(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-                  >
-                    <option value="">Selecionar...</option>
-                    {ASSISTANTS.map((a) => (
-                      <option key={a.id} value={a.name}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(e: any) => setFormAssistant(typeof e === "string" ? e : e.target.value)}
+                    placeholder="Selecionar assistente..."
+                    options={ASSISTANTS.map((a) => ({
+                      value: a.name,
+                      label: a.name,
+                    }))}
+                  />
                 </div>
                 {/* Dates & Times */}
                 <div className="grid grid-cols-2 gap-3">
@@ -278,17 +276,15 @@ export default function AbsenceManagement() {
                   <label className="text-xs text-muted-foreground block mb-1.5">
                     Tipo de Falta
                   </label>
-                  <select
+                  <CustomSelect
                     value={formReason}
-                    onChange={(e) => setFormReason(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-                  >
-                    {ABSENCE_TYPES_MOCK.map((t) => (
-                      <option key={t.id} value={t.name}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(e: any) => setFormReason(typeof e === "string" ? e : e.target.value)}
+                    placeholder="Selecionar tipo de falta..."
+                    options={ABSENCE_TYPES_MOCK.map((t) => ({
+                      value: t.name,
+                      label: t.name,
+                    }))}
+                  />
                 </div>
                 {/* Notes */}
                 <div>

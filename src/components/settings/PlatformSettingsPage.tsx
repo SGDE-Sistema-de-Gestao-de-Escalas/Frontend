@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   AlertTriangle,
   Building2,
@@ -12,6 +12,7 @@ import {
   Pencil,
   Phone,
   Plus,
+  SearchX,
   Settings,
   Shield,
   ShieldCheck,
@@ -32,6 +33,8 @@ import { Switch } from "../ui/switch";
 import Modal from "../common/Modal";
 import ConfirmationModal from "../common/ConfirmationModal";
 import { ActionTooltip } from "../common/ActionTooltip";
+import ListToolbar from "../common/ListToolbar";
+import ListPagination from "../common/ListPagination";
 import FeedbackNotification, {
   notify,
   getBackendErrorMessage,
@@ -455,6 +458,76 @@ export default function PlatformSettingsPage() {
   // Delete confirm modal state
   const [adminDeleteConfirm, setAdminDeleteConfirm] = useState<AdminUser | null>(null);
 
+  // Toolbar & Paginação para Administradores
+  const [adminSearch, setAdminSearch] = useState("");
+  const [adminSort, setAdminSort] = useState("name-asc");
+  const [adminPage, setAdminPage] = useState(1);
+  const [adminPageSize, setAdminPageSize] = useState(10);
+
+  // Toolbar & Paginação para Tipos de Falta
+  const [absenceTypeSearch, setAbsenceTypeSearch] = useState("");
+  const [absenceTypeSort, setAbsenceTypeSort] = useState("name-asc");
+  const [absenceTypePage, setAbsenceTypePage] = useState(1);
+  const [absenceTypePageSize, setAbsenceTypePageSize] = useState(10);
+
+  // Filtragem e ordenação para Administradores
+  const filteredAdmins = useMemo(() => {
+    let result = adminsList;
+    if (adminSearch.trim()) {
+      const q = adminSearch.toLowerCase().trim();
+      result = result.filter((a) => {
+        const name = `${a.first_name || ""} ${a.last_name || ""}`.toLowerCase();
+        const email = (a.email || "").toLowerCase();
+        return name.includes(q) || email.includes(q);
+      });
+    }
+
+    return [...result].sort((a, b) => {
+      const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+      const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+      if (adminSort === "name-asc") return nameA.localeCompare(nameB);
+      if (adminSort === "name-desc") return nameB.localeCompare(nameA);
+      if (adminSort === "status") {
+        if (a.active === b.active) return nameA.localeCompare(nameB);
+        return a.active ? -1 : 1;
+      }
+      return 0;
+    });
+  }, [adminsList, adminSearch, adminSort]);
+
+  const paginatedAdmins = useMemo(() => {
+    const start = (adminPage - 1) * adminPageSize;
+    return filteredAdmins.slice(start, start + adminPageSize);
+  }, [filteredAdmins, adminPage, adminPageSize]);
+
+  // Filtragem e ordenação para Tipos de Falta
+  const filteredAbsenceTypes = useMemo(() => {
+    let result = absenceTypesList;
+    if (absenceTypeSearch.trim()) {
+      const q = absenceTypeSearch.toLowerCase().trim();
+      result = result.filter((t) => t.name.toLowerCase().includes(q));
+    }
+
+    return [...result].sort((a, b) => {
+      const nameA = a.name.trim().toLowerCase();
+      const nameB = b.name.trim().toLowerCase();
+      if (absenceTypeSort === "name-asc") return nameA.localeCompare(nameB);
+      if (absenceTypeSort === "name-desc") return nameB.localeCompare(nameA);
+      if (absenceTypeSort === "doc-required") {
+        const docA = !!(a.requiresDocument ?? a.requires_document);
+        const docB = !!(b.requiresDocument ?? b.requires_document);
+        if (docA === docB) return nameA.localeCompare(nameB);
+        return docA ? -1 : 1;
+      }
+      return 0;
+    });
+  }, [absenceTypesList, absenceTypeSearch, absenceTypeSort]);
+
+  const paginatedAbsenceTypes = useMemo(() => {
+    const start = (absenceTypePage - 1) * absenceTypePageSize;
+    return filteredAbsenceTypes.slice(start, start + absenceTypePageSize);
+  }, [filteredAbsenceTypes, absenceTypePage, absenceTypePageSize]);
+
   const fetchUsers = async () => {
     try {
       setLoadingAdmins(true);
@@ -789,16 +862,21 @@ export default function PlatformSettingsPage() {
       {/* Tab: Escolas */}
       {activeTab === "schools" && (
         <>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-foreground">
-              Escolas Registadas
-            </h3>
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">
+                Escolas Registadas
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Estabelecimentos de ensino configurados e geridos na plataforma
+              </p>
+            </div>
             <button
               type="button"
               onClick={openAddSchool}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent text-white text-xs font-medium hover:bg-accent/90 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
             >
-              <Plus size={13} />
+              <Plus size={12} />
               Nova Escola
             </button>
           </div>
@@ -808,24 +886,14 @@ export default function PlatformSettingsPage() {
               <span className="text-xs">A carregar escolas...</span>
             </div>
           ) : schoolsList.length === 0 ? (
-            <div className="text-center py-12 px-4 border border-dashed border-border rounded-xl flex flex-col items-center justify-center">
-              <div className="w-12 h-12 rounded-xl bg-muted/60 flex items-center justify-center text-muted-foreground mb-3">
-                <Building2 size={24} />
-              </div>
-              <h4 className="text-sm font-semibold text-foreground mb-1">
+            <div className="p-8 text-center border border-dashed border-border rounded-xl bg-card/50 flex flex-col items-center justify-center">
+              <Building2 size={28} className="mx-auto text-muted-foreground/50 mb-2" />
+              <p className="text-sm font-medium text-foreground">
                 Nenhuma escola registada
-              </h4>
-              <p className="text-xs text-muted-foreground max-w-sm mb-4">
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
                 Comece por criar a primeira escola para poder gerir assistentes, horários e configurações.
               </p>
-              <button
-                type="button"
-                onClick={openAddSchool}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
-              >
-                <Plus size={14} />
-                Criar Primeira Escola
-              </button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -1190,7 +1258,7 @@ export default function PlatformSettingsPage() {
       {/* Tab: Administradores */}
       {activeTab === "users" && (
         <>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-start justify-between gap-3 mb-4">
             <div>
               <h3 className="text-sm font-semibold text-foreground">
                 Utilizadores Administradores
@@ -1202,12 +1270,32 @@ export default function PlatformSettingsPage() {
             <button
               type="button"
               onClick={openAddAdmin}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
             >
-              <UserPlus size={13} />
+              <UserPlus size={12} />
               Novo Administrador
             </button>
           </div>
+
+          {/* Toolbar de Pesquisa e Ordenação */}
+          {adminsList.length > 0 && (
+            <ListToolbar
+              className="mb-4"
+              search={adminSearch}
+              onSearchChange={(v) => {
+                setAdminSearch(v);
+                setAdminPage(1);
+              }}
+              searchPlaceholder="Pesquisar por nome ou e-mail..."
+              sortValue={adminSort}
+              onSortChange={setAdminSort}
+              sortOptions={[
+                { label: "Nome (A-Z)", value: "name-asc" },
+                { label: "Nome (Z-A)", value: "name-desc" },
+                { label: "Ativos Primeiro", value: "status" },
+              ]}
+            />
+          )}
 
           <div className="space-y-3">
             {loadingAdmins ? (
@@ -1225,134 +1313,164 @@ export default function PlatformSettingsPage() {
                   Para além da sua conta, não existem outros utilizadores com perfil de administrador na plataforma.
                 </p>
               </div>
+            ) : filteredAdmins.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground border border-dashed border-border rounded-xl bg-card/50">
+                <SearchX size={30} className="mb-2 opacity-40 text-muted-foreground" />
+                <p className="text-sm font-medium text-foreground">Nenhum administrador encontrado</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Não foram encontrados resultados para a pesquisa «{adminSearch}».
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminSearch("");
+                    setAdminPage(1);
+                  }}
+                  className="mt-3 text-xs text-primary font-medium hover:underline"
+                >
+                  Limpar pesquisa
+                </button>
+              </div>
             ) : (
-              adminsList.map((admin) => (
-              <div
-                key={admin.id}
-                className={`p-4 rounded-xl border transition-colors ${
-                  admin.active
-                    ? "border-border bg-card"
-                    : "border-border/50 bg-muted/20 opacity-80"
-                }`}
-              >
-                <div className="flex items-start gap-3.5">
+              <>
+                {paginatedAdmins.map((admin) => (
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 font-mono shadow-xs ${
+                    key={admin.id}
+                    className={`p-4 rounded-xl border transition-colors ${
                       admin.active
-                        ? "bg-primary/10 text-primary border border-primary/20"
-                        : "bg-muted text-muted-foreground border border-border"
+                        ? "border-border bg-card"
+                        : "border-border/50 bg-muted/20 opacity-80"
                     }`}
                   >
-                    {((admin.first_name?.[0] || "") + (admin.last_name?.[0] || "")) ||
-                      admin.email?.slice(0, 2).toUpperCase() ||
-                      "AD"}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p
-                        className={`text-sm font-semibold ${
+                    <div className="flex items-start gap-3.5">
+                      <div
+                        className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 font-mono shadow-xs ${
                           admin.active
-                            ? "text-foreground"
-                            : "text-muted-foreground"
-                        }`}
-                      >
-                        {[admin.first_name, admin.last_name].filter(Boolean).join(" ") ||
-                          admin.email ||
-                          "Administrador"}
-                      </p>
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                          admin.active
-                            ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                            ? "bg-primary/10 text-primary border border-primary/20"
                             : "bg-muted text-muted-foreground border border-border"
                         }`}
                       >
-                        {admin.active ? "Ativo" : "Inativo"}
-                      </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-primary/10 text-primary border border-primary/20">
-                        Administrador
-                      </span>
-                    </div>
+                        {((admin.first_name?.[0] || "") + (admin.last_name?.[0] || "")) ||
+                          admin.email?.slice(0, 2).toUpperCase() ||
+                          "AD"}
+                      </div>
 
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1.5">
-                        <Mail size={12} className="text-muted-foreground/70" />
-                        <span className="font-mono">{admin.email}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p
+                            className={`text-sm font-semibold ${
+                              admin.active
+                                ? "text-foreground"
+                                : "text-muted-foreground"
+                            }`}
+                          >
+                            {[admin.first_name, admin.last_name].filter(Boolean).join(" ") ||
+                              admin.email ||
+                              "Administrador"}
+                          </p>
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                              admin.active
+                                ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                                : "bg-muted text-muted-foreground border border-border"
+                            }`}
+                          >
+                            {admin.active ? "Ativo" : "Inativo"}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-primary/10 text-primary border border-primary/20">
+                            Administrador
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1.5">
+                            <Mail size={12} className="text-muted-foreground/70" />
+                            <span className="font-mono">{admin.email}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-4 mt-2 text-[11px] text-muted-foreground">
+                          {admin.created_at && (
+                            <span>Registado em: {admin.created_at}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <ActionTooltip content="Editar utilizador">
+                          <button
+                            type="button"
+                            onClick={() => openEditAdmin(admin)}
+                            className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        </ActionTooltip>
+
+                        <ActionTooltip content={admin.active ? "Inativar utilizador" : "Ativar utilizador"}>
+                          <button
+                            type="button"
+                            onClick={() => setAdminStatusConfirm(admin)}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              admin.active
+                                ? "hover:bg-amber-500/10 text-muted-foreground hover:text-amber-600"
+                                : "hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-600"
+                            }`}
+                          >
+                            {admin.active ? (
+                              <UserX size={14} />
+                            ) : (
+                              <UserCheck size={14} />
+                            )}
+                          </button>
+                        </ActionTooltip>
+
+                        <ActionTooltip
+                          content={
+                            admin.can_delete === false ? (
+                              <div className="flex items-start gap-1.5 text-left py-0.5">
+                                <AlertTriangle size={13} className="text-amber-400 flex-shrink-0 mt-0.5" />
+                                <span>
+                                  {admin.cannot_delete_reason || "Não é possível eliminar este utilizador."}
+                                </span>
+                              </div>
+                            ) : (
+                              "Eliminar utilizador"
+                            )
+                          }
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (admin.can_delete !== false) {
+                                setAdminDeleteConfirm(admin);
+                              }
+                            }}
+                            disabled={admin.can_delete === false}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              admin.can_delete === false
+                                ? "opacity-30 cursor-not-allowed text-muted-foreground"
+                                : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                            }`}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </ActionTooltip>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-4 mt-2 text-[11px] text-muted-foreground">
-                      {admin.created_at && (
-                        <span>Registado em: {admin.created_at}</span>
-                      )}
-                    </div>
                   </div>
+                ))}
 
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <ActionTooltip content="Editar utilizador">
-                      <button
-                        type="button"
-                        onClick={() => openEditAdmin(admin)}
-                        className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                    </ActionTooltip>
-
-                    <ActionTooltip content={admin.active ? "Inativar utilizador" : "Ativar utilizador"}>
-                      <button
-                        type="button"
-                        onClick={() => setAdminStatusConfirm(admin)}
-                        className={`p-1.5 rounded-lg transition-colors ${
-                          admin.active
-                            ? "hover:bg-amber-500/10 text-muted-foreground hover:text-amber-600"
-                            : "hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-600"
-                        }`}
-                      >
-                        {admin.active ? (
-                          <UserX size={14} />
-                        ) : (
-                          <UserCheck size={14} />
-                        )}
-                      </button>
-                    </ActionTooltip>
-
-                    <ActionTooltip
-                      content={
-                        admin.can_delete === false ? (
-                          <div className="flex items-start gap-1.5 text-left py-0.5">
-                            <AlertTriangle size={13} className="text-amber-400 flex-shrink-0 mt-0.5" />
-                            <span>
-                              {admin.cannot_delete_reason || "Não é possível eliminar este utilizador."}
-                            </span>
-                          </div>
-                        ) : (
-                          "Eliminar utilizador"
-                        )
-                      }
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (admin.can_delete !== false) {
-                            setAdminDeleteConfirm(admin);
-                          }
-                        }}
-                        disabled={admin.can_delete === false}
-                        className={`p-1.5 rounded-lg transition-colors ${
-                          admin.can_delete === false
-                            ? "opacity-30 cursor-not-allowed text-muted-foreground"
-                            : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                        }`}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </ActionTooltip>
-                  </div>
-                </div>
-              </div>
-            )))}
+                {/* Paginação */}
+                <ListPagination
+                  currentPage={adminPage}
+                  totalItems={filteredAdmins.length}
+                  pageSize={adminPageSize}
+                  onPageChange={setAdminPage}
+                  onPageSizeChange={setAdminPageSize}
+                />
+              </>
+            )}
           </div>
 
           {/* Modal: Criar / Editar Administrador */}
@@ -1566,7 +1684,7 @@ export default function PlatformSettingsPage() {
       {/* Tab: Tipos de Falta */}
       {activeTab === "absence-types" && (
         <>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-start justify-between gap-3 mb-4">
             <div>
               <h3 className="text-sm font-semibold text-foreground">
                 Tipos de Falta
@@ -1578,99 +1696,138 @@ export default function PlatformSettingsPage() {
             <button
               type="button"
               onClick={openAddAbsenceType}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent text-white text-xs font-medium hover:bg-accent/90 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
             >
-              <Plus size={13} />
+              <Plus size={12} />
               Novo Tipo
             </button>
           </div>
+          {/* Toolbar de Pesquisa e Ordenação */}
+          {absenceTypesList.length > 0 && (
+            <ListToolbar
+              className="mb-4"
+              search={absenceTypeSearch}
+              onSearchChange={(v) => {
+                setAbsenceTypeSearch(v);
+                setAbsenceTypePage(1);
+              }}
+              searchPlaceholder="Pesquisar tipo de falta..."
+              sortValue={absenceTypeSort}
+              onSortChange={setAbsenceTypeSort}
+              sortOptions={[
+                { label: "Nome (A-Z)", value: "name-asc" },
+                { label: "Nome (Z-A)", value: "name-desc" },
+                { label: "Com Documento Primeiro", value: "doc-required" },
+              ]}
+            />
+          )}
+
           {loadingAbsenceTypes ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 size={20} className="animate-spin mr-2" />
               <span className="text-sm">A carregar tipos de falta...</span>
             </div>
           ) : absenceTypesList.length === 0 ? (
-            <div className="text-center py-12 px-4 border border-dashed border-border rounded-xl flex flex-col items-center justify-center">
-              <div className="w-12 h-12 rounded-xl bg-muted/60 flex items-center justify-center text-muted-foreground mb-3">
-                <FileText size={24} />
-              </div>
-              <h4 className="text-sm font-semibold text-foreground mb-1">
+            <div className="p-8 text-center border border-dashed border-border rounded-xl bg-card/50 flex flex-col items-center justify-center">
+              <FileText size={28} className="mx-auto text-muted-foreground/50 mb-2" />
+              <p className="text-sm font-medium text-foreground">
                 Nenhum tipo de falta registado
-              </h4>
-              <p className="text-xs text-muted-foreground max-w-sm mb-4">
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
                 Comece por criar os tipos de falta para que assistentes e administradores possam justificar e registar ausências.
+              </p>
+            </div>
+          ) : filteredAbsenceTypes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground border border-dashed border-border rounded-xl bg-card/50">
+              <SearchX size={30} className="mb-2 opacity-40 text-muted-foreground" />
+              <p className="text-sm font-medium text-foreground">Nenhum tipo de falta encontrado</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Não foram encontrados resultados para a pesquisa «{absenceTypeSearch}».
               </p>
               <button
                 type="button"
-                onClick={openAddAbsenceType}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+                onClick={() => {
+                  setAbsenceTypeSearch("");
+                  setAbsenceTypePage(1);
+                }}
+                className="mt-3 text-xs text-primary font-medium hover:underline"
               >
-                <Plus size={14} />
-                Criar Primeiro Tipo
+                Limpar pesquisa
               </button>
             </div>
           ) : (
-            <div className="space-y-2">
-              {absenceTypesList.map((t) => (
-                <div
-                  key={t.id}
-                  className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border bg-card"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <FileText size={14} className="text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">{t.name}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {(t.requiresDocument ?? t.requires_document) ? (
-                        <span className="flex items-center gap-1">
-                          <Paperclip size={10} />
-                          Requer documento comprovativo
-                        </span>
-                      ) : (
-                        "Sem documento obrigatório"
-                      )}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <ActionTooltip content="Editar tipo de falta">
-                      <button
-                        type="button"
-                        onClick={() => openEditAbsenceType(t)}
-                        className="p-1.5 rounded hover:bg-muted transition-colors"
-                      >
-                        <Pencil size={13} className="text-muted-foreground" />
-                      </button>
-                    </ActionTooltip>
-
-                    {t.can_delete === false ? (
-                      <ActionTooltip
-                        content={
-                          t.cannot_delete_reason ||
-                          "Este tipo de falta tem faltas associadas e não pode ser eliminado."
-                        }
-                      >
-                        <span className="p-1.5 cursor-not-allowed opacity-40">
-                          <Trash2 size={13} className="text-muted-foreground" />
-                        </span>
-                      </ActionTooltip>
-                    ) : (
-                      <ActionTooltip content="Eliminar tipo de falta">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                {paginatedAbsenceTypes.map((t) => (
+                  <div
+                    key={t.id}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border bg-card"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <FileText size={14} className="text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{t.name}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {(t.requiresDocument ?? t.requires_document) ? (
+                          <span className="flex items-center gap-1">
+                            <Paperclip size={10} />
+                            Requer documento comprovativo
+                          </span>
+                        ) : (
+                          "Sem documento obrigatório"
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <ActionTooltip content="Editar tipo de falta">
                         <button
                           type="button"
-                          onClick={() => setAbsenceTypeDeleteConfirm(t)}
-                          className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
+                          onClick={() => openEditAbsenceType(t)}
+                          className="p-1.5 rounded hover:bg-muted transition-colors"
                         >
-                          <Trash2
-                            size={13}
-                            className="text-muted-foreground hover:text-destructive"
-                          />
+                          <Pencil size={13} className="text-muted-foreground" />
                         </button>
                       </ActionTooltip>
-                    )}
+
+                      {t.can_delete === false ? (
+                        <ActionTooltip
+                          content={
+                            t.cannot_delete_reason ||
+                            "Este tipo de falta tem faltas associadas e não pode ser eliminado."
+                          }
+                        >
+                          <span className="p-1.5 cursor-not-allowed opacity-40">
+                            <Trash2 size={13} className="text-muted-foreground" />
+                          </span>
+                        </ActionTooltip>
+                      ) : (
+                        <ActionTooltip content="Eliminar tipo de falta">
+                          <button
+                            type="button"
+                            onClick={() => setAbsenceTypeDeleteConfirm(t)}
+                            className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
+                          >
+                            <Trash2
+                              size={13}
+                              className="text-muted-foreground hover:text-destructive"
+                            />
+                          </button>
+                        </ActionTooltip>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+
+              {/* Paginação */}
+              <ListPagination
+                currentPage={absenceTypePage}
+                totalItems={filteredAbsenceTypes.length}
+                pageSize={absenceTypePageSize}
+                onPageChange={setAbsenceTypePage}
+                onPageSizeChange={setAbsenceTypePageSize}
+              />
             </div>
           )}
 

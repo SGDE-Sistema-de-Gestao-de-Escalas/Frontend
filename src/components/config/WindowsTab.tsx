@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import TimePicker from "../common/TimePicker";
 import DatePicker from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
+import CustomSelect from "../common/CustomSelect";
 import { useSchool } from "../../context/SchoolContext";
 
 export default function WindowsTab() {
@@ -306,15 +307,15 @@ export default function WindowsTab() {
                     <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                       Duração
                     </label>
-                    <select
+                    <CustomSelect
                       value={formLunchDuration}
-                      onChange={(e) => setFormLunchDuration(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-                    >
-                      <option value="30">30 min</option>
-                      <option value="45">45 min</option>
-                      <option value="60">60 min</option>
-                    </select>
+                      onChange={(e: any) => setFormLunchDuration(typeof e === "string" ? e : e.target.value)}
+                      options={[
+                        { value: "30", label: "30 min" },
+                        { value: "45", label: "45 min" },
+                        { value: "60", label: "60 min" },
+                      ]}
+                    />
                   </div>
                 </div>
               </div>

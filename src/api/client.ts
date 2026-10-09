@@ -30,6 +30,7 @@ apiClient.interceptors.request.use(
     const isGlobalRoute =
       url.includes("/schools") ||
       url.includes("/absence-types") ||
+      url.includes("/holidays") ||
       url.includes("/roles") ||
       url.includes("/users") ||
       url.includes("/me");

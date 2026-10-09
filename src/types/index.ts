@@ -260,8 +260,11 @@ export interface Holiday {
   id: EntityId;
   name: string;
   date: string;
-  type: "national" | "municipal" | "nacional";
-  impact: "low" | "medium" | "high" | "baixo" | "médio" | "alto";
+  description?: string | null;
+  type?: "national" | "municipal" | "nacional";
+  impact?: "low" | "medium" | "high" | "baixo" | "médio" | "alto";
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AuditLogEntry {
