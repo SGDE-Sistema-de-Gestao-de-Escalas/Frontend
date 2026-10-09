@@ -184,7 +184,7 @@ export default function AbsenceManagement() {
         </div>
         <button
           onClick={handleOpenAdd}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs"
         >
           <Plus size={14} />
           Nova Ausência

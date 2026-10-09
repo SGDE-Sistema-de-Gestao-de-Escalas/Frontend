@@ -100,31 +100,29 @@ export default function HolidaysPage() {
     .slice(0, 5);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-foreground">
-          Calendário de Feriados
-        </h2>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Gestão de feriados e dias não úteis aplicados às escalas do agrupamento
-        </p>
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">
+            Calendário de Feriados
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Gestão de feriados e dias não úteis aplicados às escalas do agrupamento
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={openAdd}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors flex-shrink-0 shadow-xs"
+        >
+          <Plus size={12} />
+          Adicionar
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-foreground">
-              Feriados Registados
-            </h3>
-            <button
-              type="button"
-              onClick={openAdd}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
-            >
-              <Plus size={12} />
-              Adicionar
-            </button>
-          </div>
 
           {/* Loading */}
           {isLoading && (
