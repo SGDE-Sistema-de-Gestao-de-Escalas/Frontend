@@ -56,11 +56,19 @@ export const usersService = {
 
   /**
    * Update an existing user
-   * PUT /api/users/{id}
+   * PATCH /api/users/{id}
    */
   async update(id: EntityId, data: Partial<UserApiPayload>): Promise<ApiResponse<BackendUserResource>> {
-    const response = await apiClient.put<ApiResponse<BackendUserResource>>(`/users/${id}`, data);
+    const response = await apiClient.patch<ApiResponse<BackendUserResource>>(`/users/${id}`, data);
     return response.data;
+  },
+
+  /**
+   * Activate user (Reactivate account)
+   * PATCH /api/users/{id}
+   */
+  async activate(id: EntityId): Promise<ApiResponse<BackendUserResource>> {
+    return this.update(id, { is_active: true });
   },
 
   /**

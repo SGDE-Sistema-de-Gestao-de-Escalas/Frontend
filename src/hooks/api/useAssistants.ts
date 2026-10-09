@@ -1,27 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notify } from "../../components/common/FeedbackNotification";
 import assistantsService, { AssistantFilters } from "../../api/services/assistants.service";
-import { assistants as mockAssistants } from "../../api/mockData";
-import { Assistant } from "../../types";
+import usersService from "../../api/services/users.service";
+import { Assistant, CreateAssistantPayload, UpdateAssistantPayload, EntityId } from "../../types";
 import { useSchool } from "../../context/SchoolContext";
 import { schoolScopedKey } from "../../lib/queryClient";
 
 export const ASSISTANTS_QUERY_KEY = ["assistants"];
-
-function mockFallback(schoolId: number | string, filters?: AssistantFilters) {
-  // Fallback local enquanto o endpoint do backend não está implementado.
-  let filtered = mockAssistants.filter((a) => String(a.schoolId) === String(schoolId));
-  if (filters?.search) {
-    const s = filters.search.toLowerCase();
-    filtered = filtered.filter(
-      (a) =>
-        a.name.toLowerCase().includes(s) ||
-        a.mecanografico?.toLowerCase().includes(s) ||
-        a.initials.toLowerCase().includes(s)
-    );
-  }
-  return filtered;
-}
 
 /**
  * Lista de assistentes da escola ativa.
@@ -34,33 +19,23 @@ export function useAssistantsList(filters?: AssistantFilters) {
   return useQuery({
     queryKey: schoolScopedKey("assistants", selectedSchoolId, "list", filters ?? {}),
     queryFn: async (): Promise<Assistant[]> => {
-      try {
-        const result = await assistantsService.getAll(filters);
-        // Se o backend ainda não devolve uma coleção (endpoint vazio), usa o fallback.
-        if (Array.isArray(result?.data)) return result.data;
-        return mockFallback(selectedSchoolId, filters);
-      } catch {
-        return mockFallback(selectedSchoolId, filters);
-      }
+      const result = await assistantsService.getAll(filters);
+      return Array.isArray(result?.data) ? result.data : [];
     },
+    enabled: !!selectedSchoolId,
   });
 }
 
 export function useAssistant(id?: number | string) {
   return useQuery({
     queryKey: [...ASSISTANTS_QUERY_KEY, "detail", id],
-    queryFn: async () => {
+    queryFn: async (): Promise<Assistant | null> => {
       if (!id) return null;
-      try {
-        const result = await assistantsService.getById(id);
-        return result.data;
-      } catch {
-        // Fallback to local mock data
-        const found = mockAssistants.find((a) => String(a.id) === String(id));
-        return found || mockAssistants[0] || null;
-      }
+      const result = await assistantsService.getById(id);
+      return result.data ?? null;
     },
     enabled: !!id,
+    retry: false,
   });
 }
 
@@ -68,13 +43,14 @@ export function useCreateAssistant() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: Partial<Assistant>) => assistantsService.create(data),
+    mutationFn: (data: CreateAssistantPayload) => assistantsService.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
       notify.success("O assistente foi registado com sucesso.", "Assistente Criado");
     },
-    onError: () => {
-      notify.error("Não foi possível criar o assistente.", "Erro ao Criar");
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || "Não foi possível criar o assistente.";
+      notify.error(message, "Erro ao Criar");
     },
   });
 }
@@ -83,7 +59,7 @@ export function useUpdateAssistant() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, data }: { id: number | string; data: Partial<Assistant> }) =>
+    mutationFn: ({ id, data }: { id: number | string; data: UpdateAssistantPayload }) =>
       assistantsService.update(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
@@ -92,8 +68,9 @@ export function useUpdateAssistant() {
       });
       notify.success("Os dados do assistente foram guardados.", "Assistente Atualizado");
     },
-    onError: () => {
-      notify.error("Não foi possível guardar as alterações.", "Erro ao Atualizar");
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || "Não foi possível guardar as alterações.";
+      notify.error(message, "Erro ao Atualizar");
     },
   });
 }
@@ -103,12 +80,103 @@ export function useDeleteAssistant() {
 
   return useMutation({
     mutationFn: (id: number | string) => assistantsService.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
+    onSuccess: (_, id) => {
+      // 1. Cancelar e remover o detalhe da cache para evitar refetch automático 404
+      queryClient.cancelQueries({ queryKey: [...ASSISTANTS_QUERY_KEY, "detail", id] });
+      queryClient.removeQueries({ queryKey: [...ASSISTANTS_QUERY_KEY, "detail", id] });
+
+      // 2. Invalidar apenas as listas de assistentes, excluindo o detalhe que acabou de ser eliminado
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          if (
+            Array.isArray(key) &&
+            key[0] === "assistants" &&
+            key[1] === "detail" &&
+            key[2] === id
+          ) {
+            return false;
+          }
+          return Array.isArray(key) && key.includes("assistants");
+        },
+      });
       notify.success("O registo do assistente foi removido.", "Assistente Eliminado");
     },
-    onError: () => {
-      notify.error("Não foi possível remover o assistente.", "Erro ao Eliminar");
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || "Não foi possível remover o assistente.";
+      notify.error(message, "Erro ao Eliminar");
     },
   });
 }
+
+export function useToggleAssistantStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      assistantId,
+      activate,
+    }: {
+      userId: EntityId;
+      assistantId: EntityId;
+      activate: boolean;
+    }) => {
+      if (activate) {
+        return await usersService.update(userId, { is_active: true });
+      } else {
+        return await usersService.deactivate(userId);
+      }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
+      queryClient.invalidateQueries({
+        queryKey: [...ASSISTANTS_QUERY_KEY, "detail", variables.assistantId],
+      });
+      if (variables.activate) {
+        notify.success("O assistente foi reativado com sucesso.", "Assistente Ativo");
+      } else {
+        notify.success("O assistente foi inativado com sucesso.", "Assistente Inativo");
+      }
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || "Não foi possível alterar o estado do assistente.";
+      notify.error(message, "Erro ao alterar estado");
+    },
+  });
+}
+
+export function useAnonymizeAssistant() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      assistantId,
+    }: {
+      userId: EntityId;
+      assistantId: EntityId;
+    }) => {
+      return await usersService.delete(userId);
+    },
+    onSuccess: (res, variables) => {
+      queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
+      queryClient.invalidateQueries({
+        queryKey: [...ASSISTANTS_QUERY_KEY, "detail", variables.assistantId],
+      });
+      notify.success(
+        res?.message || "Os dados pessoais do assistente foram anonimizados.",
+        "Dados Anonimizados"
+      );
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message ||
+        "Não foi possível anonimizar os dados do assistente.";
+      notify.error(message, "Erro ao Anonimizar");
+    },
+  });
+}
+
+
+

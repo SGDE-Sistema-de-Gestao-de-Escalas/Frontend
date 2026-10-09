@@ -17,9 +17,9 @@ export default function AssistantsListPage({
   const [tab, setTab] = useState<"ativos" | "inativos">("ativos");
   const { selectedSchool } = useSchool();
   // Muda automaticamente quando se troca de escola no header (schoolId na queryKey).
-  const { data: assistants = [], isLoading, isFetching } = useAssistantsList();
-  const active = assistants.filter((a) => (a.active ?? a.is_active ?? true));
-  const inactive = assistants.filter((a) => !(a.active ?? a.is_active ?? true));
+  const { data: assistants = [], isLoading, isFetching } = useAssistantsList({ status: "all" });
+  const active = assistants.filter((a) => !a.deleted_at && (a.active ?? a.is_active ?? true));
+  const inactive = assistants.filter((a) => a.deleted_at || !(a.active ?? a.is_active ?? true));
   const list = tab === "ativos" ? active : inactive;
 
   return (
@@ -59,7 +59,7 @@ export default function AssistantsListPage({
             },
             {
               id: "inativos" as const,
-              label: "Inativos / Em Licença",
+              label: "Inativos e Eliminados",
               count: inactive.length,
               color: "bg-muted-foreground",
             },
@@ -102,7 +102,7 @@ export default function AssistantsListPage({
           <p className="text-sm">Nenhum assistente nesta categoria para esta escola</p>
         </div>
       ) : (
-        <Card className="overflow-hidden border-border bg-card">
+        <Card className="overflow-hidden border-border bg-card gap-0">
           {/* Table header */}
           <div className="grid grid-cols-[2fr_2fr_1fr_auto] gap-4 px-4 py-2.5 border-b border-border bg-muted/20">
             <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
@@ -138,15 +138,15 @@ export default function AssistantsListPage({
                         : "text-muted-foreground"
                     }`}
                   >
-                    {a.initials}
+                    {a.initials || `${a.first_name?.[0] || ""}${a.last_name?.[0] || ""}`.toUpperCase() || "AS"}
                   </span>
                 </div>
                 <div className="min-w-0">
                   <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate block">
-                    {a.name}
+                    {a.name || `${a.first_name || ""} ${a.last_name || ""}`.trim()}
                   </span>
                   <span className="text-[10px] font-mono text-muted-foreground">
-                    {a.mecanografico}
+                    {a.internal_number || a.mecanografico || a.staffNumber || "—"}
                   </span>
                 </div>
               </div>
@@ -154,14 +154,26 @@ export default function AssistantsListPage({
                 {a.exception ?? "—"}
               </span>
               <span className="hidden sm:flex items-center gap-1.5">
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    tab === "ativos" ? "bg-[#0E7C59]" : "bg-muted-foreground"
-                  }`}
-                />
-                <span className="text-xs text-muted-foreground">
-                  {tab === "ativos" ? "Ativo" : "Inativo"}
-                </span>
+                {a.deleted_at ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                    <span className="text-xs text-rose-600 dark:text-rose-400 font-medium">
+                      Eliminado
+                    </span>
+                  </>
+                ) : !(a.active ?? a.is_active ?? true) ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                      Inativo
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#0E7C59]" />
+                    <span className="text-xs text-muted-foreground">Ativo</span>
+                  </>
+                )}
               </span>
               <ChevronRight
                 size={14}

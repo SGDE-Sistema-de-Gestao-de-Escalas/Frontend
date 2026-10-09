@@ -5,10 +5,19 @@ import {
   Calendar,
   CheckCircle,
   ChevronLeft,
+  Clock,
   Edit2,
+  FileText,
+  HeartHandshake,
   Info,
+  Loader2,
+  Mail,
+  MapPin,
   Pencil,
+  Phone,
   Plus,
+  ShieldAlert,
+  ShieldCheck,
   Trash2,
   User,
   UserCheck,
@@ -19,12 +28,21 @@ import { Badge } from "../ui/badge";
 import { Switch } from "../ui/switch";
 import ProfileScheduleHistory from "./ProfileScheduleHistory";
 import AddEditAssistant from "./AddEditAssistant";
+import AssistantScheduleManager from "./AssistantScheduleManager";
 import Modal from "../common/Modal";
 import ConfirmationModal from "../common/ConfirmationModal";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
+import {
+  useAssistant,
+  useUpdateAssistant,
+  useDeleteAssistant,
+  useToggleAssistantStatus,
+  useAnonymizeAssistant,
+} from "../../hooks/api/useAssistants";
 import type { EntityId } from "../../types";
+
 
 interface ExceptionRule {
   id: string;
@@ -84,12 +102,28 @@ interface AssistantProfileProps {
 
 export default function AssistantProfile({
   onBack,
-  assistantName = "Ana Costa",
-  initials = "ER",
+  assistantName = "Assistente",
+  initials = "AS",
+  assistantId,
   initialActive = true,
 }: AssistantProfileProps) {
-  useDocumentTitle(`${assistantName} - Perfil`);
-  const [activeTab, setActiveTab] = useState<"info" | "history">("info");
+  const { data: assistant, isLoading } = useAssistant(assistantId);
+  const updateAssistantMutation = useUpdateAssistant();
+  const deleteAssistantMutation = useDeleteAssistant();
+  const toggleStatusMutation = useToggleAssistantStatus();
+  const anonymizeMutation = useAnonymizeAssistant();
+
+  const resolvedName =
+    assistant?.name ||
+    (assistant?.first_name ? `${assistant.first_name} ${assistant.last_name || ""}`.trim() : "") ||
+    assistantName;
+
+  const resolvedInitials =
+    assistant?.initials ||
+    (assistant?.first_name ? `${assistant.first_name[0] || ""}${assistant.last_name?.[0] || ""}`.toUpperCase() : "") ||
+    initials;
+
+  const [activeTab, setActiveTab] = useState<"info" | "history" | "exceptions">("info");
   const [showAddException, setShowAddException] = useState(false);
   const [exceptions, setExceptions] = useState<ExceptionRule[]>(INITIAL_EXCEPTIONS);
   const [editingExceptionId, setEditingExceptionId] = useState<string | null>(null);
@@ -105,6 +139,40 @@ export default function AssistantProfile({
   const [isActive, setIsActive] = useState<boolean>(initialActive);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showAnonymizeModal, setShowAnonymizeModal] = useState(false);
+
+  useDocumentTitle(`${resolvedName} - Perfil`);
+
+  const currentIsActive = assistant ? (assistant.is_active ?? assistant.active ?? true) : isActive;
+  const currentAvailableForTransfer = assistant
+    ? (assistant.available_for_transfer ?? assistant.availableForTransfer ?? false)
+    : availableForTransfer;
+
+  function handleToggleTransfer(val: boolean) {
+    setAvailableForTransfer(val);
+    if (assistant?.id) {
+      updateAssistantMutation.mutate({
+        id: assistant.id,
+        data: { available_for_transfer: val },
+      });
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (assistant?.id) {
+      const idToDelete = assistant.id;
+      setShowDeleteModal(false);
+      if (onBack) onBack();
+      try {
+        await deleteAssistantMutation.mutateAsync(idToDelete);
+      } catch {
+        // Handled in mutation onError
+      }
+    } else {
+      setShowDeleteModal(false);
+      if (onBack) onBack();
+    }
+  }
 
   function openAddException() {
     setEditingExceptionId(null);
@@ -174,12 +242,37 @@ export default function AssistantProfile({
     }
   }
 
-  function formatDateDisplay(d?: string) {
-    if (!d) return "Em aberto";
+  function formatDateDisplay(d?: string | null) {
+    if (!d) return "—";
     if (d.includes("/")) return d;
     const parts = d.split("-");
     if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
     return d;
+  }
+
+  function calculateAge(dateStr?: string | null): number | null {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - d.getFullYear();
+    const m = today.getMonth() - d.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < d.getDate())) {
+      age--;
+    }
+    return age >= 0 ? age : null;
+  }
+
+  function getCriminalRecordStatus(expiry?: string | null, hasRecord?: boolean) {
+    if (!expiry) {
+      if (hasRecord) return { label: "Entregue (Sem Validade)", variant: "success" as const };
+      return { label: "Pendente / Não Registado", variant: "warning" as const };
+    }
+    const today = new Date().toISOString().split("T")[0];
+    if (expiry < today) {
+      return { label: `Expirado (${formatDateDisplay(expiry)})`, variant: "destructive" as const };
+    }
+    return { label: `Válido até ${formatDateDisplay(expiry)}`, variant: "success" as const };
   }
 
   function getStatusInfo(rule: ExceptionRule) {
@@ -196,11 +289,39 @@ export default function AssistantProfile({
     return { status: "Vigente", className: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" };
   }
 
-  if (editing) {
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
+        <Loader2 size={24} className="animate-spin text-primary" />
+        <span className="text-sm">A carregar perfil do assistente...</span>
+      </div>
+    );
+  }
+
+  if (assistantId && !assistant && !isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
+        <p className="text-sm">Assistente não encontrado.</p>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="text-xs text-primary underline"
+          >
+            Voltar à lista de assistentes
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  const isDeletedOrAnonymized = !!(assistant?.deleted_at || assistant?.is_anonymized);
+
+  if (editing && !isDeletedOrAnonymized) {
     return (
       <AddEditAssistant
         isEdit
-        initialActive={isActive}
+        assistant={assistant}
+        initialActive={currentIsActive}
         onSave={() => setEditing(false)}
         onCancel={() => setEditing(false)}
         onBack={onBack}
@@ -224,85 +345,125 @@ export default function AssistantProfile({
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
             <span className="text-base font-bold text-primary font-mono">
-              {initials}
+              {resolvedInitials}
             </span>
           </div>
           <div>
             <h2 className="text-xl font-semibold text-foreground">
-              {assistantName}
+              {resolvedName}
             </h2>
             <div className="flex items-center gap-2 mt-0.5">
               <Badge
                 variant="outline"
                 className={
-                  isActive
+                  assistant?.is_anonymized
+                    ? "bg-muted text-muted-foreground border-border"
+                    : assistant?.deleted_at
+                    ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                    : currentIsActive
                     ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                    : "bg-muted text-muted-foreground border-border"
+                    : "bg-amber-500/10 text-amber-600 border-amber-500/20"
                 }
               >
-                {isActive ? "Ativo" : "Inativo"}
+                {assistant?.is_anonymized
+                  ? "Anonimizado"
+                  : assistant?.deleted_at
+                  ? "Eliminado"
+                  : currentIsActive
+                  ? "Ativo"
+                  : "Inativo"}
               </Badge>
-              <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
-                Licença Amamentação
-              </Badge>
+              {assistant?.exception && (
+                <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+                  {assistant.exception}
+                </Badge>
+              )}
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setShowStatusModal(true)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-              isActive
-                ? "border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
-                : "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
-            }`}
-            title={isActive ? "Inativar Assistente" : "Reativar Assistente"}
-          >
-            {isActive ? <UserX size={14} /> : <UserCheck size={14} />}
-            {isActive ? "Inativar" : "Reativar"}
-          </button>
+          {!isDeletedOrAnonymized && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowStatusModal(true)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  currentIsActive
+                    ? "border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
+                    : "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+                }`}
+                title={currentIsActive ? "Inativar Assistente" : "Reativar Assistente"}
+              >
+                {currentIsActive ? <UserX size={14} /> : <UserCheck size={14} />}
+                {currentIsActive ? "Inativar" : "Reativar"}
+              </button>
 
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
-          >
-            <Edit2 size={13} />
-            Editar
-          </button>
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+              >
+                <Edit2 size={13} />
+                Editar Perfil
+              </button>
 
-          <button
-            type="button"
-            onClick={() => setShowDeleteModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-destructive/20 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-            title="Eliminar Assistente"
-          >
-            <Trash2 size={13} />
-            Eliminar
-          </button>
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-destructive/20 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                title="Eliminar Assistente"
+              >
+                <Trash2 size={13} />
+                Eliminar
+              </button>
+            </>
+          )}
         </div>
       </div>
 
+      {assistant?.is_anonymized ? (
+        <div className="flex items-center gap-2.5 px-3.5 py-2.5 mb-6 rounded-lg border border-border/70 bg-muted/40 text-muted-foreground text-xs">
+          <ShieldCheck size={15} className="shrink-0 text-muted-foreground" />
+          <span>
+            <strong className="text-foreground font-medium">Registo Anonimizado:</strong> Os dados pessoais deste assistente foram anonimizados permanentemente ao abrigo do RGPD. O histórico de escalas e turnos permanece preservado de forma anónima.
+          </span>
+        </div>
+      ) : assistant?.deleted_at ? (
+        <div className="flex items-center justify-between gap-3 p-3.5 mb-6 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400 text-sm flex-wrap">
+          <div className="flex items-center gap-3">
+            <AlertTriangle size={18} className="shrink-0" />
+            <div>
+              <p className="font-semibold">Registo Eliminado</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Este assistente encontra-se eliminado (soft-delete). O histórico permanece em arquivo e pode proceder à anonimização total dos dados pessoais para efeitos de RGPD.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAnonymizeModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 text-xs font-medium transition-colors ml-auto shadow-xs"
+          >
+            <ShieldAlert size={13} />
+            Anonimizar Agora
+          </button>
+        </div>
+      ) : null}
+
       {/* Tabs */}
       <div className="flex gap-px border-b border-border mb-6">
-        {(
-          [
-            { id: "info", label: "Dados & Exceções", icon: <User size={13} /> },
-            {
-              id: "history",
-              label: "Histórico de Horários",
-              icon: <Calendar size={13} />,
-            },
-          ] as const
-        ).map((tab) => (
+        {[
+          { id: "info" as const, label: "Informações Gerais", icon: <User size={13} /> },
+          { id: "history" as const, label: "Horários & Escalas", icon: <Calendar size={13} /> },
+          { id: "exceptions" as const, label: "Regras de Exceção", icon: <AlertTriangle size={13} /> },
+        ].map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === tab.id
-                ? "border-accent text-accent bg-accent/5"
+                ? "border-primary text-primary bg-primary/5 font-semibold"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -312,123 +473,321 @@ export default function AssistantProfile({
         ))}
       </div>
 
-      {/* Dados & Exceções tab */}
+      {/* ── Informações Gerais tab ── */}
       {activeTab === "info" && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="col-span-1 space-y-4">
-            <Card className="p-5">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                Dados Pessoais
-              </h4>
-              <div className="space-y-3">
-                {[
-                  { label: "Nº Mecanográfico", value: "ME-00127" },
-                  { label: "Email", value: "e.rodrigues@sgde.pt" },
-                  { label: "Telefone", value: "+351 912 345 678" },
-                  { label: "Admissão", value: "14/03/2019" },
-                ].map((f) => (
-                  <div key={f.label} className="flex justify-between">
-                    <span className="text-muted-foreground text-xs">
-                      {f.label}
-                    </span>
-                    <span className="font-mono text-xs font-medium">
-                      {f.value}
-                    </span>
-                  </div>
-                ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Card 1: Identificação & Contactos */}
+          <Card className="p-5 md:col-span-2 lg:col-span-2">
+            <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-border/50">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-primary/10 text-primary">
+                  <User size={15} />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  Identificação & Contactos
+                </h3>
               </div>
-            </Card>
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
+              >
+                <Edit2 size={11} />
+                Editar Dados
+              </button>
+            </div>
 
-            <Card className="p-4">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                Carga Horária Atual
-              </h4>
-              <div className="text-center">
-                <span className="text-3xl font-mono font-bold text-accent">
-                  6h
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <span className="text-xs text-muted-foreground block mb-0.5">Nome Próprio</span>
+                <span className="text-sm font-medium text-foreground">
+                  {assistant?.first_name || (assistant?.name ? assistant.name.split(" ")[0] : "—")}
                 </span>
-                <p className="text-xs text-muted-foreground mt-1">
-                  por dia · regime reduzido
-                </p>
-                <p className="text-[10px] text-[#D97706] mt-1 font-mono">
-                  Licença Amamentação (vigente)
-                </p>
               </div>
-              <div className="mt-3 pt-3 border-t border-border space-y-1.5">
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Entrada</span>
-                  <span className="font-mono font-medium">10:00</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Saída</span>
-                  <span className="font-mono font-medium">17:00</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Pausa almoço</span>
-                  <span className="font-mono font-medium">13:00 – 14:00</span>
-                </div>
+              <div>
+                <span className="text-xs text-muted-foreground block mb-0.5">Apelido</span>
+                <span className="text-sm font-medium text-foreground">
+                  {assistant?.last_name || (assistant?.name ? assistant.name.split(" ").slice(1).join(" ") : "—")}
+                </span>
               </div>
-            </Card>
-
-            {/* Inter-school availability card */}
-            <Card className="p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2.5">
-                  <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      availableForTransfer ? "bg-accent/10" : "bg-muted"
-                    }`}
+              <div>
+                <span className="text-xs text-muted-foreground block mb-0.5">Nº Mecanográfico</span>
+                <span className="inline-block px-2.5 py-0.5 rounded font-mono text-xs font-semibold bg-muted text-foreground border border-border">
+                  {assistant?.internal_number || assistant?.mecanografico || assistant?.staffNumber || "—"}
+                </span>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block mb-0.5">Estado da Conta</span>
+                <Badge
+                  variant="outline"
+                  className={
+                    currentIsActive
+                      ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                      : "bg-muted text-muted-foreground border-border"
+                  }
+                >
+                  {currentIsActive ? "Ativo" : "Inativo"}
+                </Badge>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block mb-0.5">Email Institucional</span>
+                {assistant?.email ? (
+                  <a
+                    href={`mailto:${assistant.email}`}
+                    className="text-sm text-primary hover:underline font-medium flex items-center gap-1.5 truncate"
                   >
-                    <Building2
-                      size={14}
-                      className={
-                        availableForTransfer
-                          ? "text-accent"
-                          : "text-muted-foreground"
-                      }
-                    />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-foreground">
-                      Disponibilidade Inter-escolar
-                    </p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
-                      {availableForTransfer
-                        ? "Pode ser convocado para cobrir noutras escolas da plataforma."
-                        : "Não disponível para transferência temporária."}
-                    </p>
-                  </div>
-                </div>
-                <Switch
-                  checked={availableForTransfer}
-                  onCheckedChange={setAvailableForTransfer}
-                  className="data-[state=checked]:bg-accent"
-                />
+                    <Mail size={13} className="shrink-0" />
+                    {assistant.email}
+                  </a>
+                ) : (
+                  <span className="text-sm text-muted-foreground">—</span>
+                )}
               </div>
-              {availableForTransfer && (
-                <div className="mt-3 pt-3 border-t border-border">
-                  <p className="text-[10px] text-muted-foreground flex items-center gap-1.5">
-                    <Info size={10} className="text-accent" />
-                    Ficará visível na lista de substitutos quando houver falhas de cobertura noutras escolas.
+              <div>
+                <span className="text-xs text-muted-foreground block mb-0.5">Telefone de Contacto</span>
+                {assistant?.phone ? (
+                  <a
+                    href={`tel:${assistant.phone}`}
+                    className="text-sm text-foreground hover:text-primary font-medium flex items-center gap-1.5"
+                  >
+                    <Phone size={13} className="shrink-0 text-muted-foreground" />
+                    {assistant.phone}
+                  </a>
+                ) : (
+                  <span className="text-sm text-muted-foreground">—</span>
+                )}
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block mb-0.5">Data de Nascimento</span>
+                <span className="text-sm font-medium text-foreground">
+                  {formatDateDisplay(assistant?.birth_date)}
+                  {assistant?.birth_date && calculateAge(assistant.birth_date) !== null && (
+                    <span className="text-muted-foreground font-normal ml-1.5 text-xs">
+                      ({calculateAge(assistant.birth_date)} anos)
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block mb-0.5">Data de Admissão</span>
+                <span className="text-sm font-medium text-foreground">
+                  {formatDateDisplay(assistant?.admission_date)}
+                </span>
+              </div>
+            </div>
+          </Card>
+
+          {/* Card 2: Enquadramento Fiscal & Institucional */}
+          <Card className="p-5">
+            <div className="flex items-center gap-2 pb-2 mb-2.5 border-b border-border/50">
+              <div className="p-1.5 rounded-md bg-primary/10 text-primary">
+                <FileText size={15} />
+              </div>
+              <h3 className="text-sm font-semibold text-foreground">
+                Dados Fiscais & Lotação
+              </h3>
+            </div>
+
+            <div className="space-y-3.5">
+              <div className="flex justify-between items-center py-1 border-b border-border/40">
+                <span className="text-xs text-muted-foreground">NIF</span>
+                <span className="font-mono text-xs font-semibold text-foreground">
+                  {assistant?.nif || "—"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-border/40">
+                <span className="text-xs text-muted-foreground">Segurança Social (NISS)</span>
+                <span className="font-mono text-xs font-semibold text-foreground">
+                  {assistant?.social_security_number || "—"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-border/40">
+                <span className="text-xs text-muted-foreground">Escola de Afetação</span>
+                <span className="text-xs font-medium text-foreground truncate max-w-[170px] text-right">
+                  {assistant?.school?.name || "Agrupamento Principal"}
+                </span>
+              </div>
+            </div>
+          </Card>
+
+          {/* Card 3: Morada Residencial */}
+          <Card className="p-5">
+            <div className="flex items-center gap-2 pb-2 mb-2.5 border-b border-border/50">
+              <div className="p-1.5 rounded-md bg-primary/10 text-primary">
+                <MapPin size={15} />
+              </div>
+              <h3 className="text-sm font-semibold text-foreground">
+                Morada Residencial
+              </h3>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <span className="text-muted-foreground block mb-0.5">Rua / Endereço</span>
+                <p className="text-sm font-medium text-foreground leading-snug">
+                  {assistant?.address_street || "Não especificado"}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/40">
+                <div>
+                  <span className="text-muted-foreground block mb-0.5">Código Postal</span>
+                  <span className="font-mono text-xs font-medium text-foreground">
+                    {assistant?.address_zip_code || "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block mb-0.5">Localidade</span>
+                  <span className="text-xs font-medium text-foreground">
+                    {assistant?.address_city || "—"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Card 4: Contacto de Emergência */}
+          <Card className="p-5">
+            <div className="flex items-center gap-2 pb-2 mb-2.5 border-b border-border/50">
+              <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-600">
+                <HeartHandshake size={15} />
+              </div>
+              <h3 className="text-sm font-semibold text-foreground">
+                Contacto de Emergência
+              </h3>
+            </div>
+
+            {assistant?.emergency_contact_name ? (
+              <div className="space-y-2.5 text-xs">
+                <div>
+                  <span className="text-muted-foreground block mb-0.5">Nome do Contacto</span>
+                  <p className="text-sm font-semibold text-foreground">
+                    {assistant.emergency_contact_name}
                   </p>
                 </div>
-              )}
-            </Card>
-          </div>
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/40">
+                  <div>
+                    <span className="text-muted-foreground block mb-0.5">Grau de Parentesco</span>
+                    <span className="text-xs font-medium text-foreground">
+                      {assistant.emergency_contact_kinship || "Contacto Direto"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block mb-0.5">Telefone de Emergência</span>
+                    {assistant.emergency_contact_phone ? (
+                      <a
+                        href={`tel:${assistant.emergency_contact_phone}`}
+                        className="text-xs font-medium text-primary hover:underline"
+                      >
+                        {assistant.emergency_contact_phone}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic py-2">
+                Nenhum contacto de emergência registado.
+              </p>
+            )}
+          </Card>
 
-          <div className="col-span-2 space-y-4">
+          {/* Card 5: Registo Criminal & Validade */}
+          <Card className="p-5">
+            <div className="flex items-center gap-2 pb-2 mb-2.5 border-b border-border/50">
+              <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-600">
+                <ShieldCheck size={15} />
+              </div>
+              <h3 className="text-sm font-semibold text-foreground">
+                Registo Criminal & Conformidade
+              </h3>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <span className="text-xs text-muted-foreground block mb-1">Estado do Certificado</span>
+                {(() => {
+                  const status = getCriminalRecordStatus(assistant?.criminal_record_expiry, assistant?.has_criminal_record);
+                  return (
+                    <Badge
+                      variant="outline"
+                      className={
+                        status.variant === "success"
+                          ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                          : status.variant === "destructive"
+                          ? "bg-destructive/10 text-destructive border-destructive/20"
+                          : "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                      }
+                    >
+                      {status.label}
+                    </Badge>
+                  );
+                })()}
+              </div>
+
+              <div className="pt-2 border-t border-border/40 text-xs">
+                <span className="text-muted-foreground block mb-0.5">Data de Validade</span>
+                <span className="font-mono text-xs font-medium text-foreground">
+                  {formatDateDisplay(assistant?.criminal_record_expiry)}
+                </span>
+              </div>
+            </div>
+          </Card>
+
+          {/* Card 6: Disponibilidade Inter-escolar */}
+          <Card className="p-5 md:col-span-2 lg:col-span-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div
+                  className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+                    currentAvailableForTransfer ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  <Building2 size={18} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground">
+                    Disponibilidade Inter-escolar
+                  </h4>
+                  <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl leading-relaxed">
+                    {currentAvailableForTransfer
+                      ? "O assistente está disponível para mobilidade e cobertura temporária de turnos noutras escolas da rede/agrupamento em situações de emergência ou carência."
+                      : "O assistente está alocado em exclusivo à sua escola de afetação e não será sugerido para transferências de serviço temporárias."}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={currentAvailableForTransfer}
+                onCheckedChange={handleToggleTransfer}
+                disabled={isDeletedOrAnonymized}
+                className="data-[state=checked]:bg-primary"
+              />
+            </div>
+          </Card>
+
+          {/* Card 7: Horário Padrão & Vigências */}
+          <AssistantScheduleManager assistantId={assistant?.id} />
+        </div>
+      )}
+
+      {/* ── Regras de Exceção tab ── */}
+      {activeTab === "exceptions" && (
+        <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-foreground">
                 Regras de Exceção e Vigências
               </h3>
-              <button
-                type="button"
-                onClick={openAddException}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
-              >
-                <Plus size={12} />
-                Nova Exceção
-              </button>
+              {!isDeletedOrAnonymized && (
+                <button
+                  type="button"
+                  onClick={openAddException}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+                >
+                  <Plus size={12} />
+                  Nova Exceção
+                </button>
+              )}
             </div>
 
             {showAddException && (
@@ -618,64 +977,101 @@ export default function AssistantProfile({
                 </tbody>
               </table>
             </Card>
-          </div>
         </div>
       )}
 
-      {/* Histórico de Horários tab */}
-      {activeTab === "history" && <ProfileScheduleHistory />}
+      {/* ── Horários & Escalas tab ── */}
+      {activeTab === "history" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-card">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-lg bg-primary/10 text-primary">
+                <Clock size={18} />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  Gestão de Horários & Vigências
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Consulte os turnos agendados e configure o horário padrão de funcionamento do assistente.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab("info")}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+            >
+              <Clock size={13} />
+              Gerir Horários do Assistente
+            </button>
+          </div>
+
+          <ProfileScheduleHistory />
+        </div>
+      )}
 
       {/* Modal: Confirmar Alteração de Estado (Inativar / Ativar) */}
       <ConfirmationModal
         open={showStatusModal}
         onClose={() => setShowStatusModal(false)}
-        onConfirm={() => {
-          setIsActive(!isActive);
-          setShowStatusModal(false);
+        isLoading={toggleStatusMutation.isPending}
+        onConfirm={async () => {
+          if (assistant?.user_id && assistant?.id) {
+            try {
+              await toggleStatusMutation.mutateAsync({
+                userId: assistant.user_id,
+                assistantId: assistant.id,
+                activate: !currentIsActive,
+              });
+              setShowStatusModal(false);
+            } catch {
+              // Notificação de erro já tratada no hook
+            }
+          } else {
+            setIsActive(!currentIsActive);
+            setShowStatusModal(false);
+          }
         }}
-        title={isActive ? "Inativar Assistente" : "Reativar Assistente"}
+        title={currentIsActive ? "Inativar Assistente" : "Reativar Assistente"}
         description={
-          isActive ? (
+          currentIsActive ? (
             <>
               Tem a certeza que pretende inativar o assistente{" "}
-              <strong className="text-foreground">{assistantName}</strong>?
+              <strong className="text-foreground">{resolvedName}</strong>?
               Enquanto estiver inativo, o assistente deixará de estar elegível para atribuição de novos turnos e horários ativos.
             </>
           ) : (
             <>
               Deseja reativar o assistente{" "}
-              <strong className="text-foreground">{assistantName}</strong>?
+              <strong className="text-foreground">{resolvedName}</strong>?
               O assistente voltará a estar ativo e elegível para escalas de serviço e marcações.
             </>
           )
         }
-        confirmLabel={isActive ? "Confirmar Inativação" : "Confirmar Reativação"}
+        confirmLabel={currentIsActive ? "Confirmar Inativação" : "Confirmar Reativação"}
         cancelLabel="Cancelar"
-        variant={isActive ? "warning" : "success"}
+        variant={currentIsActive ? "warning" : "success"}
       />
 
       {/* Modal: Confirmar Eliminação */}
       <ConfirmationModal
         open={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
-        onConfirm={() => {
-          setShowDeleteModal(false);
-          if (onBack) {
-            onBack();
-          }
-        }}
+        onConfirm={handleConfirmDelete}
         title="Eliminar Assistente"
         description={
           <>
-            Tem a certeza que pretende eliminar permanentemente o assistente{" "}
-            <strong className="text-foreground">{assistantName}</strong>?
-            Esta ação é irreversível e removerá o registo do assistente e todas as suas configurações associadas.
+            Tem a certeza que pretende eliminar o registo do assistente{" "}
+            <strong className="text-foreground">{resolvedName}</strong>?
+            Esta ação removerá o registo do assistente e a sua conta associada.
           </>
         }
         confirmLabel="Eliminar Definitivamente"
         cancelLabel="Cancelar"
         variant="danger"
       />
+
 
       {/* Modal: Confirmar Eliminação de Exceção */}
       <ConfirmationModal
@@ -693,6 +1089,39 @@ export default function AssistantProfile({
           ) : ""
         }
         confirmLabel="Eliminar Exceção"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
+
+      {/* Modal: Confirmar Anonimização (RGPD) */}
+      <ConfirmationModal
+        open={showAnonymizeModal}
+        onClose={() => setShowAnonymizeModal(false)}
+        isLoading={anonymizeMutation.isPending}
+        onConfirm={async () => {
+          if (assistant?.user_id && assistant?.id) {
+            try {
+              await anonymizeMutation.mutateAsync({
+                userId: assistant.user_id,
+                assistantId: assistant.id,
+              });
+              setShowAnonymizeModal(false);
+            } catch {
+              // Erro tratado no hook
+            }
+          }
+        }}
+        title="Anonimizar Dados Pessoais (RGPD)"
+        description={
+          <>
+            Tem a certeza que pretende anonimizar permanentemente os dados de{" "}
+            <strong className="text-foreground">{resolvedName}</strong>?
+            <br />
+            <br />
+            Esta ação é <strong>irreversível</strong> ao abrigo do RGPD. Todos os dados pessoais (email, telefone, NIF, morada e registo criminal) serão limpos ou substituídos por registos anónimos, mantendo apenas o histórico operacional de escalas.
+          </>
+        }
+        confirmLabel="Confirmar Anonimização"
         cancelLabel="Cancelar"
         variant="danger"
       />

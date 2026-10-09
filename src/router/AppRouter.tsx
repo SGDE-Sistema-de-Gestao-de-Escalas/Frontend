@@ -92,9 +92,12 @@ export default function AppRouter() {
         <Route path="/absences" element={<AdminRoute><Absences /></AdminRoute>} />
         <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
         <Route path="/config" element={<AdminRoute><Config /></AdminRoute>} />
+
         <Route path="/profile" element={<Profile />} />
+        <Route path="/profile/:id" element={<Profile />} />
         <Route path="/platform-settings" element={<AdminRoute><PlatformSettings /></AdminRoute>} />
         <Route path="/account" element={<Account />} />
+
 
         {/* Staff Routes */}
         <Route path="/staff/schedule" element={<StaffRoute><StaffSchedule /></StaffRoute>} />

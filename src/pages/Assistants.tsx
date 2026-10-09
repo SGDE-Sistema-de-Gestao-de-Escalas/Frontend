@@ -12,5 +12,10 @@ export default function Assistants() {
     return <NoSchoolPlaceholder moduleName="os Assistentes" />;
   }
 
-  return <AssistantsPageWrapper onViewProfile={() => navigate("/profile")} />;
+  return (
+    <AssistantsPageWrapper
+      onViewProfile={(id) => navigate(id ? `/profile/${id}` : "/profile")}
+    />
+  );
+
 }
