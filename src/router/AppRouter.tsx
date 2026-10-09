@@ -1,6 +1,7 @@
 import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useSchool } from "../context/SchoolContext";
 import MainLayout from "../components/layout/MainLayout";
 import Login from "../pages/Login";
 import OAuthCallback from "../pages/OAuthCallback";
@@ -21,13 +22,16 @@ import TitleUpdater from "./TitleUpdater";
 import { Loader2 } from "lucide-react";
 
 function ProtectedLayout() {
-  const { role, isLoading } = useAuth();
+  const { role, isLoading: isAuthLoading } = useAuth();
+  const { isLoading: isSchoolLoading } = useSchool();
 
-  if (isLoading) {
+  if (isAuthLoading || (role && isSchoolLoading)) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-background gap-3">
         <Loader2 size={32} className="animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">A verificar sessão...</p>
+        <p className="text-sm text-muted-foreground">
+          {isAuthLoading ? "A verificar sessão..." : "A carregar contexto da escola..."}
+        </p>
       </div>
     );
   }

@@ -1,11 +1,18 @@
 import React, { useState } from "react";
-import { Edit2, Info, Plus, Save, Trash2, X } from "lucide-react";
-import { DEFAULT_ACTIVITY_TYPES } from "../../api/mockData";
-import type { ActivityType } from "../../types";
+import { Edit2, Info, Plus, Trash2, Loader2, Power, AlertCircle } from "lucide-react";
 import { PRESET_COLORS } from "../dashboard/blockStyles";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import ConfirmationModal from "../common/ConfirmationModal";
+import ActionTooltip from "../common/ActionTooltip";
+import { Badge } from "../ui/badge";
+import {
+  useActivityTypesList,
+  useCreateActivityType,
+  useUpdateActivityType,
+  useDeleteActivityType,
+} from "../../hooks/api/useActivityTypes";
+import type { BackendActivityTypeResource } from "../../api/services/activityTypes.service";
 
 function ColorPicker({
   value,
@@ -60,51 +67,78 @@ function ColorPicker({
 }
 
 export default function ActivityTypesTab() {
-  const [types, setTypes] = useState<ActivityType[]>(DEFAULT_ACTIVITY_TYPES);
+  const { data: types = [], isLoading, isError, refetch } = useActivityTypesList();
+  const createMutation = useCreateActivityType();
+  const updateMutation = useUpdateActivityType();
+  const deleteMutation = useDeleteActivityType();
+
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formLabel, setFormLabel] = useState("");
-  const [formColor, setFormColor] = useState("#1A56DB");
-  const [deleteTarget, setDeleteTarget] = useState<ActivityType | null>(null);
+  const [formName, setFormName] = useState("");
+  const [formColor, setFormColor] = useState("#6366F1");
+  const [formActive, setFormActive] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<BackendActivityTypeResource | null>(null);
 
   function openAdd() {
     setEditingId(null);
-    setFormLabel("");
+    setFormName("");
     setFormColor("#6366F1");
+    setFormActive(true);
     setShowDialog(true);
   }
 
-  function openEdit(t: ActivityType) {
+  function openEdit(t: BackendActivityTypeResource) {
     setEditingId(t.id);
-    setFormLabel(t.label);
+    setFormName(t.name);
     setFormColor(t.color);
+    setFormActive(t.active ?? true);
     setShowDialog(true);
   }
 
-  function saveType() {
-    if (!formLabel.trim()) return;
+  async function saveType() {
+    if (!formName.trim()) return;
+
     if (editingId) {
-      setTypes((prev) =>
-        prev.map((t) =>
-          t.id === editingId
-            ? { ...t, label: formLabel.trim(), color: formColor }
-            : t
-        )
-      );
+      await updateMutation.mutateAsync({
+        id: editingId,
+        data: {
+          name: formName.trim(),
+          color: formColor,
+          active: formActive,
+        },
+      });
     } else {
-      const id =
-        formLabel.toLowerCase().replace(/[^a-z0-9]/g, "_") +
-        "_" +
-        Date.now().toString(36);
-      setTypes((prev) => [
-        ...prev,
-        { id, label: formLabel.trim(), color: formColor, builtIn: false },
-      ]);
+      await createMutation.mutateAsync({
+        name: formName.trim(),
+        color: formColor,
+        active: formActive,
+      });
     }
     setShowDialog(false);
     setEditingId(null);
-    setFormLabel("");
+    setFormName("");
   }
+
+  async function handleDeleteConfirm() {
+    if (!deleteTarget) return;
+    try {
+      await deleteMutation.mutateAsync(deleteTarget.id);
+      setDeleteTarget(null);
+    } catch {
+      // O erro já é tratado no hook / interceptor
+    }
+  }
+
+  async function handleToggleActive(t: BackendActivityTypeResource) {
+    await updateMutation.mutateAsync({
+      id: t.id,
+      data: {
+        active: !t.active,
+      },
+    });
+  }
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="space-y-5">
@@ -115,8 +149,7 @@ export default function ActivityTypesTab() {
             Tipos de Atividade
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Define os blocos disponíveis na edição de escalas — nome, cor e
-            regras de bloqueio.
+            Define os blocos disponíveis na edição de escalas — nome, cor e estado por escola.
           </p>
         </div>
         <button
@@ -128,52 +161,147 @@ export default function ActivityTypesTab() {
         </button>
       </div>
 
-      {/* Type list */}
-      <Card className="overflow-hidden border-border bg-card">
-        {types.map((t) => (
-          <div
-            key={t.id}
-            className="border-b border-border/50 last:border-0 flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors group"
+      {/* Loading state */}
+      {isLoading && (
+        <Card className="p-8 border-border bg-card flex flex-col items-center justify-center text-muted-foreground gap-3">
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          <span className="text-xs">A carregar tipos de atividade da escola...</span>
+        </Card>
+      )}
+
+      {/* Error state */}
+      {isError && !isLoading && (
+        <Card className="p-6 border-destructive/20 bg-destructive/5 flex flex-col items-center justify-center gap-3">
+          <AlertCircle className="w-6 h-6 text-destructive" />
+          <p className="text-xs text-destructive text-center font-medium">
+            Ocorreu um erro ao carregar os tipos de atividade.
+          </p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="px-3 py-1.5 text-xs rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
+            Tentar novamente
+          </button>
+        </Card>
+      )}
+
+      {/* Empty state */}
+      {!isLoading && !isError && types.length === 0 && (
+        <Card className="p-8 border-border bg-card flex flex-col items-center justify-center text-center">
+          <p className="text-sm font-medium text-foreground">Sem tipos de atividade configurados</p>
+          <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+            Esta escola ainda não tem tipos de atividade criados. Clique em "Novo Tipo" para adicionar.
+          </p>
+          <button
+            type="button"
+            onClick={openAdd}
+            className="mt-4 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Plus size={12} /> Criar Primeiro Tipo
+          </button>
+        </Card>
+      )}
+
+      {/* Type list */}
+      {!isLoading && !isError && types.length > 0 && (
+        <Card className="overflow-hidden border-border bg-card">
+          {types.map((t) => (
             <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ backgroundColor: t.color + "22" }}
+              key={t.id}
+              className={`border-b border-border/50 last:border-0 flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors group ${
+                !t.active ? "opacity-60 bg-muted/10" : ""
+              }`}
             >
               <div
-                className="w-4 h-4 rounded-sm"
-                style={{ backgroundColor: t.color }}
-              />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">
-                {t.label}
-              </p>
-              <span className="text-[10px] font-mono text-muted-foreground">
-                {t.color.toUpperCase()} ·{" "}
-                {t.builtIn ? "Nativo" : "Personalizado"}
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => openEdit(t)}
-                className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                title="Editar tipo"
+                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: t.color + "22" }}
               >
-                <Edit2 size={13} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(t)}
-                className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                title="Eliminar tipo"
-              >
-                <Trash2 size={13} />
-              </button>
+                <div
+                  className="w-4 h-4 rounded-sm"
+                  style={{ backgroundColor: t.color }}
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {t.name}
+                  </p>
+                  {!t.active && (
+                    <Badge variant="secondary" className="text-[10px] py-0 px-1.5 bg-muted text-muted-foreground">
+                      Inativo
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[10px] font-mono text-muted-foreground">
+                    {t.color.toUpperCase()} ·{" "}
+                    {t.is_system ? "Predefinido" : "Personalizado"}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                {/* Ativar/Desativar */}
+                <ActionTooltip content={t.active ? "Desativar tipo de atividade" : "Ativar tipo de atividade"}>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleActive(t)}
+                    disabled={updateMutation.isPending}
+                    className={`p-1.5 rounded hover:bg-muted transition-colors ${
+                      t.active ? "text-emerald-600 hover:text-emerald-700" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    title={t.active ? "Desativar tipo" : "Ativar tipo"}
+                  >
+                    <Power size={13} />
+                  </button>
+                </ActionTooltip>
+
+                {/* Editar */}
+                <ActionTooltip content="Editar tipo de atividade">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(t)}
+                    className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    title="Editar tipo"
+                  >
+                    <Edit2 size={13} />
+                  </button>
+                </ActionTooltip>
+
+                {/* Eliminar com tooltip informativo se can_delete === false */}
+                {t.can_delete ? (
+                  <ActionTooltip content="Eliminar tipo de atividade">
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(t)}
+                      className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                      title="Eliminar tipo"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </ActionTooltip>
+                ) : (
+                  <ActionTooltip
+                    content={
+                      t.cannot_delete_reason ||
+                      "Esta atividade não pode ser eliminada (predefinida ou em uso em escalas)."
+                    }
+                  >
+                    <button
+                      type="button"
+                      disabled
+                      className="p-1.5 rounded text-muted-foreground/40 cursor-not-allowed transition-colors"
+                      title="Não pode ser eliminada"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </ActionTooltip>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </Card>
+          ))}
+        </Card>
+      )}
 
       {/* Add / Edit dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
@@ -184,7 +312,7 @@ export default function ActivityTypesTab() {
             </DialogTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
               {editingId
-                ? "Altera o nome e a cor do tipo de bloco"
+                ? "Altera o nome, a cor e o estado do tipo de bloco"
                 : "Define nome e cor do tipo de bloco"}
             </p>
           </DialogHeader>
@@ -195,9 +323,9 @@ export default function ActivityTypesTab() {
                   Nome *
                 </label>
                 <input
-                  value={formLabel}
-                  onChange={(e) => setFormLabel(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && saveType()}
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && !isSaving && saveType()}
                   className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                   placeholder="Ex: Apoio Refeitório"
                   autoFocus
@@ -213,7 +341,7 @@ export default function ActivityTypesTab() {
                     style={{ backgroundColor: formColor }}
                   />
                   <span className="text-sm font-medium truncate">
-                    {formLabel || (editingId ? "Tipo de atividade" : "Novo tipo")}
+                    {formName || (editingId ? "Tipo de atividade" : "Novo tipo")}
                   </span>
                 </div>
               </div>
@@ -224,6 +352,24 @@ export default function ActivityTypesTab() {
               </label>
               <ColorPicker value={formColor} onChange={setFormColor} />
             </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-border/50">
+              <div>
+                <span className="text-xs font-medium text-foreground block">Estado Ativo</span>
+                <span className="text-[11px] text-muted-foreground block">
+                  Disponível para atribuição em escalas e turnos
+                </span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formActive}
+                  onChange={(e) => setFormActive(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+              </label>
+            </div>
           </div>
           <div className="px-5 py-4 border-t border-border flex gap-3 bg-muted/10">
             <button
@@ -231,18 +377,20 @@ export default function ActivityTypesTab() {
               onClick={() => {
                 setShowDialog(false);
                 setEditingId(null);
-                setFormLabel("");
+                setFormName("");
               }}
-              className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              disabled={isSaving}
+              className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
               type="button"
               onClick={saveType}
-              disabled={!formLabel.trim()}
-              className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
+              disabled={!formName.trim() || isSaving}
+              className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-1.5"
             >
+              {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               {editingId ? "Guardar Alterações" : "Criar Tipo"}
             </button>
           </div>
@@ -253,8 +401,7 @@ export default function ActivityTypesTab() {
       <div className="flex items-start gap-2 p-3 rounded-xl bg-muted/30 border border-border">
         <Info size={14} className="text-muted-foreground flex-shrink-0 mt-0.5" />
         <p className="text-xs text-muted-foreground leading-relaxed">
-          As alterações e remoções são refletidas imediatamente na edição de escalas e nos
-          filtros de substituição inter-escolar.
+          As atividades são configuradas especificamente para a escola selecionada. As atividades predefinidas do sistema ou que estejam associadas a escalas não podem ser eliminadas, podendo contudo ser desativadas a qualquer momento.
         </p>
       </div>
 
@@ -262,19 +409,15 @@ export default function ActivityTypesTab() {
       <ConfirmationModal
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (deleteTarget) {
-            setTypes((prev) => prev.filter((item) => item.id !== deleteTarget.id));
-            setDeleteTarget(null);
-          }
-        }}
+        onConfirm={handleDeleteConfirm}
+        isLoading={deleteMutation.isPending}
         title="Eliminar Tipo de Atividade"
         description={
           deleteTarget ? (
             <>
               Tem a certeza que pretende eliminar o tipo de atividade{" "}
-              <strong className="text-foreground">{deleteTarget.label}</strong>?
-              Esta ação removerá esta atividade das opções de escala da plataforma.
+              <strong className="text-foreground">{deleteTarget.name}</strong>?
+              Esta ação removerá esta atividade das opções de escala desta escola.
             </>
           ) : ""
         }
@@ -285,4 +428,3 @@ export default function ActivityTypesTab() {
     </div>
   );
 }
-

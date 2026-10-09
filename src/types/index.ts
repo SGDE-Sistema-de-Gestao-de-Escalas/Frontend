@@ -200,9 +200,18 @@ export interface Notification {
 
 export interface ActivityType {
   id: string;
-  label: string;
+  label?: string;
+  name?: string;
   color: string;
-  builtIn: boolean;
+  builtIn?: boolean;
+  is_system?: boolean;
+  school_id?: string;
+  active?: boolean;
+  status_message?: string | null;
+  can_delete?: boolean;
+  cannot_delete_reason?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ScheduleRule {
