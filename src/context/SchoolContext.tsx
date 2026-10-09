@@ -17,6 +17,7 @@ interface SchoolContextType {
   currentSchoolId: number | string | null;
   selectedSchool: School | null;
   schools: School[];
+  isLoading: boolean;
   setSchoolId: (id: number | string) => void;
   agrupamento: typeof AGRUPAMENTO;
   updateSchool: (school: School) => void;
@@ -31,12 +32,13 @@ const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
 export function SchoolProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
-  const { role, user } = useAuth();
+  const { role, user, isAuthenticated } = useAuth();
   const isStaff = role === "staff";
   const isAdmin = role === "admin";
   const canSwitchSchool = isAdmin;
 
   const [schoolsList, setSchoolsList] = useState<School[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | string | null>(() => {
     return localStorage.getItem("selected_school_id") || null;
   });
@@ -61,6 +63,7 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
   }, [isStaff, user?.school_id]);
 
   const refreshSchools = async () => {
+    setIsLoading(true);
     try {
       const res = await schoolsService.getAll();
       const rawList = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : null;
@@ -103,12 +106,18 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (err) {
       console.warn("Could not fetch schools from API in SchoolContext:", err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    refreshSchools();
-  }, [isStaff, user?.school_id]);
+    if (isAuthenticated) {
+      refreshSchools();
+    } else {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, isStaff, user?.school_id]);
 
   const selectedSchool =
     schoolsList.find((s) => String(s.id) === String(selectedSchoolId)) ||
@@ -162,6 +171,7 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
         currentSchoolId: selectedSchoolId,
         selectedSchool,
         schools: schoolsList,
+        isLoading,
         setSchoolId,
         agrupamento: AGRUPAMENTO,
         updateSchool,
