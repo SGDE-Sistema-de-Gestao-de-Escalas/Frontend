@@ -808,24 +808,14 @@ export default function PlatformSettingsPage() {
               <span className="text-xs">A carregar escolas...</span>
             </div>
           ) : schoolsList.length === 0 ? (
-            <div className="text-center py-12 px-4 border border-dashed border-border rounded-xl flex flex-col items-center justify-center">
-              <div className="w-12 h-12 rounded-xl bg-muted/60 flex items-center justify-center text-muted-foreground mb-3">
-                <Building2 size={24} />
-              </div>
-              <h4 className="text-sm font-semibold text-foreground mb-1">
+            <div className="p-8 text-center border border-dashed border-border rounded-xl bg-card/50 flex flex-col items-center justify-center">
+              <Building2 size={28} className="mx-auto text-muted-foreground/50 mb-2" />
+              <p className="text-sm font-medium text-foreground">
                 Nenhuma escola registada
-              </h4>
-              <p className="text-xs text-muted-foreground max-w-sm mb-4">
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
                 Comece por criar a primeira escola para poder gerir assistentes, horários e configurações.
               </p>
-              <button
-                type="button"
-                onClick={openAddSchool}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
-              >
-                <Plus size={14} />
-                Criar Primeira Escola
-              </button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -1590,24 +1580,14 @@ export default function PlatformSettingsPage() {
               <span className="text-sm">A carregar tipos de falta...</span>
             </div>
           ) : absenceTypesList.length === 0 ? (
-            <div className="text-center py-12 px-4 border border-dashed border-border rounded-xl flex flex-col items-center justify-center">
-              <div className="w-12 h-12 rounded-xl bg-muted/60 flex items-center justify-center text-muted-foreground mb-3">
-                <FileText size={24} />
-              </div>
-              <h4 className="text-sm font-semibold text-foreground mb-1">
+            <div className="p-8 text-center border border-dashed border-border rounded-xl bg-card/50 flex flex-col items-center justify-center">
+              <FileText size={28} className="mx-auto text-muted-foreground/50 mb-2" />
+              <p className="text-sm font-medium text-foreground">
                 Nenhum tipo de falta registado
-              </h4>
-              <p className="text-xs text-muted-foreground max-w-sm mb-4">
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
                 Comece por criar os tipos de falta para que assistentes e administradores possam justificar e registar ausências.
               </p>
-              <button
-                type="button"
-                onClick={openAddAbsenceType}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
-              >
-                <Plus size={14} />
-                Criar Primeiro Tipo
-              </button>
             </div>
           ) : (
             <div className="space-y-2">

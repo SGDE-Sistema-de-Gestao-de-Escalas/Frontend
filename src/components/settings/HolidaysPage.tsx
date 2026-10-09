@@ -152,22 +152,13 @@ export default function HolidaysPage() {
 
           {/* Empty state */}
           {!isLoading && !isError && holidays.length === 0 && (
-            <Card className="p-10 border-border bg-card flex flex-col items-center justify-center text-center">
-              <div className="w-10 h-10 rounded-xl bg-muted/60 flex items-center justify-center text-muted-foreground mb-3">
-                <Calendar size={20} />
-              </div>
+            <div className="p-8 text-center border border-dashed border-border rounded-xl bg-card/50 flex flex-col items-center justify-center">
+              <Calendar size={28} className="mx-auto text-muted-foreground/50 mb-2" />
               <p className="text-sm font-medium text-foreground">Nenhum feriado registado</p>
-              <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+              <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
                 Ainda não existem feriados configurados no sistema. Adicione feriados para que sejam considerados no cálculo de escalas.
               </p>
-              <button
-                type="button"
-                onClick={openAdd}
-                className="mt-4 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
-              >
-                <Plus size={12} /> Adicionar Primeiro Feriado
-              </button>
-            </Card>
+            </div>
           )}
 
           {/* Table */}

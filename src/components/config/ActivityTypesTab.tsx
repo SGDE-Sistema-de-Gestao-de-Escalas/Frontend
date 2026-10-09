@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Edit2, Info, Plus, Trash2, Loader2, Power, AlertCircle } from "lucide-react";
+import { Edit2, Info, Plus, Trash2, Loader2, Power, AlertCircle, Layers } from "lucide-react";
 import { PRESET_COLORS } from "../dashboard/blockStyles";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -188,19 +188,13 @@ export default function ActivityTypesTab() {
 
       {/* Empty state */}
       {!isLoading && !isError && types.length === 0 && (
-        <Card className="p-8 border-border bg-card flex flex-col items-center justify-center text-center">
+        <div className="p-8 text-center border border-dashed border-border rounded-xl bg-card/50 flex flex-col items-center justify-center">
+          <Layers size={28} className="mx-auto text-muted-foreground/50 mb-2" />
           <p className="text-sm font-medium text-foreground">Sem tipos de atividade configurados</p>
-          <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-            Esta escola ainda não tem tipos de atividade criados. Clique em "Novo Tipo" para adicionar.
+          <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+            Esta escola ainda não tem tipos de atividade criados. Utilize o botão acima para adicionar.
           </p>
-          <button
-            type="button"
-            onClick={openAdd}
-            className="mt-4 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
-          >
-            <Plus size={12} /> Criar Primeiro Tipo
-          </button>
-        </Card>
+        </div>
       )}
 
       {/* Type list */}
