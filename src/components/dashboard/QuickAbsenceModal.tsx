@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { BLOCK_STYLES } from "./blockStyles";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
+import CustomSelect from "../common/CustomSelect";
 import type { EntityId } from "../../types";
 
 interface QuickAbsenceModalProps {
@@ -166,12 +167,10 @@ export default function QuickAbsenceModal({
               <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                 Motivo
               </label>
-              <select
+              <CustomSelect
                 value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                {[
+                onChange={(e: any) => setReason(typeof e === "string" ? e : e.target.value)}
+                options={[
                   "Doença",
                   "Baixa Médica",
                   "Consulta Médica",
@@ -179,12 +178,11 @@ export default function QuickAbsenceModal({
                   "Acidente",
                   "Luto",
                   "Outro",
-                ].map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
+                ].map((r) => ({
+                  value: r,
+                  label: r,
+                }))}
+              />
             </div>
 
             <div>
@@ -256,23 +254,18 @@ export default function QuickAbsenceModal({
                     <label className="text-xs text-muted-foreground block mb-1.5">
                       Escola de origem
                     </label>
-                    <select
-                      value={coverageSchool}
-                      onChange={(e) => {
-                        setCoverageSchool(
-                          e.target.value === "" ? "" : Number(e.target.value)
-                        );
+                    <CustomSelect
+                      value={coverageSchool === "" ? "" : String(coverageSchool)}
+                      onValueChange={(val) => {
+                        setCoverageSchool(val === "" ? "" : Number(val));
                         setCoverageAssistantId("");
                       }}
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-                    >
-                      <option value="">Selecionar escola...</option>
-                      {otherSchools.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Selecionar escola..."
+                      options={otherSchools.map((s) => ({
+                        value: String(s.id),
+                        label: s.name,
+                      }))}
+                    />
                   </div>
 
                   {coverageSchool !== "" && (
@@ -285,24 +278,17 @@ export default function QuickAbsenceModal({
                           Nenhum assistente marcado como disponível nesta escola.
                         </p>
                       ) : (
-                        <select
-                          value={coverageAssistantId}
-                          onChange={(e) =>
-                            setCoverageAssistantId(
-                              e.target.value === ""
-                                ? ""
-                                : Number(e.target.value)
-                            )
+                        <CustomSelect
+                          value={coverageAssistantId === "" ? "" : String(coverageAssistantId)}
+                          onValueChange={(val) =>
+                            setCoverageAssistantId(val === "" ? "" : Number(val))
                           }
-                          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-                        >
-                          <option value="">Selecionar assistente...</option>
-                          {coverageSubstitutes.map((a) => (
-                            <option key={a.id} value={a.id}>
-                              {a.name}
-                            </option>
-                          ))}
-                        </select>
+                          placeholder="Selecionar assistente..."
+                          options={coverageSubstitutes.map((a) => ({
+                            value: String(a.id),
+                            label: a.name,
+                          }))}
+                        />
                       )}
                     </div>
                   )}

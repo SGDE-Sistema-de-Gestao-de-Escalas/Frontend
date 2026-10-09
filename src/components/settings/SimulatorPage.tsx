@@ -19,6 +19,7 @@ import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { assistants as ASSISTANTS } from "../../api/mockData";
 import DatePicker from "../common/DatePicker";
+import CustomSelect from "../common/CustomSelect";
 
 export default function SimulatorPage() {
   const [selectedAssistant, setSelectedAssistant] = useState<number | null>(
@@ -58,21 +59,18 @@ export default function SimulatorPage() {
               <label className="text-xs text-muted-foreground block mb-1.5">
                 Assistente *
               </label>
-              <select
-                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-                value={selectedAssistant ?? ""}
-                onChange={(e) => {
-                  setSelectedAssistant(Number(e.target.value));
+              <CustomSelect
+                placeholder="Selecionar assistente..."
+                value={selectedAssistant ? String(selectedAssistant) : ""}
+                onValueChange={(val) => {
+                  setSelectedAssistant(val ? Number(val) : null);
                   setSimulated(false);
                 }}
-              >
-                <option value="">Selecionar assistente...</option>
-                {ASSISTANTS.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
+                options={ASSISTANTS.map((a) => ({
+                  value: String(a.id),
+                  label: a.name,
+                }))}
+              />
             </div>
             <div>
               <label className="text-xs text-muted-foreground block mb-1.5">

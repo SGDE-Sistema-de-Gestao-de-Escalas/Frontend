@@ -20,6 +20,7 @@ import TimePicker from "../common/TimePicker";
 import DatePicker, { formatToIsoDate } from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import { ActionTooltip } from "../common/ActionTooltip";
+import CustomSelect from "../common/CustomSelect";
 
 const DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
@@ -366,17 +367,14 @@ export default function ScheduleRulesTab() {
                 <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                   Tipo de Atividade *
                 </label>
-                <select
+                <CustomSelect
                   value={formActivityId}
-                  onChange={(e) => setFormActivityId(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  {DEFAULT_ACTIVITY_TYPES.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(e: any) => setFormActivityId(typeof e === "string" ? e : e.target.value)}
+                  options={DEFAULT_ACTIVITY_TYPES.map((a) => ({
+                    value: a.id,
+                    label: a.label,
+                  }))}
+                />
               </div>
 
               <div>
@@ -442,16 +440,16 @@ export default function ScheduleRulesTab() {
                   <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                     Obrigatoriedade
                   </label>
-                  <select
+                  <CustomSelect
                     value={formRuleType}
-                    onChange={(e) =>
-                      setFormRuleType(e.target.value as "mandatory" | "optional")
+                    onChange={(e: any) =>
+                      setFormRuleType((typeof e === "string" ? e : e.target.value) as "mandatory" | "optional")
                     }
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-                  >
-                    <option value="mandatory">Obrigatório</option>
-                    <option value="optional">Facultativo</option>
-                  </select>
+                    options={[
+                      { value: "mandatory", label: "Obrigatório" },
+                      { value: "optional", label: "Facultativo" },
+                    ]}
+                  />
                 </div>
               </div>
 
