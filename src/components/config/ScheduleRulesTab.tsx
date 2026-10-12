@@ -1,11 +1,16 @@
 import React, { useState } from "react";
 import {
   AlertTriangle,
+  ArrowUpDown,
   Check,
   CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  GripVertical,
   Pencil,
   Plus,
   Trash2,
+  Users,
 } from "lucide-react";
 import {
   assistants as ASSISTANTS,
@@ -83,6 +88,7 @@ export default function ScheduleRulesTab() {
     setFormValidityStart("2026-02-01");
     setFormValidityEnd("");
     setFormAssistantIds(allAssistantIds);
+    setOrderedAssistantIds(allAssistantIds);
     setFormStep("form");
     setShowAdd(true);
   }
@@ -97,10 +103,18 @@ export default function ScheduleRulesTab() {
     setFormRuleType(rule.type);
     setFormValidityStart(formatToIsoDate(rule.start) || rule.start);
     setFormValidityEnd(rule.end ? (formatToIsoDate(rule.end) || rule.end) : "");
-    setFormAssistantIds(rule.assistantIds);
+    const selected = rule.assistantIds || [];
+    setFormAssistantIds(selected);
+    // Preservar a ordem dos selecionados e depois os restantes não selecionados
+    const unselected = allAssistantIds.filter((id) => !selected.includes(id));
+    setOrderedAssistantIds([...selected, ...unselected]);
     setFormStep("form");
     setShowAdd(true);
   }
+
+  // Reordering & Priority logic
+  const [orderedAssistantIds, setOrderedAssistantIds] = useState<EntityId[]>(allAssistantIds);
+  const [draggedAssistantId, setDraggedAssistantId] = useState<EntityId | null>(null);
 
   function toggleAssistant(id: EntityId) {
     setFormAssistantIds((prev) =>
@@ -113,11 +127,53 @@ export default function ScheduleRulesTab() {
     setFormAssistantIds(allSelected ? [] : ASSISTANTS.map((a) => a.id));
   }
 
+  function moveAssistant(index: number, direction: "up" | "down") {
+    const newIndex = direction === "up" ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= orderedAssistantIds.length) return;
+    setOrderedAssistantIds((prev) => {
+      const copy = [...prev];
+      const temp = copy[index];
+      copy[index] = copy[newIndex];
+      copy[newIndex] = temp;
+      return copy;
+    });
+  }
+
+  function handleDragStart(id: EntityId) {
+    setDraggedAssistantId(id);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+  }
+
+  function handleDrop(targetId: EntityId) {
+    if (!draggedAssistantId || draggedAssistantId === targetId) {
+      setDraggedAssistantId(null);
+      return;
+    }
+    setOrderedAssistantIds((prev) => {
+      const fromIndex = prev.indexOf(draggedAssistantId);
+      const toIndex = prev.indexOf(targetId);
+      if (fromIndex === -1 || toIndex === -1) return prev;
+      const copy = [...prev];
+      copy.splice(fromIndex, 1);
+      copy.splice(toIndex, 0, draggedAssistantId);
+      return copy;
+    });
+    setDraggedAssistantId(null);
+  }
+
+  function getSortedSelectedAssistantIds(): EntityId[] {
+    return orderedAssistantIds.filter((id) => formAssistantIds.includes(id));
+  }
+
   function submitRule() {
     if (!isEditing && conflictingRule) {
       setFormStep("conflict");
       return;
     }
+    const finalAssistantIds = getSortedSelectedAssistantIds();
     if (isEditing) {
       setRules((prev) =>
         prev.map((r) =>
@@ -130,7 +186,7 @@ export default function ScheduleRulesTab() {
                 min: Number(formMinStaff),
                 type: formRuleType,
                 end: formValidityEnd || null,
-                assistantIds: formAssistantIds,
+                assistantIds: finalAssistantIds,
                 days: [...formDays],
               }
             : r
@@ -143,6 +199,7 @@ export default function ScheduleRulesTab() {
   }
 
   function confirmCreate() {
+    const finalAssistantIds = getSortedSelectedAssistantIds();
     setRules((prev) => [
       ...prev,
       {
@@ -154,7 +211,7 @@ export default function ScheduleRulesTab() {
         type: formRuleType,
         start: formValidityStart,
         end: formValidityEnd || null,
-        assistantIds: formAssistantIds,
+        assistantIds: finalAssistantIds,
         days: [...formDays],
       },
     ]);
@@ -346,8 +403,8 @@ export default function ScheduleRulesTab() {
 
       {/* Add / Edit Dialog */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
-        <DialogContent className="w-full max-w-lg p-0 overflow-visible rounded-xl border border-border bg-card shadow-2xl">
-          <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10 rounded-t-xl">
+        <DialogContent className="w-full max-w-xl p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl max-h-[92vh] flex flex-col">
+          <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10 rounded-t-xl shrink-0">
             <DialogTitle className="font-semibold text-foreground text-sm">
               {formStep === "form"
                 ? isEditing
@@ -362,7 +419,7 @@ export default function ScheduleRulesTab() {
           </DialogHeader>
 
           {formStep === "form" && (
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-4 overflow-y-auto max-h-[calc(92vh-70px)]">
               <div>
                 <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                   Tipo de Atividade *
@@ -453,40 +510,156 @@ export default function ScheduleRulesTab() {
                 </div>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs text-muted-foreground font-medium">
-                    Assistentes aplicáveis ({formAssistantIds.length}/
-                    {ASSISTANTS.length})
-                  </label>
+              {/* Assistentes Afetos e Ordem de Prioridade (Lista Única Intuitiva) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <Users size={14} className="text-primary" />
+                      Funcionários Afetos & Ordem de Prioridade
+                    </label>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Marque para afetar à regra e arraste na pega para definir a prioridade do motor ({formAssistantIds.length}/{ASSISTANTS.length} selecionados)
+                    </p>
+                  </div>
                   <button
                     type="button"
                     onClick={toggleAllAssistants}
-                    className="text-xs text-primary hover:underline"
+                    className="text-xs font-semibold text-primary hover:underline px-2.5 py-1 rounded hover:bg-primary/5 transition-colors border border-primary/20"
                   >
                     {formAssistantIds.length === ASSISTANTS.length
                       ? "Desmarcar todos"
                       : "Selecionar todos"}
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-2 border border-border rounded-lg bg-muted/10">
-                  {ASSISTANTS.map((a) => {
-                    const isSelected = formAssistantIds.includes(a.id);
-                    return (
-                      <button
-                        key={a.id}
-                        type="button"
-                        onClick={() => toggleAssistant(a.id)}
-                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                          isSelected
-                            ? "bg-primary text-primary-foreground font-semibold"
-                            : "bg-card border border-border text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        {a.name.split(" ")[0]}
-                      </button>
-                    );
-                  })}
+
+                {/* Lista Unificada: Checkbox + Drag & Drop */}
+                <div className="rounded-lg border border-border bg-card overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b border-border text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    <span className="flex items-center gap-2">
+                      <span>Ordem</span>
+                      <span>Funcionário</span>
+                    </span>
+                    <span>Afeto à Regra</span>
+                  </div>
+
+                  <div className="max-h-64 overflow-y-auto divide-y divide-border/50 p-1 space-y-1">
+                    {orderedAssistantIds.map((id, index) => {
+                      const assistant = ASSISTANTS.find((a) => a.id === id);
+                      if (!assistant) return null;
+
+                      const isSelected = formAssistantIds.includes(id);
+                      // Prioridade real calculada com base na ordem dos selecionados
+                      const selectedPriority = isSelected
+                        ? getSortedSelectedAssistantIds().indexOf(id) + 1
+                        : null;
+                      const isDragging = draggedAssistantId === id;
+
+                      return (
+                        <div
+                          key={id}
+                          draggable
+                          onDragStart={() => handleDragStart(id)}
+                          onDragOver={handleDragOver}
+                          onDrop={() => handleDrop(id)}
+                          className={`flex items-center justify-between px-2.5 py-2 rounded-md transition-all select-none ${
+                            isDragging
+                              ? "opacity-40 border-2 border-dashed border-primary bg-primary/10"
+                              : isSelected
+                              ? "bg-card hover:bg-primary/5"
+                              : "bg-muted/10 opacity-70 hover:opacity-100 hover:bg-muted/30"
+                          }`}
+                        >
+                          {/* Lado esquerdo: Pega de arrasto, indicador de prioridade e dados do assistente */}
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span
+                              className="cursor-grab active:cursor-grabbing text-muted-foreground/60 hover:text-foreground p-1 rounded hover:bg-muted transition-colors shrink-0"
+                              title="Arrastar para reordenar prioridade"
+                            >
+                              <GripVertical size={15} />
+                            </span>
+
+                            {/* Badge de Prioridade */}
+                            <div className="w-6 h-6 flex items-center justify-center shrink-0">
+                              {isSelected ? (
+                                <span
+                                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold font-mono ${
+                                    selectedPriority === 1
+                                      ? "bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/40"
+                                      : selectedPriority === 2
+                                      ? "bg-slate-500/20 text-slate-700 dark:text-slate-300 border border-slate-500/40"
+                                      : "bg-primary/15 text-primary border border-primary/30"
+                                  }`}
+                                  title={`${selectedPriority}ª Prioridade na regra`}
+                                >
+                                  {selectedPriority}º
+                                </span>
+                              ) : (
+                                <span
+                                  className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-muted-foreground/40 font-mono"
+                                  title="Não afeto à regra"
+                                >
+                                  —
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Nome e Mecanográfico */}
+                            <div className="truncate">
+                              <span
+                                className={`text-xs ${
+                                  isSelected
+                                    ? "font-semibold text-foreground"
+                                    : "text-muted-foreground font-normal"
+                                }`}
+                              >
+                                {assistant.name}
+                              </span>
+                              {assistant.mecanografico && (
+                                <span className="text-[10px] text-muted-foreground font-mono ml-1.5">
+                                  ({assistant.mecanografico})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Lado direito: Botões subir/descer discretos + Checkbox de seleção */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex items-center gap-0.5">
+                              <button
+                                type="button"
+                                disabled={index === 0}
+                                onClick={() => moveAssistant(index, "up")}
+                                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
+                                title="Subir na lista"
+                              >
+                                <ChevronUp size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={index === orderedAssistantIds.length - 1}
+                                onClick={() => moveAssistant(index, "down")}
+                                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
+                                title="Descer na lista"
+                              >
+                                <ChevronDown size={13} />
+                              </button>
+                            </div>
+
+                            {/* Checkbox customizado e acessível */}
+                            <label className="cursor-pointer p-1">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleAssistant(id)}
+                                className="w-4 h-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-0 cursor-pointer accent-primary"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
