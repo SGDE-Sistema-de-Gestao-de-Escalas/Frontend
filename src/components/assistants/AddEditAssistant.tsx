@@ -89,10 +89,9 @@ export default function AddEditAssistant({
     assistant?.emergency_contact_kinship || ""
   );
 
-  // Availability / Transfer
-  const [availableForTransfer, setAvailableForTransfer] = useState<boolean>(
-    assistant?.available_for_transfer ?? assistant?.availableForTransfer ?? false
-  );
+  // Availability / Transfer (managed directly on the profile page)
+  const availableForTransfer =
+    assistant?.available_for_transfer ?? assistant?.availableForTransfer ?? false;
 
   // Errors state
   const [formErrors, setFormErrors] = useState<{
@@ -726,23 +725,7 @@ export default function AddEditAssistant({
           </div>
         </Card>
 
-        {/* Mobilidade Inter-escolar */}
-        <Card className="p-5 lg:col-span-2">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h4 className="text-sm font-semibold text-foreground">
-                Disponibilidade Inter-escolar
-              </h4>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Indica se o assistente se encontra disponível para cobertura ou transferências temporárias entre escolas do agrupamento em situações de emergência.
-              </p>
-            </div>
-            <Switch
-              checked={availableForTransfer}
-              onCheckedChange={setAvailableForTransfer}
-            />
-          </div>
-        </Card>
+
       </div>
 
       {/* Actions */}

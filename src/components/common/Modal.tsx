@@ -27,7 +27,7 @@ export default function Modal({
             overflowVisible ? "overflow-visible" : "max-h-[90vh] overflow-y-auto"
           }`}
         >
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between sticky top-0 bg-card z-10">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between sticky top-0 bg-card z-10 rounded-t-xl">
             <div>
               <h3 className="font-semibold text-foreground">{title}</h3>
               {subtitle && (
@@ -43,7 +43,7 @@ export default function Modal({
               <X size={15} className="text-muted-foreground" />
             </button>
           </div>
-          <div className="p-5">{children}</div>
+          <div className="p-5 rounded-b-xl">{children}</div>
         </div>
       </div>
     </>

@@ -531,23 +531,13 @@ export default function AssistantProfile({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Card 1: Identificação & Contactos */}
           <Card className="p-5 md:col-span-2 lg:col-span-2">
-            <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-border/50">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-md bg-primary/10 text-primary">
-                  <User size={15} />
-                </div>
-                <h3 className="text-sm font-semibold text-foreground">
-                  Identificação & Contactos
-                </h3>
+            <div className="flex items-center gap-2 pb-2 mb-2.5 border-b border-border/50">
+              <div className="p-1.5 rounded-md bg-primary/10 text-primary">
+                <User size={15} />
               </div>
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
-              >
-                <Edit2 size={11} />
-                Editar Dados
-              </button>
+              <h3 className="text-sm font-semibold text-foreground">
+                Identificação & Contactos
+              </h3>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
