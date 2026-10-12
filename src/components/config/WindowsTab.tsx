@@ -254,10 +254,11 @@ export default function WindowsTab() {
   // ==========================================
   // FORMULÁRIO: EXCEÇÕES
   // ==========================================
+  const todayStr = new Date().toISOString().split("T")[0];
   const [excName, setExcName] = useState("");
   const [excIsClosed, setExcIsClosed] = useState(true);
-  const [excValidFrom, setExcValidFrom] = useState("2026-12-21");
-  const [excValidUntil, setExcValidUntil] = useState("2027-01-04");
+  const [excValidFrom, setExcValidFrom] = useState(todayStr);
+  const [excValidUntil, setExcValidUntil] = useState(todayStr);
   const [excOpening, setExcOpening] = useState("08:00");
   const [excClosing, setExcClosing] = useState("15:00");
   const [excLunchStart, setExcLunchStart] = useState("12:00");
@@ -809,6 +810,7 @@ export default function WindowsTab() {
               <div className="max-w-xs">
                 <DatePicker
                   value={ruleValidFrom}
+                  minDate={editingRule ? undefined : todayStr}
                   onChange={setRuleValidFrom}
                   placeholder="AAAA-MM-DD"
                 />
@@ -1081,7 +1083,14 @@ export default function WindowsTab() {
                 </label>
                 <DatePicker
                   value={excValidFrom}
-                  onChange={setExcValidFrom}
+                  minDate={editingException ? undefined : todayStr}
+                  disabled={Boolean(editingException && !editingException.can_edit_all)}
+                  onChange={(v) => {
+                    setExcValidFrom(v);
+                    if (v && excValidUntil && excValidUntil < v) {
+                      setExcValidUntil(v);
+                    }
+                  }}
                   placeholder="AAAA-MM-DD"
                 />
                 {excFormErrors.valid_from && (
@@ -1094,6 +1103,8 @@ export default function WindowsTab() {
                 </label>
                 <DatePicker
                   value={excValidUntil}
+                  minDate={excValidFrom || undefined}
+                  disabled={Boolean(editingException && !editingException.can_edit_all && !editingException.can_change_end_date)}
                   onChange={setExcValidUntil}
                   placeholder="AAAA-MM-DD"
                 />

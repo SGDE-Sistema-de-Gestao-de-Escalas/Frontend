@@ -37,6 +37,7 @@ export default function ScheduleRulesTab() {
   const [deleteRuleTarget, setDeleteRuleTarget] = useState<ScheduleRule | null>(null);
 
   // Form state
+  const todayStr = new Date().toISOString().split("T")[0];
   const [formActivityId, setFormActivityId] = useState("");
   const [formDays, setFormDays] = useState<boolean[]>([
     true,
@@ -51,7 +52,7 @@ export default function ScheduleRulesTab() {
   const [formPeriodEnd, setFormPeriodEnd] = useState("13:00");
   const [formMinStaff, setFormMinStaff] = useState("3");
   const [formRuleType, setFormRuleType] = useState<"mandatory" | "optional">("mandatory");
-  const [formValidityStart, setFormValidityStart] = useState("2026-02-01");
+  const [formValidityStart, setFormValidityStart] = useState(todayStr);
   const [formValidityEnd, setFormValidityEnd] = useState("");
   const [formAssistantIds, setFormAssistantIds] = useState<EntityId[]>(allAssistantIds);
   const [formStep, setFormStep] = useState<"form" | "conflict" | "done">("form");
@@ -85,7 +86,7 @@ export default function ScheduleRulesTab() {
     setFormPeriodEnd("13:00");
     setFormMinStaff("3");
     setFormRuleType("mandatory");
-    setFormValidityStart("2026-02-01");
+    setFormValidityStart(todayStr);
     setFormValidityEnd("");
     setFormAssistantIds(allAssistantIds);
     setOrderedAssistantIds(allAssistantIds);
@@ -671,7 +672,13 @@ export default function ScheduleRulesTab() {
                   </label>
                   <DatePicker
                     value={formValidityStart}
-                    onChange={setFormValidityStart}
+                    minDate={isEditing ? undefined : todayStr}
+                    onChange={(v) => {
+                      setFormValidityStart(v);
+                      if (v && formValidityEnd && formValidityEnd < v) {
+                        setFormValidityEnd(v);
+                      }
+                    }}
                     className="w-full"
                   />
                 </div>
@@ -681,6 +688,7 @@ export default function ScheduleRulesTab() {
                   </label>
                   <DatePicker
                     value={formValidityEnd}
+                    minDate={formValidityStart || undefined}
                     onChange={setFormValidityEnd}
                     className="w-full"
                   />

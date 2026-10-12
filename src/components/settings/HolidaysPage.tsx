@@ -41,7 +41,7 @@ export default function HolidaysPage() {
   function openAdd() {
     setEditingHolidayId(null);
     setNewName("");
-    setNewDate("");
+    setNewDate(new Date().toISOString().split("T")[0]);
     setNewDescription("");
     setShowAdd(true);
   }
@@ -256,6 +256,7 @@ export default function HolidaysPage() {
                   </label>
                   <DatePicker
                     value={newDate}
+                    minDate={editingHolidayId !== null ? undefined : todayStr}
                     onChange={setNewDate}
                     className="w-full"
                   />
