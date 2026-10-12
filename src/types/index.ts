@@ -19,7 +19,7 @@ export type StaffPage =
 
 export type StaffViewMode = "day" | "week" | "month";
 
-export type ConfigTab = "security" | "windows" | "holidays" | "activity-types";
+export type ConfigTab = "security" | "windows" | "activity-types";
 
 export type BlockState =
   | "work"

@@ -22,6 +22,7 @@ import {
   UserPlus,
   UserX,
   XCircle,
+  Calendar,
 } from "lucide-react";
 import usersService from "../../api/services/users.service";
 import schoolsService, { BackendSchoolResource } from "../../api/services/schools.service";
@@ -42,9 +43,10 @@ import FeedbackNotification, {
 } from "../common/FeedbackNotification";
 import { useSchool } from "../../context/SchoolContext";
 import { useAuth } from "../../context/AuthContext";
+import HolidaysPage from "./HolidaysPage";
 
 export default function PlatformSettingsPage() {
-  const [activeTab, setActiveTab] = useState<"schools" | "users" | "absence-types">("schools");
+  const [activeTab, setActiveTab] = useState<"schools" | "users" | "absence-types" | "holidays">("schools");
   const { refreshSchools: refreshGlobalSchools } = useSchool();
   const { user: currentUser } = useAuth();
 
@@ -791,6 +793,11 @@ export default function PlatformSettingsPage() {
       icon: <ShieldCheck size={14} />,
     },
     {
+      id: "holidays" as const,
+      label: "Feriados Globais",
+      icon: <Calendar size={14} />,
+    },
+    {
       id: "absence-types" as const,
       label: "Tipos de Falta",
       icon: <FileText size={14} />,
@@ -798,7 +805,7 @@ export default function PlatformSettingsPage() {
   ];
 
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-5xl">
       {/* Header */}
       <div className="flex items-center gap-2 mb-1">
         <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -1941,6 +1948,13 @@ export default function PlatformSettingsPage() {
             variant="danger"
           />
         </>
+      )}
+
+      {/* ── Tab: Holidays (Feriados Globais do Agrupamento) ─────────────── */}
+      {activeTab === "holidays" && (
+        <div className="pt-2">
+          <HolidaysPage />
+        </div>
       )}
     </div>
   );
