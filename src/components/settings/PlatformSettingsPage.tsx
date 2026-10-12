@@ -1764,68 +1764,95 @@ export default function PlatformSettingsPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="space-y-2">
-                {paginatedAbsenceTypes.map((t) => (
-                  <div
-                    key={t.id}
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border bg-card"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <FileText size={14} className="text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">{t.name}</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {(t.requiresDocument ?? t.requires_document) ? (
-                          <span className="flex items-center gap-1">
-                            <Paperclip size={10} />
-                            Requer documento comprovativo
-                          </span>
-                        ) : (
-                          "Sem documento obrigatório"
-                        )}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <ActionTooltip content="Editar tipo de falta">
-                        <button
-                          type="button"
-                          onClick={() => openEditAbsenceType(t)}
-                          className="p-1.5 rounded hover:bg-muted transition-colors"
-                        >
-                          <Pencil size={13} className="text-muted-foreground" />
-                        </button>
-                      </ActionTooltip>
-
-                      {t.can_delete === false ? (
-                        <ActionTooltip
-                          content={
-                            t.cannot_delete_reason ||
-                            "Este tipo de falta tem faltas associadas e não pode ser eliminado."
-                          }
-                        >
-                          <span className="p-1.5 cursor-not-allowed opacity-40">
-                            <Trash2 size={13} className="text-muted-foreground" />
-                          </span>
-                        </ActionTooltip>
-                      ) : (
-                        <ActionTooltip content="Eliminar tipo de falta">
-                          <button
-                            type="button"
-                            onClick={() => setAbsenceTypeDeleteConfirm(t)}
-                            className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
+              <Card className="overflow-hidden border-border bg-card">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/20">
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Tipo de Falta
+                        </th>
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Documento Comprovativo
+                        </th>
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Ações
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedAbsenceTypes.map((t) => {
+                        const reqDoc = t.requiresDocument ?? t.requires_document;
+                        return (
+                          <tr
+                            key={t.id}
+                            className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors"
                           >
-                            <Trash2
-                              size={13}
-                              className="text-muted-foreground hover:text-destructive"
-                            />
-                          </button>
-                        </ActionTooltip>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                            <td className="px-4 py-3 font-medium text-foreground">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                  <FileText size={13} className="text-primary" />
+                                </div>
+                                <span className="font-semibold text-foreground text-sm">
+                                  {t.name}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-xs">
+                              {reqDoc ? (
+                                <Badge variant="secondary" className="gap-1 font-normal text-[11px] bg-primary/10 text-primary border border-primary/20">
+                                  <Paperclip size={11} />
+                                  Obrigatório
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">
+                                  Não obrigatório
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center gap-1 justify-end">
+                                <ActionTooltip content="Editar tipo de falta">
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditAbsenceType(t)}
+                                    className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                  >
+                                    <Pencil size={13} />
+                                  </button>
+                                </ActionTooltip>
+
+                                {t.can_delete === false ? (
+                                  <ActionTooltip
+                                    content={
+                                      t.cannot_delete_reason ||
+                                      "Este tipo de falta tem faltas associadas e não pode ser eliminado."
+                                    }
+                                  >
+                                    <span className="p-1.5 cursor-not-allowed opacity-40">
+                                      <Trash2 size={13} className="text-muted-foreground" />
+                                    </span>
+                                  </ActionTooltip>
+                                ) : (
+                                  <ActionTooltip content="Eliminar tipo de falta">
+                                    <button
+                                      type="button"
+                                      onClick={() => setAbsenceTypeDeleteConfirm(t)}
+                                      className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  </ActionTooltip>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
 
               {/* Paginação */}
               <ListPagination
