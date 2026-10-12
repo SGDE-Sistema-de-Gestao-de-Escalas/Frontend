@@ -7,6 +7,7 @@ interface ModalProps {
   onClose: () => void;
   children: React.ReactNode;
   maxWidth?: string;
+  overflowVisible?: boolean;
 }
 
 export default function Modal({
@@ -15,13 +16,16 @@ export default function Modal({
   onClose,
   children,
   maxWidth = "max-w-lg",
+  overflowVisible = false,
 }: ModalProps) {
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div
-          className={`bg-card border border-border rounded-xl shadow-2xl w-full ${maxWidth} max-h-[90vh] overflow-y-auto`}
+          className={`bg-card border border-border rounded-xl shadow-2xl w-full ${maxWidth} ${
+            overflowVisible ? "overflow-visible" : "max-h-[90vh] overflow-y-auto"
+          }`}
         >
           <div className="px-5 py-4 border-b border-border flex items-center justify-between sticky top-0 bg-card z-10">
             <div>

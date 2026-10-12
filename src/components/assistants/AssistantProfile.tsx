@@ -41,6 +41,12 @@ import {
   useToggleAssistantStatus,
   useAnonymizeAssistant,
 } from "../../hooks/api/useAssistants";
+import {
+  useAssistantExceptions,
+  useCreateAssistantException,
+  useUpdateAssistantException,
+  useDeleteAssistantException,
+} from "../../hooks/api/useAssistantExceptions";
 import type { EntityId } from "../../types";
 
 
@@ -55,42 +61,6 @@ interface ExceptionRule {
   status?: string;
   className?: string;
 }
-
-const INITIAL_EXCEPTIONS: ExceptionRule[] = [
-  {
-    id: "exc-1",
-    tipo: "Licença Amamentação",
-    detalhe: "Carga horária → 6h/dia",
-    entrada: "09:30",
-    saida: "16:30",
-    inicio: "2025-09-15",
-    fim: "2026-09-14",
-    status: "Vigente",
-    className: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
-  },
-  {
-    id: "exc-2",
-    tipo: "Horário Especial",
-    detalhe: "Entrada diferida 09:30",
-    entrada: "09:30",
-    saida: "17:00",
-    inicio: "2025-01-01",
-    fim: "2025-08-31",
-    status: "Expirado",
-    className: "bg-muted text-muted-foreground border-border",
-  },
-  {
-    id: "exc-3",
-    tipo: "Licença Médica",
-    detalhe: "Ausência total",
-    entrada: "",
-    saida: "",
-    inicio: "2024-07-03",
-    fim: "2024-07-14",
-    status: "Histórico",
-    className: "bg-muted text-muted-foreground border-border",
-  },
-];
 
 interface AssistantProfileProps {
   onBack?: () => void;
@@ -123,23 +93,52 @@ export default function AssistantProfile({
     (assistant?.first_name ? `${assistant.first_name[0] || ""}${assistant.last_name?.[0] || ""}`.toUpperCase() : "") ||
     initials;
 
-  const [activeTab, setActiveTab] = useState<"info" | "history" | "exceptions">("info");
+  const TODAY_STR = new Date().toISOString().split("T")[0];
+
+  const { data: apiExceptions } = useAssistantExceptions(assistantId);
+  const createExceptionMutation = useCreateAssistantException();
+  const updateExceptionMutation = useUpdateAssistantException();
+  const deleteExceptionMutation = useDeleteAssistantException();
+
+  const [activeTab, setActiveTab] = useState<"info" | "schedule" | "history">("info");
   const [showAddException, setShowAddException] = useState(false);
-  const [exceptions, setExceptions] = useState<ExceptionRule[]>(INITIAL_EXCEPTIONS);
+  const [exceptions, setExceptions] = useState<ExceptionRule[]>([]);
   const [editingExceptionId, setEditingExceptionId] = useState<string | null>(null);
   const [deleteExceptionTarget, setDeleteExceptionTarget] = useState<ExceptionRule | null>(null);
   const [exceptionType, setExceptionType] = useState("");
   const [exceptionDetail, setExceptionDetail] = useState("");
   const [exceptionEntry, setExceptionEntry] = useState("09:30");
   const [exceptionExit, setExceptionExit] = useState("16:30");
-  const [exceptionStartDate, setExceptionStartDate] = useState("");
+  const [exceptionStartDate, setExceptionStartDate] = useState(TODAY_STR);
   const [exceptionEndDate, setExceptionEndDate] = useState("");
+  const [exceptionDateError, setExceptionDateError] = useState<string | null>(null);
+  const [exceptionTimeError, setExceptionTimeError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [availableForTransfer, setAvailableForTransfer] = useState(false);
   const [isActive, setIsActive] = useState<boolean>(initialActive);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showAnonymizeModal, setShowAnonymizeModal] = useState(false);
+
+  React.useEffect(() => {
+    if (apiExceptions) {
+      setExceptions(
+        apiExceptions.map((e) => ({
+          id: String(e.id),
+          tipo: e.type,
+          detalhe:
+            e.description ||
+            (e.start_time && e.end_time
+              ? `Horário diferido ${e.start_time}–${e.end_time}`
+              : "Horário especial"),
+          entrada: e.start_time || undefined,
+          saida: e.end_time || undefined,
+          inicio: e.valid_from,
+          fim: e.valid_until || undefined,
+        }))
+      );
+    }
+  }, [apiExceptions]);
 
   useDocumentTitle(`${resolvedName} - Perfil`);
 
@@ -180,8 +179,10 @@ export default function AssistantProfile({
     setExceptionDetail("");
     setExceptionEntry("09:30");
     setExceptionExit("16:30");
-    setExceptionStartDate("");
+    setExceptionStartDate(TODAY_STR);
     setExceptionEndDate("");
+    setExceptionDateError(null);
+    setExceptionTimeError(null);
     setShowAddException(true);
   }
 
@@ -193,11 +194,32 @@ export default function AssistantProfile({
     setExceptionExit(item.saida || "16:30");
     setExceptionStartDate(item.inicio);
     setExceptionEndDate(item.fim || "");
+    setExceptionDateError(null);
+    setExceptionTimeError(null);
     setShowAddException(true);
   }
 
   function handleSaveException() {
-    if (!exceptionType.trim() || !exceptionStartDate) return;
+    setExceptionDateError(null);
+    setExceptionTimeError(null);
+
+    if (!exceptionType.trim()) return;
+
+    if (!exceptionStartDate) {
+      setExceptionDateError("A data de início de vigência é obrigatória.");
+      return;
+    }
+
+    if (exceptionEndDate && exceptionEndDate < exceptionStartDate) {
+      setExceptionDateError("A data de fim não pode ser anterior à data de início.");
+      return;
+    }
+
+    if (exceptionEntry && exceptionExit && exceptionExit <= exceptionEntry) {
+      setExceptionTimeError("A hora de saída tem de ser posterior à hora de entrada.");
+      return;
+    }
+
     const computedDetail = exceptionDetail.trim()
       ? exceptionDetail.trim()
       : exceptionEntry && exceptionExit
@@ -220,6 +242,20 @@ export default function AssistantProfile({
             : e
         )
       );
+      if (assistant?.id) {
+        updateExceptionMutation.mutate({
+          id: editingExceptionId,
+          assistantId: String(assistant.id),
+          data: {
+            type: exceptionType.trim(),
+            description: computedDetail,
+            start_time: exceptionEntry || null,
+            end_time: exceptionExit || null,
+            valid_from: exceptionStartDate,
+            valid_until: exceptionEndDate || null,
+          },
+        });
+      }
     } else {
       const newRule: ExceptionRule = {
         id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
@@ -231,6 +267,17 @@ export default function AssistantProfile({
         fim: exceptionEndDate || undefined,
       };
       setExceptions((prev) => [newRule, ...prev]);
+      if (assistant?.id) {
+        createExceptionMutation.mutate({
+          assistant_id: String(assistant.id),
+          type: exceptionType.trim(),
+          description: computedDetail,
+          start_time: exceptionEntry || null,
+          end_time: exceptionExit || null,
+          valid_from: exceptionStartDate,
+          valid_until: exceptionEndDate || null,
+        });
+      }
     }
     setShowAddException(false);
   }
@@ -238,6 +285,12 @@ export default function AssistantProfile({
   function confirmDeleteException() {
     if (deleteExceptionTarget) {
       setExceptions((prev) => prev.filter((e) => e.id !== deleteExceptionTarget.id));
+      if (assistant?.id) {
+        deleteExceptionMutation.mutate({
+          id: deleteExceptionTarget.id,
+          assistantId: String(assistant.id),
+        });
+      }
       setDeleteExceptionTarget(null);
     }
   }
@@ -455,8 +508,8 @@ export default function AssistantProfile({
       <div className="flex gap-px border-b border-border mb-6">
         {[
           { id: "info" as const, label: "Informações Gerais", icon: <User size={13} /> },
-          { id: "history" as const, label: "Horários & Escalas", icon: <Calendar size={13} /> },
-          { id: "exceptions" as const, label: "Regras de Exceção", icon: <AlertTriangle size={13} /> },
+          { id: "schedule" as const, label: "Horários & Exceções", icon: <Clock size={13} /> },
+          { id: "history" as const, label: "Escalas & Histórico", icon: <Calendar size={13} /> },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -765,30 +818,128 @@ export default function AssistantProfile({
               />
             </div>
           </Card>
-
-          {/* Card 7: Horário Padrão & Vigências */}
-          <AssistantScheduleManager assistantId={assistant?.id} />
         </div>
       )}
 
-      {/* ── Regras de Exceção tab ── */}
-      {activeTab === "exceptions" && (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-foreground">
-                Regras de Exceção e Vigências
-              </h3>
-              {!isDeletedOrAnonymized && (
-                <button
-                  type="button"
-                  onClick={openAddException}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
-                >
-                  <Plus size={12} />
-                  Nova Exceção
-                </button>
+      {/* ── Horários & Exceções tab (Lado a Lado) ── */}
+      {activeTab === "schedule" && (
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+          {/* Lado Esquerdo: Horário Padrão & Vigências */}
+          <div className="xl:col-span-7 space-y-4">
+            <AssistantScheduleManager assistantId={assistant?.id} />
+          </div>
+
+          {/* Lado Direito: Regras de Exceção */}
+          <div className="xl:col-span-5 space-y-4">
+            <Card className="p-5 w-full">
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-border/50 flex-wrap gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600">
+                    <AlertTriangle size={16} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Regras de Exceção
+                      </h3>
+                      <Badge variant="outline" className="text-[11px] font-normal">
+                        {exceptions.length} {exceptions.length === 1 ? "regra" : "regras"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Horários especiais sobrepostos ao horário padrão.
+                    </p>
+                  </div>
+                </div>
+
+                {!isDeletedOrAnonymized && (
+                  <button
+                    type="button"
+                    onClick={openAddException}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+                  >
+                    <Plus size={12} />
+                    Nova Exceção
+                  </button>
+                )}
+              </div>
+
+              {/* Lista de Exceções */}
+              {exceptions.length === 0 ? (
+                <div className="py-8 text-center text-xs text-muted-foreground bg-muted/20 rounded-lg border border-dashed border-border p-4">
+                  Nenhuma regra de exceção registada para este assistente.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {exceptions.map((row) => {
+                    const { status, className } = getStatusInfo(row);
+                    return (
+                      <div
+                        key={row.id}
+                        className="p-3.5 rounded-xl border border-border bg-card hover:border-border/80 transition-colors space-y-2 shadow-2xs"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-semibold text-sm text-foreground truncate">
+                              {row.tipo}
+                            </span>
+                            <Badge variant="outline" className={`text-[10px] px-2 py-0 ${className}`}>
+                              {status}
+                            </Badge>
+                          </div>
+                          {!isDeletedOrAnonymized && (
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => openEditException(row)}
+                                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                title="Editar exceção"
+                              >
+                                <Pencil size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeleteExceptionTarget(row)}
+                                className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                                title="Eliminar exceção"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {row.detalhe && (
+                          <p className="text-xs text-muted-foreground">
+                            {row.detalhe}
+                          </p>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs pt-1 border-t border-border/40 text-muted-foreground">
+                          <div>
+                            <span className="font-medium text-foreground">Vigência:</span>{" "}
+                            <span className="font-mono">{formatDateDisplay(row.inicio)}</span>
+                            {row.fim ? (
+                              <> → <span className="font-mono">{formatDateDisplay(row.fim)}</span></>
+                            ) : (
+                              " → Em aberto"
+                            )}
+                          </div>
+                          {(row.entrada || row.saida) && (
+                            <div className="flex items-center gap-1">
+                              <Clock size={11} className="text-muted-foreground" />
+                              <span>
+                                {row.entrada || "—"} às {row.saida || "—"}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
-            </div>
+            </Card>
 
             {showAddException && (
               <Modal
@@ -803,8 +954,19 @@ export default function AssistantProfile({
                     : "Horário especial com data de vigência"
                 }
                 onClose={() => setShowAddException(false)}
+                overflowVisible={true}
               >
                 <div className="space-y-4">
+                  {exceptionDateError && (
+                    <div className="p-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs font-medium">
+                      {exceptionDateError}
+                    </div>
+                  )}
+                  {exceptionTimeError && (
+                    <div className="p-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs font-medium">
+                      {exceptionTimeError}
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
                       <label className="text-xs font-medium text-muted-foreground block mb-1">
@@ -836,7 +998,10 @@ export default function AssistantProfile({
                       </label>
                       <TimePicker
                         value={exceptionEntry}
-                        onChange={setExceptionEntry}
+                        onChange={(v) => {
+                          setExceptionEntry(v);
+                          setExceptionTimeError(null);
+                        }}
                         className="w-full"
                       />
                     </div>
@@ -846,7 +1011,10 @@ export default function AssistantProfile({
                       </label>
                       <TimePicker
                         value={exceptionExit}
-                        onChange={setExceptionExit}
+                        onChange={(v) => {
+                          setExceptionExit(v);
+                          setExceptionTimeError(null);
+                        }}
                         className="w-full"
                       />
                     </div>
@@ -856,7 +1024,14 @@ export default function AssistantProfile({
                       </label>
                       <DatePicker
                         value={exceptionStartDate}
-                        onChange={setExceptionStartDate}
+                        minDate={editingExceptionId ? undefined : TODAY_STR}
+                        onChange={(v) => {
+                          setExceptionStartDate(v);
+                          setExceptionDateError(null);
+                          if (v && exceptionEndDate && exceptionEndDate < v) {
+                            setExceptionEndDate(v);
+                          }
+                        }}
                         className="w-full"
                       />
                     </div>
@@ -866,7 +1041,11 @@ export default function AssistantProfile({
                       </label>
                       <DatePicker
                         value={exceptionEndDate}
-                        onChange={setExceptionEndDate}
+                        minDate={exceptionStartDate || TODAY_STR}
+                        onChange={(v) => {
+                          setExceptionEndDate(v);
+                          setExceptionDateError(null);
+                        }}
                         className="w-full"
                       />
                     </div>
@@ -891,92 +1070,7 @@ export default function AssistantProfile({
                 </div>
               </Modal>
             )}
-
-            <Card className="overflow-hidden border-border bg-card">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/30">
-                    {[
-                      "Tipo de Exceção",
-                      "Detalhe",
-                      "Data Início",
-                      "Data Fim",
-                      "Estado",
-                      "",
-                    ].map((h, i) => (
-                      <th
-                        key={i}
-                        className={`px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide ${
-                          h === "" ? "text-right w-24" : "text-left"
-                        }`}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {exceptions.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="px-4 py-8 text-center text-xs text-muted-foreground"
-                      >
-                        Nenhuma regra de exceção registada para este assistente.
-                      </td>
-                    </tr>
-                  ) : (
-                    exceptions.map((row) => {
-                      const { status, className } = getStatusInfo(row);
-                      return (
-                        <tr
-                          key={row.id}
-                          className="border-b border-border/50 hover:bg-muted/20 transition-colors"
-                        >
-                          <td className="px-4 py-3 font-medium text-sm text-foreground">
-                            {row.tipo}
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground text-xs">
-                            {row.detalhe}
-                          </td>
-                          <td className="px-4 py-3 font-mono text-xs">
-                            {formatDateDisplay(row.inicio)}
-                          </td>
-                          <td className="px-4 py-3 font-mono text-xs">
-                            {formatDateDisplay(row.fim)}
-                          </td>
-                          <td className="px-4 py-3">
-                            <Badge variant="outline" className={className}>
-                              {status}
-                            </Badge>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                type="button"
-                                onClick={() => openEditException(row)}
-                                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                                title="Editar exceção"
-                              >
-                                <Pencil size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeleteExceptionTarget(row)}
-                                className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                                title="Eliminar exceção"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </Card>
+          </div>
         </div>
       )}
 
@@ -999,7 +1093,7 @@ export default function AssistantProfile({
             </div>
             <button
               type="button"
-              onClick={() => setActiveTab("info")}
+              onClick={() => setActiveTab("schedule")}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
             >
               <Clock size={13} />

@@ -27,6 +27,16 @@ import {
 } from "../dashboard/blockStyles";
 import { HOUR_LABELS } from "../../api/mockData";
 import type { BlockState, EntityId } from "../../types";
+import {
+  useAssistantSchedules,
+  useCreateAssistantSchedule,
+  useUpdateAssistantSchedule,
+  useDeleteAssistantSchedule,
+} from "../../hooks/api/useAssistantSchedules";
+import {
+  apiProfileToScheduleItem,
+  scheduleItemToApiPayload,
+} from "../../api/services/assistantSchedules.service";
 
 export interface AssistantScheduleItem {
   id: number;
@@ -89,49 +99,18 @@ interface AssistantScheduleManagerProps {
 export default function AssistantScheduleManager({
   assistantId,
 }: AssistantScheduleManagerProps) {
-  const [schedules, setSchedules] = useState<AssistantScheduleItem[]>([
-    {
-      id: 1,
-      type: "rotating",
-      period: "Quinzenal",
-      shiftA: { entry: "07:30", exit: "15:30" },
-      shiftB: { entry: "10:00", exit: "17:00" },
-      days: ["Seg", "Ter", "Qua", "Qui", "Sex"],
-      startsWith: "A",
-      from: "2026-02-01",
-      to: null,
-    },
-    {
-      id: 2,
-      type: "fixed",
-      entry: "08:00",
-      exit: "16:00",
-      days: ["Seg", "Ter", "Qua", "Qui", "Sex"],
-      lunch: { start: "12:00", end: "13:30", duration: 30 },
-      from: "2025-09-01",
-      to: "2026-01-31",
-    },
-    {
-      id: 3,
-      type: "fixed",
-      entry: "07:30",
-      exit: "15:30",
-      days: ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"],
-      lunch: { start: "11:30", end: "13:00", duration: 30 },
-      from: "2024-01-01",
-      to: "2025-08-31",
-    },
-    {
-      id: 4,
-      type: "fixed",
-      entry: "07:00",
-      exit: "15:00",
-      days: ["Seg", "Ter", "Qua", "Qui", "Sex"],
-      lunch: { start: "12:00", end: "13:00", duration: 30 },
-      from: "2022-09-01",
-      to: "2023-12-31",
-    },
-  ]);
+  const { data: apiProfiles } = useAssistantSchedules(assistantId);
+  const createScheduleMutation = useCreateAssistantSchedule();
+  const updateScheduleMutation = useUpdateAssistantSchedule();
+  const deleteScheduleMutation = useDeleteAssistantSchedule();
+
+  const [schedules, setSchedules] = useState<AssistantScheduleItem[]>([]);
+
+  React.useEffect(() => {
+    if (apiProfiles) {
+      setSchedules(apiProfiles.map(apiProfileToScheduleItem));
+    }
+  }, [apiProfiles]);
 
   const [showAddScheduleModal, setShowAddScheduleModal] = useState(false);
   const [editingScheduleId, setEditingScheduleId] = useState<number | null>(null);
@@ -340,6 +319,13 @@ export default function AssistantScheduleManager({
       setSchedules((prev) =>
         prev.map((s) => (s.id === editingSchedule.id ? { ...s, to: endVal } : s))
       );
+      if (assistantId) {
+        updateScheduleMutation.mutate({
+          id: editingSchedule.id,
+          assistantId: String(assistantId),
+          data: { valid_until: endVal },
+        });
+      }
       notify.success("Data de fim de vigência atualizada!");
       setShowAddScheduleModal(false);
       setEditingScheduleId(null);
@@ -430,6 +416,23 @@ export default function AssistantScheduleManager({
       return list.sort((a, b) => (b.from > a.from ? 1 : -1));
     });
 
+    if (assistantId) {
+      if (editingScheduleId) {
+        updateScheduleMutation.mutate({
+          id: editingScheduleId,
+          assistantId: String(assistantId),
+          data: {
+            valid_from: itemToSave.from,
+            valid_until: itemToSave.to,
+          },
+        });
+      } else {
+        createScheduleMutation.mutate(
+          scheduleItemToApiPayload(String(assistantId), itemToSave)
+        );
+      }
+    }
+
     notify.success(
       editingScheduleId
         ? "Horário atualizado com sucesso!"
@@ -473,6 +476,13 @@ export default function AssistantScheduleManager({
       return nextList;
     });
 
+    if (assistantId && scheduleToDelete) {
+      deleteScheduleMutation.mutate({
+        id: scheduleToDelete.id,
+        assistantId: String(assistantId),
+      });
+    }
+
     notify.success(
       isFuture
         ? "Horário agendado eliminado. A vigência do horário atual ficou em aberto."
@@ -482,7 +492,7 @@ export default function AssistantScheduleManager({
   }
 
   return (
-    <Card className="p-5 col-span-1 md:col-span-2 lg:col-span-3">
+    <Card className="p-5 w-full">
       {/* Box Header */}
       <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-border/50 flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
@@ -516,7 +526,12 @@ export default function AssistantScheduleManager({
 
       {/* History list */}
       <div className="space-y-3">
-        {schedules.map((h) => {
+        {schedules.length === 0 ? (
+          <div className="py-8 text-center text-xs text-muted-foreground bg-muted/20 rounded-lg border border-dashed border-border p-4">
+            Nenhum perfil de horário configurado para este assistente. Clique em "Adicionar Horário" para definir o horário.
+          </div>
+        ) : (
+          schedules.map((h) => {
           const status = getScheduleTypeStatus(h, schedules);
           const isActiveSchedule = status === "active";
           const isFutureSchedule = status === "future";
@@ -744,7 +759,7 @@ export default function AssistantScheduleManager({
               </div>
             </div>
           );
-        })}
+        }))}
       </div>
 
       {/* ── Add / Edit schedule modal ── */}
@@ -768,6 +783,7 @@ export default function AssistantScheduleManager({
             setScheduleError(null);
           }}
           maxWidth="max-w-4xl"
+          overflowVisible={true}
         >
           <div className="space-y-5">
             {/* Active schedule banner */}
@@ -941,9 +957,13 @@ export default function AssistantScheduleManager({
                       <div className={isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}>
                         <DatePicker
                           value={fixedStartDate}
+                          minDate={isEditingActiveSchedule ? undefined : TODAY_STR}
                           onChange={(v) => {
                             setFixedStartDate(v);
                             setScheduleError(null);
+                            if (v && fixedEndDate && fixedEndDate < v) {
+                              setFixedEndDate(v);
+                            }
                           }}
                           className="w-full"
                         />
@@ -967,6 +987,7 @@ export default function AssistantScheduleManager({
                       </label>
                       <DatePicker
                         value={fixedEndDate}
+                        minDate={fixedStartDate || undefined}
                         onChange={(v) => {
                           setFixedEndDate(v);
                           setScheduleError(null);
@@ -1076,9 +1097,13 @@ export default function AssistantScheduleManager({
                           <div className={isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}>
                             <DatePicker
                               value={rotStartDate}
+                              minDate={isEditingActiveSchedule ? undefined : TODAY_STR}
                               onChange={(v) => {
                                 setRotStartDate(v);
                                 setScheduleError(null);
+                                if (v && rotEndDate && rotEndDate < v) {
+                                  setRotEndDate(v);
+                                }
                               }}
                               className="w-full"
                             />
@@ -1095,6 +1120,7 @@ export default function AssistantScheduleManager({
                           </label>
                           <DatePicker
                             value={rotEndDate}
+                            minDate={rotStartDate || undefined}
                             onChange={(v) => {
                               setRotEndDate(v);
                               setScheduleError(null);
