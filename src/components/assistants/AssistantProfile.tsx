@@ -49,6 +49,27 @@ import {
 } from "../../hooks/api/useAssistantExceptions";
 import type { EntityId } from "../../types";
 
+const WEEK_DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
+const DAY_MAP_TO_NUM: Record<string, number> = {
+  Seg: 1,
+  Ter: 2,
+  Qua: 3,
+  Qui: 4,
+  Sex: 5,
+  Sáb: 6,
+  Dom: 7,
+};
+
+const NUM_TO_DAY_MAP: Record<number, string> = {
+  1: "Seg",
+  2: "Ter",
+  3: "Qua",
+  4: "Qui",
+  5: "Sex",
+  6: "Sáb",
+  7: "Dom",
+};
 
 interface ExceptionRule {
   id: string;
@@ -56,6 +77,13 @@ interface ExceptionRule {
   detalhe: string;
   entrada?: string;
   saida?: string;
+  dias?: string[];
+  pausaAlmoco?: {
+    ativo: boolean;
+    inicio: string;
+    fim: string;
+    duracao: number;
+  };
   inicio: string;
   fim?: string;
   status?: string;
@@ -113,12 +141,31 @@ export default function AssistantProfile({
   const [exceptionEndDate, setExceptionEndDate] = useState("");
   const [exceptionDateError, setExceptionDateError] = useState<string | null>(null);
   const [exceptionTimeError, setExceptionTimeError] = useState<string | null>(null);
+  const [exceptionDays, setExceptionDays] = useState<string[]>([
+    "Seg",
+    "Ter",
+    "Qua",
+    "Qui",
+    "Sex",
+  ]);
+  const [exceptionLunchEnabled, setExceptionLunchEnabled] = useState(true);
+  const [exceptionLunchStart, setExceptionLunchStart] = useState("12:00");
+  const [exceptionLunchEnd, setExceptionLunchEnd] = useState("13:30");
+  const [exceptionLunchDuration, setExceptionLunchDuration] = useState("30");
   const [editing, setEditing] = useState(false);
   const [availableForTransfer, setAvailableForTransfer] = useState(false);
   const [isActive, setIsActive] = useState<boolean>(initialActive);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showAnonymizeModal, setShowAnonymizeModal] = useState(false);
+
+  function toggleExceptionDay(day: string) {
+    if (exceptionDays.includes(day)) {
+      setExceptionDays(exceptionDays.filter((d) => d !== day));
+    } else {
+      setExceptionDays([...exceptionDays, day]);
+    }
+  }
 
   React.useEffect(() => {
     if (apiExceptions) {
@@ -133,6 +180,15 @@ export default function AssistantProfile({
               : "Horário especial"),
           entrada: e.start_time || undefined,
           saida: e.end_time || undefined,
+          dias: e.days && e.days.length > 0 ? e.days.map((n) => NUM_TO_DAY_MAP[n] || String(n)) : undefined,
+          pausaAlmoco: e.lunch_enabled
+            ? {
+                ativo: true,
+                inicio: e.lunch_start || "12:00",
+                fim: e.lunch_end || "13:30",
+                duracao: e.lunch_duration_minutes ?? 30,
+              }
+            : undefined,
           inicio: e.valid_from,
           fim: e.valid_until || undefined,
         }))
@@ -181,6 +237,11 @@ export default function AssistantProfile({
     setExceptionExit("16:30");
     setExceptionStartDate(TODAY_STR);
     setExceptionEndDate("");
+    setExceptionDays(["Seg", "Ter", "Qua", "Qui", "Sex"]);
+    setExceptionLunchEnabled(true);
+    setExceptionLunchStart("12:00");
+    setExceptionLunchEnd("13:30");
+    setExceptionLunchDuration("30");
     setExceptionDateError(null);
     setExceptionTimeError(null);
     setShowAddException(true);
@@ -194,6 +255,18 @@ export default function AssistantProfile({
     setExceptionExit(item.saida || "16:30");
     setExceptionStartDate(item.inicio);
     setExceptionEndDate(item.fim || "");
+    setExceptionDays(item.dias || ["Seg", "Ter", "Qua", "Qui", "Sex"]);
+    if (item.pausaAlmoco) {
+      setExceptionLunchEnabled(item.pausaAlmoco.ativo);
+      setExceptionLunchStart(item.pausaAlmoco.inicio);
+      setExceptionLunchEnd(item.pausaAlmoco.fim);
+      setExceptionLunchDuration(String(item.pausaAlmoco.duracao));
+    } else {
+      setExceptionLunchEnabled(false);
+      setExceptionLunchStart("12:00");
+      setExceptionLunchEnd("13:30");
+      setExceptionLunchDuration("30");
+    }
     setExceptionDateError(null);
     setExceptionTimeError(null);
     setShowAddException(true);
@@ -215,6 +288,11 @@ export default function AssistantProfile({
       return;
     }
 
+    if (exceptionDays.length === 0) {
+      setExceptionDateError("Selecione pelo menos um dia de trabalho para a exceção.");
+      return;
+    }
+
     if (exceptionEntry && exceptionExit && exceptionExit <= exceptionEntry) {
       setExceptionTimeError("A hora de saída tem de ser posterior à hora de entrada.");
       return;
@@ -226,6 +304,29 @@ export default function AssistantProfile({
       ? `Horário diferido ${exceptionEntry}–${exceptionExit}`
       : "Horário especial";
 
+    const lunchData = exceptionLunchEnabled
+      ? {
+          ativo: true,
+          inicio: exceptionLunchStart,
+          fim: exceptionLunchEnd,
+          duracao: parseInt(exceptionLunchDuration, 10) || 30,
+        }
+      : undefined;
+
+    const commonPayload = {
+      type: exceptionType.trim(),
+      description: computedDetail,
+      start_time: exceptionEntry || null,
+      end_time: exceptionExit || null,
+      valid_from: exceptionStartDate,
+      valid_until: exceptionEndDate || null,
+      days: exceptionDays.map((d) => DAY_MAP_TO_NUM[d] || 1),
+      lunch_enabled: exceptionLunchEnabled,
+      lunch_start: exceptionLunchEnabled ? exceptionLunchStart : null,
+      lunch_end: exceptionLunchEnabled ? exceptionLunchEnd : null,
+      lunch_duration_minutes: exceptionLunchEnabled ? parseInt(exceptionLunchDuration, 10) || 30 : null,
+    };
+
     if (editingExceptionId) {
       setExceptions((prev) =>
         prev.map((e) =>
@@ -236,6 +337,8 @@ export default function AssistantProfile({
                 detalhe: computedDetail,
                 entrada: exceptionEntry,
                 saida: exceptionExit,
+                dias: exceptionDays,
+                pausaAlmoco: lunchData,
                 inicio: exceptionStartDate,
                 fim: exceptionEndDate || undefined,
               }
@@ -246,14 +349,7 @@ export default function AssistantProfile({
         updateExceptionMutation.mutate({
           id: editingExceptionId,
           assistantId: String(assistant.id),
-          data: {
-            type: exceptionType.trim(),
-            description: computedDetail,
-            start_time: exceptionEntry || null,
-            end_time: exceptionExit || null,
-            valid_from: exceptionStartDate,
-            valid_until: exceptionEndDate || null,
-          },
+          data: commonPayload,
         });
       }
     } else {
@@ -263,6 +359,8 @@ export default function AssistantProfile({
         detalhe: computedDetail,
         entrada: exceptionEntry,
         saida: exceptionExit,
+        dias: exceptionDays,
+        pausaAlmoco: lunchData,
         inicio: exceptionStartDate,
         fim: exceptionEndDate || undefined,
       };
@@ -270,12 +368,7 @@ export default function AssistantProfile({
       if (assistant?.id) {
         createExceptionMutation.mutate({
           assistant_id: String(assistant.id),
-          type: exceptionType.trim(),
-          description: computedDetail,
-          start_time: exceptionEntry || null,
-          end_time: exceptionExit || null,
-          valid_from: exceptionStartDate,
-          valid_until: exceptionEndDate || null,
+          ...commonPayload,
         });
       }
     }
@@ -905,7 +998,7 @@ export default function AssistantProfile({
                           </p>
                         )}
 
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs pt-1 border-t border-border/40 text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs pt-2 border-t border-border/40 text-muted-foreground">
                           <div>
                             <span className="font-medium text-foreground">Vigência:</span>{" "}
                             <span className="font-mono">{formatDateDisplay(row.inicio)}</span>
@@ -920,6 +1013,20 @@ export default function AssistantProfile({
                               <Clock size={11} className="text-muted-foreground" />
                               <span>
                                 {row.entrada || "—"} às {row.saida || "—"}
+                              </span>
+                            </div>
+                          )}
+                          {row.dias && row.dias.length > 0 && (
+                            <div>
+                              <span className="font-medium text-foreground">Dias:</span>{" "}
+                              <span>{row.dias.join(", ")}</span>
+                            </div>
+                          )}
+                          {row.pausaAlmoco?.ativo && (
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium text-foreground">Pausa de almoço:</span>{" "}
+                              <span>
+                                {row.pausaAlmoco.inicio}–{row.pausaAlmoco.fim} ({row.pausaAlmoco.duracao}m)
                               </span>
                             </div>
                           )}
@@ -957,7 +1064,7 @@ export default function AssistantProfile({
                     <button
                       type="button"
                       onClick={handleSaveException}
-                      disabled={!exceptionType.trim() || !exceptionStartDate}
+                      disabled={!exceptionType.trim() || !exceptionStartDate || exceptionDays.length === 0}
                       className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
                     >
                       {editingExceptionId ? "Guardar Alterações" : "Criar Exceção"}
@@ -1003,32 +1110,6 @@ export default function AssistantProfile({
                     </div>
                     <div>
                       <label className="text-xs font-medium text-muted-foreground block mb-1">
-                        Hora de Entrada
-                      </label>
-                      <TimePicker
-                        value={exceptionEntry}
-                        onChange={(v) => {
-                          setExceptionEntry(v);
-                          setExceptionTimeError(null);
-                        }}
-                        className="w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground block mb-1">
-                        Hora de Saída
-                      </label>
-                      <TimePicker
-                        value={exceptionExit}
-                        onChange={(v) => {
-                          setExceptionExit(v);
-                          setExceptionTimeError(null);
-                        }}
-                        className="w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground block mb-1">
                         Data de Início *
                       </label>
                       <DatePicker
@@ -1057,6 +1138,113 @@ export default function AssistantProfile({
                         }}
                         className="w-full"
                       />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground block mb-1">
+                        Hora de Entrada
+                      </label>
+                      <TimePicker
+                        value={exceptionEntry}
+                        onChange={(v) => {
+                          setExceptionEntry(v);
+                          setExceptionTimeError(null);
+                        }}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground block mb-1">
+                        Hora de Saída
+                      </label>
+                      <TimePicker
+                        value={exceptionExit}
+                        onChange={(v) => {
+                          setExceptionExit(v);
+                          setExceptionTimeError(null);
+                        }}
+                        className="w-full"
+                      />
+                    </div>
+
+                    {/* Dias de trabalho */}
+                    <div className="col-span-2 border-t border-border/60 pt-3">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                        Dias de Trabalho
+                      </p>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {WEEK_DAYS.map((d) => (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => toggleExceptionDay(d)}
+                            className={`w-8 h-8 rounded-lg border text-xs font-medium transition-colors ${
+                              exceptionDays.includes(d)
+                                ? "bg-primary text-primary-foreground border-primary font-bold shadow-xs"
+                                : "border-border text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Pausa de almoço */}
+                    <div className="col-span-2 border-t border-border/60 pt-3">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Pausa de almoço
+                        </p>
+                        <Switch
+                          checked={exceptionLunchEnabled}
+                          onCheckedChange={setExceptionLunchEnabled}
+                        />
+                      </div>
+                      {exceptionLunchEnabled && (
+                        <div className="grid grid-cols-3 gap-2.5">
+                          <div>
+                            <label className="text-[11px] text-muted-foreground block mb-1">
+                              Início do Almoço
+                            </label>
+                            <TimePicker
+                              value={exceptionLunchStart}
+                              onChange={setExceptionLunchStart}
+                              className="w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] text-muted-foreground block mb-1">
+                              Fim do Almoço
+                            </label>
+                            <TimePicker
+                              value={exceptionLunchEnd}
+                              onChange={setExceptionLunchEnd}
+                              className="w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] text-muted-foreground block mb-1">
+                              Duração Efetiva
+                            </label>
+                            <div className="flex gap-1">
+                              {["30", "45", "60"].map((m) => (
+                                <button
+                                  key={m}
+                                  type="button"
+                                  onClick={() => setExceptionLunchDuration(m)}
+                                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                    exceptionLunchDuration === m
+                                      ? "bg-primary text-primary-foreground border-primary font-semibold"
+                                      : "border-border text-muted-foreground hover:text-foreground"
+                                  }`}
+                                >
+                                  {m}m
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

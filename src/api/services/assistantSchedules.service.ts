@@ -75,6 +75,10 @@ export function scheduleItemToApiPayload(
         shift_label: "A",
         entry_time: item.shiftA?.entry || "07:30",
         exit_time: item.shiftA?.exit || "15:30",
+        lunch_enabled: !!item.shiftA?.lunch,
+        lunch_start: item.shiftA?.lunch?.start || null,
+        lunch_end: item.shiftA?.lunch?.end || null,
+        lunch_duration_minutes: item.shiftA?.lunch?.duration ?? 30,
         days: (item.days || ["Seg", "Ter", "Qua", "Qui", "Sex"]).map(
           (d) => DAY_MAP_TO_NUM[d] || 1
         ),
@@ -83,6 +87,10 @@ export function scheduleItemToApiPayload(
         shift_label: "B",
         entry_time: item.shiftB?.entry || "10:00",
         exit_time: item.shiftB?.exit || "17:00",
+        lunch_enabled: !!item.shiftB?.lunch,
+        lunch_start: item.shiftB?.lunch?.start || null,
+        lunch_end: item.shiftB?.lunch?.end || null,
+        lunch_duration_minutes: item.shiftB?.lunch?.duration ?? 30,
         days: (item.days || ["Seg", "Ter", "Qua", "Qui", "Sex"]).map(
           (d) => DAY_MAP_TO_NUM[d] || 1
         ),
@@ -139,10 +147,24 @@ export function apiProfileToScheduleItem(
     shiftA: {
       entry: shiftA?.entry_time || "07:30",
       exit: shiftA?.exit_time || "15:30",
+      lunch: shiftA?.lunch_enabled
+        ? {
+            start: shiftA.lunch_start || "12:00",
+            end: shiftA.lunch_end || "13:30",
+            duration: shiftA.lunch_duration_minutes ?? 30,
+          }
+        : undefined,
     },
     shiftB: {
       entry: shiftB?.entry_time || "10:00",
       exit: shiftB?.exit_time || "17:00",
+      lunch: shiftB?.lunch_enabled
+        ? {
+            start: shiftB.lunch_start || "12:00",
+            end: shiftB.lunch_end || "13:30",
+            duration: shiftB.lunch_duration_minutes ?? 30,
+          }
+        : undefined,
     },
     days: daysA,
     from: profile.valid_from,

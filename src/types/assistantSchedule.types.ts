@@ -57,6 +57,11 @@ export interface AssistantExceptionApi {
   valid_until?: string | null;
   start_time?: string | null;
   end_time?: string | null;
+  days?: number[] | null; // 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sáb, 7=Dom
+  lunch_enabled?: boolean;
+  lunch_start?: string | null;
+  lunch_end?: string | null;
+  lunch_duration_minutes?: number | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -69,6 +74,11 @@ export interface CreateAssistantExceptionPayload {
   valid_until?: string | null;
   start_time?: string | null;
   end_time?: string | null;
+  days?: number[] | null;
+  lunch_enabled?: boolean;
+  lunch_start?: string | null;
+  lunch_end?: string | null;
+  lunch_duration_minutes?: number | null;
 }
 
 export interface UpdateAssistantExceptionPayload {
@@ -78,5 +88,10 @@ export interface UpdateAssistantExceptionPayload {
   valid_until?: string | null;
   start_time?: string | null;
   end_time?: string | null;
+  days?: number[] | null;
+  lunch_enabled?: boolean;
+  lunch_start?: string | null;
+  lunch_end?: string | null;
+  lunch_duration_minutes?: number | null;
 }
 

@@ -44,8 +44,8 @@ export interface AssistantScheduleItem {
   period?: "Semanal" | "Quinzenal" | "Mensal";
   entry?: string;
   exit?: string;
-  shiftA?: { entry: string; exit: string };
-  shiftB?: { entry: string; exit: string };
+  shiftA?: { entry: string; exit: string; lunch?: { start: string; end: string; duration: number } };
+  shiftB?: { entry: string; exit: string; lunch?: { start: string; end: string; duration: number } };
   days: string[];
   lunch?: { start: string; end: string; duration: number };
   startsWith?: "A" | "B";
@@ -254,10 +254,26 @@ export default function AssistantScheduleManager({
       if (item.shiftA) {
         setFixedEntry(item.shiftA.entry);
         setFixedExit(item.shiftA.exit);
+        if (item.shiftA.lunch) {
+          setLunchEnabled(true);
+          setLunchStart(item.shiftA.lunch.start);
+          setLunchEnd(item.shiftA.lunch.end);
+          setLunchDuration(String(item.shiftA.lunch.duration));
+        } else {
+          setLunchEnabled(false);
+        }
       }
       if (item.shiftB) {
         setShiftBEntry(item.shiftB.entry);
         setShiftBExit(item.shiftB.exit);
+        if (item.shiftB.lunch) {
+          setShiftBLunchEnabled(true);
+          setShiftBLunchStart(item.shiftB.lunch.start);
+          setShiftBLunchEnd(item.shiftB.lunch.end);
+          setShiftBLunchDuration(String(item.shiftB.lunch.duration));
+        } else {
+          setShiftBLunchEnabled(false);
+        }
       }
       setFixedDays(item.days || ["Seg", "Ter", "Qua", "Qui", "Sex"]);
       setShiftBDays(item.days || ["Seg", "Ter", "Qua", "Qui", "Sex"]);
@@ -390,10 +406,24 @@ export default function AssistantScheduleManager({
             shiftA: {
               entry: fixedEntry,
               exit: fixedExit,
+              lunch: lunchEnabled
+                ? {
+                    start: lunchStart,
+                    end: lunchEnd,
+                    duration: parseInt(lunchDuration, 10) || 30,
+                  }
+                : undefined,
             },
             shiftB: {
               entry: shiftBEntry,
               exit: shiftBExit,
+              lunch: shiftBLunchEnabled
+                ? {
+                    start: shiftBLunchStart,
+                    end: shiftBLunchEnd,
+                    duration: parseInt(shiftBLunchDuration, 10) || 30,
+                  }
+                : undefined,
             },
           }),
     };
@@ -744,6 +774,11 @@ export default function AssistantScheduleManager({
                           </div>
                           <span>
                             {s?.entry} – {s?.exit}
+                            {s?.lunch && (
+                              <span className="text-muted-foreground ml-1.5 text-[11px]">
+                                · Almoço: {s.lunch.start}–{s.lunch.end} ({s.lunch.duration}m)
+                              </span>
+                            )}
                           </span>
                         </div>
                       );
@@ -907,7 +942,7 @@ export default function AssistantScheduleManager({
                   <div className="border-t border-border/60 pt-4">
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Pausa de Almoço
+                        Pausa de almoço
                       </p>
                       <Switch
                         checked={lunchEnabled}
@@ -1168,6 +1203,14 @@ export default function AssistantScheduleManager({
                     const setExitVal = isA ? setFixedExit : setShiftBExit;
                     const daysVal = isA ? fixedDays : shiftBDays;
                     const setDaysVal = isA ? setFixedDays : setShiftBDays;
+                    const isLunch = isA ? lunchEnabled : shiftBLunchEnabled;
+                    const setIsLunch = isA ? setLunchEnabled : setShiftBLunchEnabled;
+                    const lunchS = isA ? lunchStart : shiftBLunchStart;
+                    const setLunchS = isA ? setLunchStart : setShiftBLunchStart;
+                    const lunchE = isA ? lunchEnd : shiftBLunchEnd;
+                    const setLunchE = isA ? setLunchEnd : setShiftBLunchEnd;
+                    const lunchD = isA ? lunchDuration : shiftBLunchDuration;
+                    const setLunchD = isA ? setLunchDuration : setShiftBLunchDuration;
 
                     return (
                       <Card key={ab} className="p-5 space-y-4">
@@ -1228,6 +1271,67 @@ export default function AssistantScheduleManager({
                               </button>
                             ))}
                           </div>
+                        </div>
+
+                        {/* Pausa de almoço */}
+                        <div className="border-t border-border/60 pt-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                              Pausa de almoço
+                            </p>
+                            <Switch
+                              checked={isLunch}
+                              onCheckedChange={setIsLunch}
+                            />
+                          </div>
+                          {isLunch && (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground block mb-1">
+                                    Início do Almoço
+                                  </label>
+                                  <TimePicker
+                                    value={lunchS}
+                                    onChange={setLunchS}
+                                    className="w-full"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground block mb-1">
+                                    Fim do Almoço
+                                  </label>
+                                  <TimePicker
+                                    value={lunchE}
+                                    onChange={setLunchE}
+                                    className="w-full"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="text-[10px] text-muted-foreground block mb-1">
+                                  Duração Efetiva
+                                </label>
+                                <div className="flex gap-1.5 w-full">
+                                  {["30", "45", "60"].map((m) => (
+                                    <button
+                                      key={m}
+                                      type="button"
+                                      onClick={() => setLunchD(m)}
+                                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                        lunchD === m
+                                          ? "bg-primary text-primary-foreground border-primary font-semibold shadow-xs"
+                                          : "border-border text-muted-foreground hover:text-foreground"
+                                      }`}
+                                    >
+                                      {m}m
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </Card>
                     );
