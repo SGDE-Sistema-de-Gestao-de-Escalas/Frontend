@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Building2, Check, ChevronDown } from "lucide-react";
+import { Building2, ChevronDown } from "lucide-react";
+import { notify } from "../common/FeedbackNotification";
 import {
   assistants as ASSISTANTS,
   generateMatrix,
@@ -29,7 +30,6 @@ export default function QuickAbsenceModal({
   const [endTime, setEndTime] = useState("17:00");
   const [reason, setReason] = useState("Doença");
   const [note, setNote] = useState("");
-  const [done, setDone] = useState(false);
   const [showCoverage, setShowCoverage] = useState(false);
   const [coverageSchool, setCoverageSchool] = useState<number | "">("");
   const [coverageAssistantId, setCoverageAssistantId] = useState<number | "">("");
@@ -72,7 +72,11 @@ export default function QuickAbsenceModal({
     }
 
     setDateErrors({});
-    setDone(true);
+    notify.success(
+      `A falta de ${assistantName} foi registada com sucesso.`,
+      "Ausência Registada"
+    );
+    onClose();
   }
 
   const hasDates = Boolean(start && end);
@@ -89,44 +93,6 @@ export default function QuickAbsenceModal({
           </p>
         </DialogHeader>
 
-        {done ? (
-          <div className="p-8 text-center">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
-              <Check size={22} className="text-primary" />
-            </div>
-            <p className="text-sm font-semibold text-foreground">
-              Ausência registada
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              A falta de <span className="font-medium text-foreground">{assistantName}</span> foi registada com sucesso.
-            </p>
-            <div className="mt-2 px-3 py-2 rounded-lg bg-muted/40 border border-border text-xs font-mono text-muted-foreground">
-              {start} {startTime} → {end} {endTime}
-            </div>
-            {selectedCovSub && (
-              <div className="mt-3 px-4 py-2.5 rounded-xl bg-primary/5 border border-primary/20 text-xs text-left">
-                <p className="font-medium text-primary mb-0.5">
-                  Cobertura inter-escolar agendada
-                </p>
-                <p className="text-muted-foreground">
-                  {selectedCovSub.name} (
-                  {
-                    SCHOOLS.find((s) => s.id === selectedCovSub.schoolId)
-                      ?.name
-                  }
-                  ) cobre de {start} {startTime} a {end} {endTime}.
-                </p>
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="mt-5 px-6 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-            >
-              Fechar
-            </button>
-          </div>
-        ) : (
           <div className="p-5 space-y-4">
             {/* Assistant summary header */}
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-muted/50 border border-border">
@@ -366,7 +332,6 @@ export default function QuickAbsenceModal({
               </button>
             </DialogFooter>
           </div>
-        )}
       </DialogContent>
     </Dialog>
   );

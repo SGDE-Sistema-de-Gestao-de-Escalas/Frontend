@@ -69,11 +69,12 @@ export default function ScheduleRulesTab() {
   const [formMinStaff, setFormMinStaff] = useState("2");
   const [formRuleType, setFormRuleType] = useState<"mandatory" | "optional">("mandatory");
   const [formValidityStart, setFormValidityStart] = useState(todayStr);
+  const [formValidityEnd, setFormValidityEnd] = useState("");
   const [formAssistantIds, setFormAssistantIds] = useState<EntityId[]>([]);
   const [orderedAssistantIds, setOrderedAssistantIds] = useState<EntityId[]>([]);
   const [draggedAssistantId, setDraggedAssistantId] = useState<EntityId | null>(null);
-  const [formStep, setFormStep] = useState<"form" | "done">("form");
   const [formError, setFormError] = useState<string | null>(null);
+  const [showMissingSubstitutesWarning, setShowMissingSubstitutesWarning] = useState(false);
 
   const isEditing = editingRuleId !== null;
   const selectedActivity = activityTypes.find((a) => a.id === formActivityId);
@@ -94,13 +95,14 @@ export default function ScheduleRulesTab() {
     setFormMinStaff("2");
     setFormRuleType("mandatory");
     setFormValidityStart(todayStr);
+    setFormValidityEnd("");
     const initialAssistants = assistants.map((a) => a.id);
     setOrderedAssistantIds(initialAssistants);
-    // Para cumprir a validação exata do backend (count(ids) === min), selecionamos os primeiros N assistentes
+    // Selecionamos os primeiros N correspondentes à dotação mínima
     const initialSelected = initialAssistants.slice(0, 2);
     setFormAssistantIds(initialSelected);
     setFormError(null);
-    setFormStep("form");
+    setShowMissingSubstitutesWarning(false);
     setShowAdd(true);
   }
 
@@ -116,7 +118,10 @@ export default function ScheduleRulesTab() {
     setFormPeriodEnd(rule.period_end);
     setFormMinStaff(String(rule.min));
     setFormRuleType(rule.type);
-    setFormValidityStart(formatToIsoDate(rule.start) || rule.start);
+    const rawStart = rule.valid_from || rule.start || todayStr;
+    const rawEnd = rule.valid_until || rule.end || "";
+    setFormValidityStart(formatToIsoDate(rawStart) || rawStart);
+    setFormValidityEnd(formatToIsoDate(rawEnd) || rawEnd);
     const sortedAssistants = [...(rule.assistants || [])].sort(
       (a, b) => a.priority - b.priority
     );
@@ -129,7 +134,7 @@ export default function ScheduleRulesTab() {
     const unselected = allIds.filter((id) => !selected.includes(id));
     setOrderedAssistantIds([...selected, ...unselected]);
     setFormError(null);
-    setFormStep("form");
+    setShowMissingSubstitutesWarning(false);
     setShowAdd(true);
   }
 
@@ -193,7 +198,7 @@ export default function ScheduleRulesTab() {
       .filter((id) => selectedStrings.includes(id));
   }
 
-  async function submitRule() {
+  async function submitRule(force = false) {
     const minCount = Math.max(1, parseInt(formMinStaff, 10) || 1);
     const finalAssistantIds = getSortedSelectedAssistantIds();
 
@@ -202,9 +207,9 @@ export default function ScheduleRulesTab() {
       return;
     }
 
-    if (finalAssistantIds.length !== minCount) {
+    if (finalAssistantIds.length < minCount) {
       setFormError(
-        `Selecione exatamente ${minCount} ${minCount === 1 ? "assistente" : "assistentes"} por ordem de prioridade para a dotação de ${minCount}.`
+        `Selecione pelo menos ${minCount} ${minCount === 1 ? "assistente" : "assistentes"} para cumprir a dotação mínima de ${minCount}.`
       );
       return;
     }
@@ -224,7 +229,19 @@ export default function ScheduleRulesTab() {
       return;
     }
 
+    if (formValidityEnd && formValidityEnd < formValidityStart) {
+      setFormError("A data de fim da vigência deve ser posterior ou igual à data de início.");
+      return;
+    }
+
+    // Regra obrigatória sem suplentes adicionais: solicitar confirmação amigável
+    if (!force && formRuleType === "mandatory" && finalAssistantIds.length === minCount) {
+      setShowMissingSubstitutesWarning(true);
+      return;
+    }
+
     setFormError(null);
+    setShowMissingSubstitutesWarning(false);
 
     const payload = {
       activity_type_id: formActivityId,
@@ -232,7 +249,10 @@ export default function ScheduleRulesTab() {
       period_end: formPeriodEnd,
       min: minCount,
       type: formRuleType,
+      valid_from: formValidityStart,
+      valid_until: formValidityEnd || null,
       start: formValidityStart,
+      end: formValidityEnd || null,
       days_of_week: selectedDaysOfWeek,
       assistant_ids: finalAssistantIds,
     };
@@ -246,7 +266,7 @@ export default function ScheduleRulesTab() {
       } else {
         await createRuleMutation.mutateAsync(payload);
       }
-      setFormStep("done");
+      setShowAdd(false);
     } catch {
       // O erro já é tratado no onError do hook com toast de feedback
     }
@@ -287,7 +307,8 @@ export default function ScheduleRulesTab() {
                   "Mín. pessoas",
                   "Funcionários (Prioridade)",
                   "Obrigatoriedade",
-                  "Vigência",
+                  "Vigência Início",
+                  "Vigência Fim",
                   "",
                 ].map((h) => (
                   <th
@@ -302,7 +323,7 @@ export default function ScheduleRulesTab() {
             <tbody>
               {isLoadingRules ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-xs text-muted-foreground">
+                  <td colSpan={9} className="px-4 py-8 text-center text-xs text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 size={16} className="animate-spin text-primary" />
                       <span>A carregar regras de horário...</span>
@@ -311,7 +332,7 @@ export default function ScheduleRulesTab() {
                 </tr>
               ) : rules.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-xs text-muted-foreground">
+                  <td colSpan={9} className="px-4 py-8 text-center text-xs text-muted-foreground">
                     Nenhuma regra de horário configurada para esta escola.
                   </td>
                 </tr>
@@ -329,6 +350,9 @@ export default function ScheduleRulesTab() {
                   const ruleAssistants = [...(rule.assistants || [])].sort(
                     (a, b) => a.priority - b.priority
                   );
+
+                  const startDate = rule.valid_from ?? rule.start;
+                  const endDate = rule.valid_until ?? rule.end;
 
                   return (
                     <tr
@@ -384,19 +408,63 @@ export default function ScheduleRulesTab() {
                         {ruleAssistants.length === 0 ? (
                           <span className="text-xs text-muted-foreground italic">Nenhum</span>
                         ) : (
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {ruleAssistants.map((ast) => (
-                              <span
-                                key={ast.id}
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-[11px] font-medium text-foreground"
-                                title={`${ast.priority}ª Prioridade: ${ast.name}`}
+                          <div className="flex items-center -space-x-1.5">
+                            {ruleAssistants.slice(0, 2).map((ast) => {
+                              const assistantData = assistants.find(
+                                (a) => String(a.id) === String(ast.id)
+                              );
+                              const initials =
+                                assistantData?.initials ||
+                                ast.name
+                                  .split(" ")
+                                  .map((n) => n[0])
+                                  .filter(Boolean)
+                                  .slice(0, 2)
+                                  .join("")
+                                  .toUpperCase() ||
+                                "A";
+
+                              return (
+                                <ActionTooltip
+                                  key={ast.id}
+                                  content={
+                                    <div className="text-center font-medium whitespace-nowrap">
+                                      {ast.priority ? `${ast.priority}º ` : ""}{ast.name}
+                                    </div>
+                                  }
+                                >
+                                  <div className="w-6 h-6 rounded-full border-2 border-card bg-primary/15 text-primary text-[10px] font-bold font-mono flex items-center justify-center shadow-xs cursor-default hover:z-10 transition-transform hover:scale-110">
+                                    {initials}
+                                  </div>
+                                </ActionTooltip>
+                              );
+                            })}
+
+                            {ruleAssistants.length > 2 && (
+                              <ActionTooltip
+                                content={
+                                  <div className="text-center text-xs space-y-1.5 min-w-[130px] p-0.5">
+                                    <p className="font-semibold border-b border-primary-foreground/20 pb-1 text-center">
+                                      +{ruleAssistants.length - 2} Suplentes
+                                    </p>
+                                    <div className="space-y-1">
+                                      {ruleAssistants.slice(2).map((ast) => (
+                                        <p
+                                          key={ast.id}
+                                          className="text-[11px] text-center whitespace-nowrap"
+                                        >
+                                          {ast.priority ? `${ast.priority}º ` : ""}{ast.name}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                }
                               >
-                                <span className="text-[9px] font-bold text-primary font-mono">
-                                  {ast.priority}º
-                                </span>
-                                <span>{ast.name}</span>
-                              </span>
-                            ))}
+                                <div className="w-6 h-6 rounded-full border-2 border-card bg-muted text-muted-foreground text-[10px] font-bold font-mono flex items-center justify-center shadow-xs cursor-default hover:z-10 transition-transform hover:scale-110">
+                                  +{ruleAssistants.length - 2}
+                                </div>
+                              </ActionTooltip>
+                            )}
                           </div>
                         )}
                       </td>
@@ -412,7 +480,14 @@ export default function ScheduleRulesTab() {
                         )}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">
-                        A partir de {rule.start}
+                        {startDate}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs">
+                        {endDate ? (
+                          endDate
+                        ) : (
+                          <span className="text-[#0E7C59] font-medium">Em aberto</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center gap-1 justify-end">
@@ -446,23 +521,27 @@ export default function ScheduleRulesTab() {
         </div>
       </Card>
 
-      {/* Add / Edit Dialog */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
-        <DialogContent className="w-full max-w-xl p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl max-h-[92vh] flex flex-col">
+        <DialogContent
+          onPointerDownOutside={(e) => {
+            if (showMissingSubstitutesWarning) {
+              e.preventDefault();
+            }
+          }}
+          onInteractOutside={(e) => {
+            if (showMissingSubstitutesWarning) {
+              e.preventDefault();
+            }
+          }}
+          className="w-full max-w-xl p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl max-h-[92vh] flex flex-col"
+        >
           <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10 rounded-t-xl shrink-0">
             <DialogTitle className="font-semibold text-foreground text-sm">
-              {formStep === "form"
-                ? isEditing
-                  ? "Editar Regra de Horário"
-                  : "Nova Regra de Horário"
-                : isEditing
-                ? "Regra atualizada"
-                : "Regra criada"}
+              {isEditing ? "Editar Regra de Horário" : "Nova Regra de Horário"}
             </DialogTitle>
           </DialogHeader>
 
-          {formStep === "form" && (
-            <div className="p-5 space-y-4 overflow-y-auto max-h-[calc(92vh-70px)]">
+          <div className="p-5 space-y-4 overflow-y-auto max-h-[calc(92vh-70px)]">
               <div>
                 <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                   Tipo de Atividade *
@@ -583,41 +662,68 @@ export default function ScheduleRulesTab() {
                 {/* Requisito de dotação antes da listagem */}
                 {(() => {
                   const parsedMin = Math.max(1, parseInt(formMinStaff, 10) || 1);
-                  const isSatisfied = formAssistantIds.length === parsedMin;
+                  const count = formAssistantIds.length;
+                  const isBelowMin = count < parsedMin;
+                  const hasSubstitutes = count > parsedMin;
+                  const isExactlyMinMandatory = formRuleType === "mandatory" && count === parsedMin;
 
                   return (
                     <div
                       className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs transition-colors border ${
-                        !isSatisfied
+                        isBelowMin
+                          ? "bg-amber-500/10 border-amber-500/25 text-amber-800 dark:text-amber-200"
+                          : isExactlyMinMandatory
                           ? "bg-amber-500/10 border-amber-500/25 text-amber-800 dark:text-amber-200"
                           : "bg-muted/30 border-border/60 text-muted-foreground"
                       }`}
                     >
                       <div className="flex items-center gap-2">
-                        <Info
-                          size={14}
-                          className={`shrink-0 ${
-                            !isSatisfied
-                              ? "text-amber-600 dark:text-amber-400"
-                              : "text-muted-foreground"
-                          }`}
-                        />
+                        {isBelowMin ? (
+                          <AlertTriangle
+                            size={14}
+                            className="shrink-0 text-amber-600 dark:text-amber-400"
+                          />
+                        ) : isExactlyMinMandatory ? (
+                          <Info
+                            size={14}
+                            className="shrink-0 text-amber-600 dark:text-amber-400"
+                          />
+                        ) : (
+                          <CheckCircle
+                            size={14}
+                            className="shrink-0 text-emerald-600 dark:text-emerald-400"
+                          />
+                        )}
                         <span>
-                          Mínimo exigido:{" "}
-                          <strong>
-                            {parsedMin} {parsedMin === 1 ? "assistente" : "assistentes"}
-                          </strong>{" "}
-                          por ordem de prioridade.
+                          {isBelowMin ? (
+                            <>
+                              Dotação mínima: <strong>{parsedMin} {parsedMin === 1 ? "assistente" : "assistentes"}</strong>. Faltam {parsedMin - count}.
+                            </>
+                          ) : isExactlyMinMandatory ? (
+                            <>
+                              Dotação mínima atingida ({parsedMin}). <em>Sem suplentes</em> selecionados para salvaguarda.
+                            </>
+                          ) : hasSubstitutes ? (
+                            <>
+                              Dotação cumprida: <strong>{parsedMin} efetivos</strong> + <strong>{count - parsedMin} {count - parsedMin === 1 ? "suplente" : "suplentes"}</strong> por ordem de prioridade.
+                            </>
+                          ) : (
+                            <>
+                              Dotação mínima cumprida: <strong>{parsedMin} {parsedMin === 1 ? "assistente" : "assistentes"}</strong>.
+                            </>
+                          )}
                         </span>
                       </div>
                       <span
                         className={`text-[11px] font-semibold px-2 py-0.5 rounded-md shrink-0 ${
-                          !isSatisfied
+                          isBelowMin
+                            ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                            : isExactlyMinMandatory
                             ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
                             : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                         }`}
                       >
-                        {formAssistantIds.length} / {parsedMin} selecionados
+                        {count} / {parsedMin} {count > parsedMin ? `(+${count - parsedMin} suplentes)` : "min"}
                       </span>
                     </div>
                   );
@@ -771,19 +877,38 @@ export default function ScheduleRulesTab() {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
                   Vigência
                 </p>
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                    Data de Início *
-                  </label>
-                  <DatePicker
-                    value={formValidityStart}
-                    minDate={isEditing ? undefined : todayStr}
-                    onChange={(v) => setFormValidityStart(v)}
-                    className="w-full"
-                  />
-                  <p className="text-[10px] text-muted-foreground/70 mt-1">
-                    A regra entra em vigor a partir desta data sem termo fixo.
-                  </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                      Data de Início *
+                    </label>
+                    <DatePicker
+                      value={formValidityStart}
+                      minDate={isEditing ? undefined : todayStr}
+                      onChange={(v) => {
+                        setFormValidityStart(v);
+                        if (v && formValidityEnd && formValidityEnd < v) {
+                          setFormValidityEnd(v);
+                        }
+                      }}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                      Data de Fim
+                    </label>
+                    <DatePicker
+                      value={formValidityEnd}
+                      minDate={formValidityStart || undefined}
+                      onChange={setFormValidityEnd}
+                      className="w-full"
+                      placeholder="AAAA-MM-DD"
+                    />
+                    <p className="text-[10px] text-muted-foreground/70 mt-1">
+                      Em branco = vigência em aberto
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -798,7 +923,7 @@ export default function ScheduleRulesTab() {
                 <button
                   type="button"
                   disabled={isSaving}
-                  onClick={submitRule}
+                  onClick={() => submitRule(false)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs disabled:opacity-50"
                 >
                   {isSaving && <Loader2 size={13} className="animate-spin" />}
@@ -806,27 +931,6 @@ export default function ScheduleRulesTab() {
                 </button>
               </div>
             </div>
-          )}
-
-
-
-          {formStep === "done" && (
-            <div className="p-8 text-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-[#0E7C59]/10 flex items-center justify-center mx-auto">
-                <CheckCircle size={24} className="text-[#0E7C59]" />
-              </div>
-              <p className="font-semibold text-foreground">
-                Regra Guardada com Sucesso
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowAdd(false)}
-                className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs"
-              >
-                Concluir
-              </button>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
 
@@ -853,7 +957,10 @@ export default function ScheduleRulesTab() {
                 {activityTypes.find((t) => t.id === deleteRuleTarget.activity_type_id)?.name ??
                   deleteRuleTarget.activity_type_id}
               </strong>{" "}
-              (Vigência a partir de {deleteRuleTarget.start})?
+              (Vigência: {deleteRuleTarget.valid_from ?? deleteRuleTarget.start}
+              {(deleteRuleTarget.valid_until ?? deleteRuleTarget.end)
+                ? ` a ${deleteRuleTarget.valid_until ?? deleteRuleTarget.end}`
+                : " — Em aberto"})?
               Esta ação removerá esta restrição no cálculo de escalas do motor.
             </>
           ) : ""
@@ -861,6 +968,30 @@ export default function ScheduleRulesTab() {
         confirmLabel={deleteRuleMutation.isPending ? "A eliminar..." : "Eliminar Regra"}
         cancelLabel="Cancelar"
         variant="danger"
+      />
+
+      {/* Confirmation Modal for mandatory rule without substitutes */}
+      <ConfirmationModal
+        open={showMissingSubstitutesWarning}
+        onClose={() => setShowMissingSubstitutesWarning(false)}
+        onConfirm={() => submitRule(true)}
+        title="Regra Obrigatória sem Assistentes Suplentes"
+        description={
+          <>
+            Não foram selecionados assistentes suplentes para esta regra.
+            <br />
+            <br />
+            No caso de um assistente não estar disponível (por motivo de falta, sobreposição ou exceção), a regra{" "}
+            <strong className="text-foreground">não vai cumprir os requisitos de dotação mínima</strong> ({formMinStaff}{" "}
+            {parseInt(formMinStaff, 10) === 1 ? "pessoa" : "pessoas"}).
+            <br />
+            <br />
+            Deseja voltar atrás para adicionar mais assistentes por ordem de prioridade ou prefere prosseguir mesmo assim?
+          </>
+        }
+        confirmLabel="Prosseguir"
+        cancelLabel="Voltar e Adicionar"
+        variant="warning"
       />
     </div>
   );

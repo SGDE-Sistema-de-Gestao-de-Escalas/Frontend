@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { Calendar, Check, CheckCircle, Upload, X } from "lucide-react";
+import { Calendar, Check, Upload, X } from "lucide-react";
 import type { MyAbsence } from "../../types";
 import { Card } from "../ui/card";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
+import { notify } from "../common/FeedbackNotification";
 
 interface RegisterAbsenceModalProps {
   onClose: () => void;
@@ -23,7 +24,6 @@ export default function RegisterAbsenceModal({
   const [otherReason, setOtherReason] = useState("");
   const [note, setNote] = useState("");
   const [fileName, setFileName] = useState("");
-  const [isDone, setIsDone] = useState(false);
   const [dateErrors, setDateErrors] = useState<{ start?: string; end?: string }>({});
 
   const absenceDays =
@@ -46,7 +46,11 @@ export default function RegisterAbsenceModal({
       status: "pending",
       note,
     });
-    setIsDone(true);
+    notify.success(
+      "O seu pedido foi registado e aguarda análise do gestor.",
+      "Falta Registada"
+    );
+    onClose();
   }
 
   return (
@@ -58,11 +62,9 @@ export default function RegisterAbsenceModal({
           <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
             <div>
               <h3 className="font-semibold text-foreground">Justificar Falta</h3>
-              {!isDone && (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Passo {step} de 3
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Passo {step} de 3
+              </p>
             </div>
             <button
               type="button"
@@ -74,53 +76,34 @@ export default function RegisterAbsenceModal({
           </div>
 
           {/* Step dots */}
-          {!isDone && (
-            <div className="px-5 pt-4 flex items-center gap-1.5">
-              {[1, 2, 3].map((s) => (
-                <div key={s} className="flex items-center gap-1.5">
-                  <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${
-                      s < step
-                        ? "bg-[#0E7C59] text-white"
-                        : s === step
-                        ? "bg-accent text-white"
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {s < step ? <Check size={11} /> : s}
-                  </div>
-                  {s < 3 && (
-                    <div
-                      className={`h-0.5 w-6 rounded ${
-                        s < step ? "bg-[#0E7C59]" : "bg-muted"
-                      }`}
-                    />
-                  )}
+          <div className="px-5 pt-4 flex items-center gap-1.5">
+            {[1, 2, 3].map((s) => (
+              <div key={s} className="flex items-center gap-1.5">
+                <div
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${
+                    s < step
+                      ? "bg-[#0E7C59] text-white"
+                      : s === step
+                      ? "bg-accent text-white"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {s < step ? <Check size={11} /> : s}
                 </div>
-              ))}
-            </div>
-          )}
+                {s < 3 && (
+                  <div
+                    className={`h-0.5 w-6 rounded ${
+                      s < step ? "bg-[#0E7C59]" : "bg-muted"
+                    }`}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
 
           {/* Body */}
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
-            {isDone ? (
-              <div className="text-center py-4 space-y-3">
-                <div className="w-14 h-14 rounded-full bg-[#0E7C59]/10 flex items-center justify-center mx-auto">
-                  <CheckCircle size={28} className="text-[#0E7C59]" />
-                </div>
-                <p className="font-semibold text-foreground">Falta Registada</p>
-                <p className="text-sm text-muted-foreground">
-                  O seu pedido foi registado e aguarda análise do gestor.
-                </p>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-full py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
-                >
-                  Fechar
-                </button>
-              </div>
-            ) : step === 1 ? (
+            {step === 1 ? (
               <div className="space-y-3">
                 <h4 className="text-sm font-semibold text-foreground">
                   Período de ausência
