@@ -8,18 +8,14 @@ import {
   ChevronUp,
   GripVertical,
   Info,
+  Loader2,
   Pencil,
   Plus,
   ShieldAlert,
   Trash2,
   Users,
 } from "lucide-react";
-import {
-  assistants as ASSISTANTS,
-  DEFAULT_ACTIVITY_TYPES,
-  INITIAL_RULES,
-} from "../../api/mockData";
-import type { ScheduleRule, EntityId } from "../../types";
+import type { EntityId } from "../../types";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { Checkbox } from "../ui/checkbox";
@@ -29,15 +25,32 @@ import DatePicker, { formatToIsoDate } from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import { ActionTooltip } from "../common/ActionTooltip";
 import CustomSelect from "../common/CustomSelect";
+import {
+  useScheduleRulesList,
+  useCreateScheduleRule,
+  useUpdateScheduleRule,
+  useDeleteScheduleRule,
+} from "../../hooks/api/useScheduleRules";
+import { useActivityTypesList } from "../../hooks/api/useActivityTypes";
+import { useAssistantsList } from "../../hooks/api/useAssistants";
+import type { BackendScheduleRuleResource } from "../../api/services/scheduleRules.service";
 
 const DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
 export default function ScheduleRulesTab() {
-  const allAssistantIds = ASSISTANTS.map((a) => a.id);
-  const [rules, setRules] = useState<ScheduleRule[]>(INITIAL_RULES);
+  const { data: rules = [], isLoading: isLoadingRules } = useScheduleRulesList();
+  const { data: activityTypes = [] } = useActivityTypesList();
+  const { data: assistants = [] } = useAssistantsList();
+
+  const createRuleMutation = useCreateScheduleRule();
+  const updateRuleMutation = useUpdateScheduleRule();
+  const deleteRuleMutation = useDeleteScheduleRule();
+
+  const isSaving = createRuleMutation.isPending || updateRuleMutation.isPending;
+
   const [showAdd, setShowAdd] = useState(false);
-  const [editingRuleId, setEditingRuleId] = useState<EntityId | null>(null);
-  const [deleteRuleTarget, setDeleteRuleTarget] = useState<ScheduleRule | null>(null);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [deleteRuleTarget, setDeleteRuleTarget] = useState<BackendScheduleRuleResource | null>(null);
 
   // Form state
   const todayStr = new Date().toISOString().split("T")[0];
@@ -53,19 +66,17 @@ export default function ScheduleRulesTab() {
   ]);
   const [formPeriodStart, setFormPeriodStart] = useState("07:30");
   const [formPeriodEnd, setFormPeriodEnd] = useState("13:00");
-  const [formMinStaff, setFormMinStaff] = useState("3");
+  const [formMinStaff, setFormMinStaff] = useState("2");
   const [formRuleType, setFormRuleType] = useState<"mandatory" | "optional">("mandatory");
   const [formValidityStart, setFormValidityStart] = useState(todayStr);
-  const [formValidityEnd, setFormValidityEnd] = useState("");
-  const [formAssistantIds, setFormAssistantIds] = useState<EntityId[]>(allAssistantIds);
+  const [formAssistantIds, setFormAssistantIds] = useState<EntityId[]>([]);
+  const [orderedAssistantIds, setOrderedAssistantIds] = useState<EntityId[]>([]);
+  const [draggedAssistantId, setDraggedAssistantId] = useState<EntityId | null>(null);
   const [formStep, setFormStep] = useState<"form" | "done">("form");
   const [formError, setFormError] = useState<string | null>(null);
 
   const isEditing = editingRuleId !== null;
-  const selectedActivity = DEFAULT_ACTIVITY_TYPES.find(
-    (a) => a.id === formActivityId
-  );
-
+  const selectedActivity = activityTypes.find((a) => a.id === formActivityId);
   function toggleDay(i: number) {
     setFormDays((p) => {
       const n = [...p];
@@ -76,56 +87,66 @@ export default function ScheduleRulesTab() {
 
   function openAdd() {
     setEditingRuleId(null);
-    setFormActivityId("work");
+    setFormActivityId(activityTypes[0]?.id || "");
     setFormDays([true, true, true, true, true, false, false]);
     setFormPeriodStart("07:30");
     setFormPeriodEnd("13:00");
-    setFormMinStaff("3");
+    setFormMinStaff("2");
     setFormRuleType("mandatory");
     setFormValidityStart(todayStr);
-    setFormValidityEnd("");
-    setFormAssistantIds(allAssistantIds);
-    setOrderedAssistantIds(allAssistantIds);
+    const initialAssistants = assistants.map((a) => a.id);
+    setOrderedAssistantIds(initialAssistants);
+    // Para cumprir a validação exata do backend (count(ids) === min), selecionamos os primeiros N assistentes
+    const initialSelected = initialAssistants.slice(0, 2);
+    setFormAssistantIds(initialSelected);
     setFormError(null);
     setFormStep("form");
     setShowAdd(true);
   }
 
-  function openEdit(rule: ScheduleRule) {
+  function openEdit(rule: BackendScheduleRuleResource) {
     setEditingRuleId(rule.id);
-    setFormActivityId(rule.activityTypeId);
-    setFormDays(rule.days && rule.days.length === 7 ? [...rule.days] : [true, true, true, true, true, false, false]);
-    setFormPeriodStart(rule.periodStart);
-    setFormPeriodEnd(rule.periodEnd);
+    setFormActivityId(rule.activity_type_id);
+    const daysArr = [false, false, false, false, false, false, false];
+    (rule.days_of_week || []).forEach((d) => {
+      if (d >= 0 && d <= 6) daysArr[d] = true;
+    });
+    setFormDays(daysArr);
+    setFormPeriodStart(rule.period_start);
+    setFormPeriodEnd(rule.period_end);
     setFormMinStaff(String(rule.min));
     setFormRuleType(rule.type);
     setFormValidityStart(formatToIsoDate(rule.start) || rule.start);
-    setFormValidityEnd(rule.end ? (formatToIsoDate(rule.end) || rule.end) : "");
-    const selected = rule.assistantIds || [];
+    const sortedAssistants = [...(rule.assistants || [])].sort(
+      (a, b) => a.priority - b.priority
+    );
+    const selected =
+      sortedAssistants.length > 0
+        ? sortedAssistants.map((a) => String(a.id))
+        : (rule.assistant_ids || []).map(String);
     setFormAssistantIds(selected);
-    // Preservar a ordem dos selecionados e depois os restantes não selecionados
-    const unselected = allAssistantIds.filter((id) => !selected.includes(id));
+    const allIds = assistants.map((a) => String(a.id));
+    const unselected = allIds.filter((id) => !selected.includes(id));
     setOrderedAssistantIds([...selected, ...unselected]);
     setFormError(null);
     setFormStep("form");
     setShowAdd(true);
   }
 
-  // Reordering & Priority logic
-  const [orderedAssistantIds, setOrderedAssistantIds] = useState<EntityId[]>(allAssistantIds);
-  const [draggedAssistantId, setDraggedAssistantId] = useState<EntityId | null>(null);
-
   function toggleAssistant(id: EntityId) {
     setFormError(null);
+    const strId = String(id);
     setFormAssistantIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      prev.map(String).includes(strId)
+        ? prev.filter((x) => String(x) !== strId)
+        : [...prev, strId]
     );
   }
 
   function toggleAllAssistants() {
     setFormError(null);
-    const allSelected = formAssistantIds.length === ASSISTANTS.length;
-    setFormAssistantIds(allSelected ? [] : ASSISTANTS.map((a) => a.id));
+    const allSelected = formAssistantIds.length === assistants.length;
+    setFormAssistantIds(allSelected ? [] : assistants.map((a) => String(a.id)));
   }
 
   function moveAssistant(index: number, direction: "up" | "down") {
@@ -154,8 +175,8 @@ export default function ScheduleRulesTab() {
       return;
     }
     setOrderedAssistantIds((prev) => {
-      const fromIndex = prev.indexOf(draggedAssistantId);
-      const toIndex = prev.indexOf(targetId);
+      const fromIndex = prev.findIndex((x) => String(x) === String(draggedAssistantId));
+      const toIndex = prev.findIndex((x) => String(x) === String(targetId));
       if (fromIndex === -1 || toIndex === -1) return prev;
       const copy = [...prev];
       copy.splice(fromIndex, 1);
@@ -165,73 +186,70 @@ export default function ScheduleRulesTab() {
     setDraggedAssistantId(null);
   }
 
-  function getSortedSelectedAssistantIds(): EntityId[] {
-    return orderedAssistantIds.filter((id) => formAssistantIds.includes(id));
+  function getSortedSelectedAssistantIds(): string[] {
+    const selectedStrings = formAssistantIds.map(String);
+    return orderedAssistantIds
+      .map(String)
+      .filter((id) => selectedStrings.includes(id));
   }
 
-  function submitRule() {
+  async function submitRule() {
     const minCount = Math.max(1, parseInt(formMinStaff, 10) || 1);
-    const requiredCount = formRuleType === "mandatory" ? minCount + 1 : minCount;
-    const selectedCount = formAssistantIds.length;
+    const finalAssistantIds = getSortedSelectedAssistantIds();
 
-    if (selectedCount < requiredCount) {
-      if (formRuleType === "mandatory") {
-        setFormError(
-          `Selecione pelo menos ${requiredCount} funcionários (${minCount} efetivos + 1 suplente obrigatório).`
-        );
-      } else {
-        setFormError(
-          `Selecione pelo menos ${minCount} ${minCount === 1 ? "funcionário" : "funcionários"} para a dotação mínima.`
-        );
-      }
+    if (!formActivityId) {
+      setFormError("Selecione o tipo de atividade.");
+      return;
+    }
+
+    if (finalAssistantIds.length !== minCount) {
+      setFormError(
+        `Selecione exatamente ${minCount} ${minCount === 1 ? "assistente" : "assistentes"} por ordem de prioridade para a dotação de ${minCount}.`
+      );
+      return;
+    }
+
+    if (formPeriodEnd <= formPeriodStart) {
+      setFormError("A hora de fim tem de ser posterior à hora de início.");
+      return;
+    }
+
+    const selectedDaysOfWeek: number[] = [];
+    formDays.forEach((active, index) => {
+      if (active) selectedDaysOfWeek.push(index);
+    });
+
+    if (selectedDaysOfWeek.length === 0) {
+      setFormError("Selecione pelo menos um dia da semana para a regra.");
       return;
     }
 
     setFormError(null);
 
-    const finalAssistantIds = getSortedSelectedAssistantIds();
-    if (isEditing) {
-      setRules((prev) =>
-        prev.map((r) =>
-          r.id === editingRuleId
-            ? {
-                ...r,
-                activityTypeId: formActivityId,
-                periodStart: formPeriodStart,
-                periodEnd: formPeriodEnd,
-                min: Number(formMinStaff),
-                type: formRuleType,
-                end: formValidityEnd || null,
-                assistantIds: finalAssistantIds,
-                days: [...formDays],
-              }
-            : r
-        )
-      );
-      setFormStep("done");
-    } else {
-      confirmCreate();
-    }
-  }
+    const payload = {
+      activity_type_id: formActivityId,
+      period_start: formPeriodStart,
+      period_end: formPeriodEnd,
+      min: minCount,
+      type: formRuleType,
+      start: formValidityStart,
+      days_of_week: selectedDaysOfWeek,
+      assistant_ids: finalAssistantIds,
+    };
 
-  function confirmCreate() {
-    const finalAssistantIds = getSortedSelectedAssistantIds();
-    setRules((prev) => [
-      ...prev,
-      {
-        id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-        activityTypeId: formActivityId,
-        periodStart: formPeriodStart,
-        periodEnd: formPeriodEnd,
-        min: Number(formMinStaff),
-        type: formRuleType,
-        start: formValidityStart,
-        end: formValidityEnd || null,
-        assistantIds: finalAssistantIds,
-        days: [...formDays],
-      },
-    ]);
-    setFormStep("done");
+    try {
+      if (editingRuleId) {
+        await updateRuleMutation.mutateAsync({
+          id: editingRuleId,
+          data: payload,
+        });
+      } else {
+        await createRuleMutation.mutateAsync(payload);
+      }
+      setFormStep("done");
+    } catch {
+      // O erro já é tratado no onError do hook com toast de feedback
+    }
   }
 
   return (
@@ -267,10 +285,9 @@ export default function ScheduleRulesTab() {
                   "Dias",
                   "Período",
                   "Mín. pessoas",
-                  "Funcionários",
+                  "Funcionários (Prioridade)",
                   "Obrigatoriedade",
-                  "Vigência início",
-                  "Vigência fim",
+                  "Vigência",
                   "",
                 ].map((h) => (
                   <th
@@ -283,135 +300,147 @@ export default function ScheduleRulesTab() {
               </tr>
             </thead>
             <tbody>
-              {rules.map((rule) => {
-                const activity = DEFAULT_ACTIVITY_TYPES.find(
-                  (a) => a.id === rule.activityTypeId
-                );
-                const activeDays = rule.days || [true, true, true, true, true, false, false];
-                const allWeekdays = activeDays.slice(0, 5).every(Boolean) && !activeDays[5] && !activeDays[6];
-                const allDays = activeDays.every(Boolean);
+              {isLoadingRules ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-xs text-muted-foreground">
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 size={16} className="animate-spin text-primary" />
+                      <span>A carregar regras de horário...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : rules.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-xs text-muted-foreground">
+                    Nenhuma regra de horário configurada para esta escola.
+                  </td>
+                </tr>
+              ) : (
+                rules.map((rule) => {
+                  const activity = activityTypes.find(
+                    (a) => a.id === rule.activity_type_id
+                  );
+                  const daysOfWeek = rule.days_of_week ?? [];
+                  const isAllDays = daysOfWeek.length === 7;
+                  const isWeekdays =
+                    daysOfWeek.length === 5 &&
+                    [0, 1, 2, 3, 4].every((d) => daysOfWeek.includes(d));
 
-                return (
-                  <tr
-                    key={rule.id}
-                    className={`border-b border-border/50 hover:bg-muted/20 transition-colors ${
-                      rule.end ? "opacity-50" : ""
-                    }`}
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-sm flex-shrink-0"
-                          style={{
-                            backgroundColor: activity?.color ?? "#ccc",
-                          }}
-                        />
-                        <span className="font-medium text-foreground">
-                          {activity?.label ?? rule.activityTypeId}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-0.5">
-                        {allDays ? (
-                          <span className="text-xs text-muted-foreground font-medium">Todos</span>
-                        ) : allWeekdays ? (
-                          <span className="text-xs text-muted-foreground font-medium">Seg–Sex</span>
-                        ) : (
-                          DAYS.map((d, idx) => (
-                            <span
-                              key={d}
-                              className={`text-[10px] w-5 h-5 flex items-center justify-center rounded font-mono ${
-                                activeDays[idx]
-                                  ? "bg-primary/10 text-primary font-bold"
-                                  : "text-muted-foreground/30"
-                              }`}
-                              title={d}
-                            >
-                              {d[0]}
-                            </span>
-                          ))
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs">
-                      {rule.periodStart}–{rule.periodEnd}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs font-semibold">
-                      {rule.min}
-                    </td>
-                    <td className="px-4 py-3">
-                      {rule.assistantIds.length === ASSISTANTS.length ? (
-                        <span className="text-xs text-muted-foreground">
-                          Todos ({ASSISTANTS.length})
-                        </span>
-                      ) : (
-                        <div className="flex items-center gap-1 flex-wrap">
-                          {rule.assistantIds.slice(0, 3).map((aid) => {
-                            const a = ASSISTANTS.find((x) => x.id === aid);
-                            return a ? (
-                              <span
-                                key={aid}
-                                className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-[8px] font-bold text-primary font-mono"
-                                title={a.name}
-                              >
-                                {a.initials}
-                              </span>
-                            ) : null;
-                          })}
-                          {rule.assistantIds.length > 3 && (
-                            <span className="text-[10px] text-muted-foreground">
-                              +{rule.assistantIds.length - 3}
-                            </span>
+                  const ruleAssistants = [...(rule.assistants || [])].sort(
+                    (a, b) => a.priority - b.priority
+                  );
+
+                  return (
+                    <tr
+                      key={rule.id}
+                      className="border-b border-border/50 hover:bg-muted/20 transition-colors"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded-sm flex-shrink-0"
+                            style={{
+                              backgroundColor: activity?.color ?? "#0E7C59",
+                            }}
+                          />
+                          <span className="font-medium text-foreground">
+                            {activity?.name ?? rule.activity_type_id}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-0.5">
+                          {isAllDays ? (
+                            <span className="text-xs text-muted-foreground font-medium">Todos</span>
+                          ) : isWeekdays ? (
+                            <span className="text-xs text-muted-foreground font-medium">Seg–Sex</span>
+                          ) : (
+                            DAYS.map((d, idx) => {
+                              const isActive = daysOfWeek.includes(idx);
+                              return (
+                                <span
+                                  key={d}
+                                  className={`text-[10px] w-5 h-5 flex items-center justify-center rounded font-mono ${
+                                    isActive
+                                      ? "bg-primary/10 text-primary font-bold"
+                                      : "text-muted-foreground/30"
+                                  }`}
+                                  title={d}
+                                >
+                                  {d[0]}
+                                </span>
+                              );
+                            })
                           )}
                         </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {rule.type === "mandatory" ? (
-                        <span className="inline-flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
-                          Obrigatório
-                        </span>
-                      ) : (
-                        <Badge variant="secondary" className="text-[10px]">
-                          Facultativo
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs">{rule.start}</td>
-                    <td className="px-4 py-3 font-mono text-xs">
-                      {rule.end ?? (
-                        <span className="text-[#0E7C59] font-semibold">
-                          Em aberto
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center gap-1 justify-end">
-                        <ActionTooltip content="Editar regra">
-                          <button
-                            type="button"
-                            onClick={() => openEdit(rule)}
-                            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            <Pencil size={13} />
-                          </button>
-                        </ActionTooltip>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs">
+                        {rule.period_start}–{rule.period_end}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs font-semibold">
+                        {rule.min}
+                      </td>
+                      <td className="px-4 py-3">
+                        {ruleAssistants.length === 0 ? (
+                          <span className="text-xs text-muted-foreground italic">Nenhum</span>
+                        ) : (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {ruleAssistants.map((ast) => (
+                              <span
+                                key={ast.id}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-[11px] font-medium text-foreground"
+                                title={`${ast.priority}ª Prioridade: ${ast.name}`}
+                              >
+                                <span className="text-[9px] font-bold text-primary font-mono">
+                                  {ast.priority}º
+                                </span>
+                                <span>{ast.name}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {rule.type === "mandatory" ? (
+                          <span className="inline-flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
+                            Obrigatório
+                          </span>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Facultativo
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs">
+                        A partir de {rule.start}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center gap-1 justify-end">
+                          <ActionTooltip content="Editar regra">
+                            <button
+                              type="button"
+                              onClick={() => openEdit(rule)}
+                              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                          </ActionTooltip>
 
-                        <ActionTooltip content="Eliminar regra">
-                          <button
-                            type="button"
-                            onClick={() => setDeleteRuleTarget(rule)}
-                            className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </ActionTooltip>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                          <ActionTooltip content="Eliminar regra">
+                            <button
+                              type="button"
+                              onClick={() => setDeleteRuleTarget(rule)}
+                              className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </ActionTooltip>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -441,9 +470,9 @@ export default function ScheduleRulesTab() {
                 <CustomSelect
                   value={formActivityId}
                   onChange={(e: any) => setFormActivityId(typeof e === "string" ? e : e.target.value)}
-                  options={DEFAULT_ACTIVITY_TYPES.map((a) => ({
+                  options={activityTypes.map((a) => ({
                     value: a.id,
-                    label: a.label,
+                    label: a.name,
                   }))}
                 />
               </div>
@@ -537,7 +566,7 @@ export default function ScheduleRulesTab() {
                       Funcionários Afetos & Ordem de Prioridade
                     </label>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Marque para afetar à regra e arraste na pega para definir a prioridade ({formAssistantIds.length}/{ASSISTANTS.length} selecionados)
+                      Marque para afetar à regra e arraste na pega para definir a prioridade ({formAssistantIds.length}/{assistants.length} selecionados)
                     </p>
                   </div>
                   <button
@@ -545,7 +574,7 @@ export default function ScheduleRulesTab() {
                     onClick={toggleAllAssistants}
                     className="text-xs font-semibold text-primary hover:underline px-2.5 py-1 rounded hover:bg-primary/5 transition-colors border border-primary/20"
                   >
-                    {formAssistantIds.length === ASSISTANTS.length
+                    {formAssistantIds.length === assistants.length
                       ? "Desmarcar todos"
                       : "Selecionar todos"}
                   </button>
@@ -554,39 +583,41 @@ export default function ScheduleRulesTab() {
                 {/* Requisito de dotação antes da listagem */}
                 {(() => {
                   const parsedMin = Math.max(1, parseInt(formMinStaff, 10) || 1);
-                  const reqStaff = formRuleType === "mandatory" ? parsedMin + 1 : parsedMin;
-                  const isShort = formAssistantIds.length < reqStaff;
+                  const isSatisfied = formAssistantIds.length === parsedMin;
 
                   return (
                     <div
                       className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs transition-colors border ${
-                        isShort
+                        !isSatisfied
                           ? "bg-amber-500/10 border-amber-500/25 text-amber-800 dark:text-amber-200"
                           : "bg-muted/30 border-border/60 text-muted-foreground"
                       }`}
                     >
                       <div className="flex items-center gap-2">
-                        <Info size={14} className={`shrink-0 ${isShort ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
+                        <Info
+                          size={14}
+                          className={`shrink-0 ${
+                            !isSatisfied
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-muted-foreground"
+                          }`}
+                        />
                         <span>
-                          {formRuleType === "mandatory" ? (
-                            <>
-                              Mínimo exigido: <strong>{reqStaff} funcionários</strong> ({parsedMin} efetivos + 1 suplente de salvaguarda).
-                            </>
-                          ) : (
-                            <>
-                              Mínimo exigido: <strong>{reqStaff} {reqStaff === 1 ? "funcionário" : "funcionários"}</strong> para cumprir a dotação.
-                            </>
-                          )}
+                          Mínimo exigido:{" "}
+                          <strong>
+                            {parsedMin} {parsedMin === 1 ? "assistente" : "assistentes"}
+                          </strong>{" "}
+                          por ordem de prioridade.
                         </span>
                       </div>
                       <span
                         className={`text-[11px] font-semibold px-2 py-0.5 rounded-md shrink-0 ${
-                          isShort
+                          !isSatisfied
                             ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
                             : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                         }`}
                       >
-                        {formAssistantIds.length} / {reqStaff} min
+                        {formAssistantIds.length} / {parsedMin} selecionados
                       </span>
                     </div>
                   );
@@ -608,15 +639,19 @@ export default function ScheduleRulesTab() {
 
                   <div className="max-h-64 overflow-y-auto divide-y divide-border/50 p-1 space-y-1">
                     {orderedAssistantIds.map((id, index) => {
-                      const assistant = ASSISTANTS.find((a) => a.id === id);
+                      const assistant = assistants.find((a) => String(a.id) === String(id));
                       if (!assistant) return null;
 
-                      const isSelected = formAssistantIds.includes(id);
+                      const isSelected = formAssistantIds
+                        .map(String)
+                        .includes(String(id));
                       // Prioridade real calculada com base na ordem dos selecionados
                       const selectedPriority = isSelected
-                        ? getSortedSelectedAssistantIds().indexOf(id) + 1
+                        ? getSortedSelectedAssistantIds().indexOf(String(id)) + 1
                         : null;
-                      const isDragging = draggedAssistantId === id;
+                      const isDragging =
+                        draggedAssistantId !== null &&
+                        String(draggedAssistantId) === String(id);
 
                       return (
                         <div
@@ -678,9 +713,9 @@ export default function ScheduleRulesTab() {
                               >
                                 {assistant.name}
                               </span>
-                              {assistant.mecanografico && (
+                              {(assistant.internal_number || assistant.mecanografico) && (
                                 <span className="text-[10px] text-muted-foreground font-mono ml-1.5">
-                                  ({assistant.mecanografico})
+                                  ({assistant.internal_number || assistant.mecanografico})
                                 </span>
                               )}
                             </div>
@@ -736,38 +771,19 @@ export default function ScheduleRulesTab() {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
                   Vigência
                 </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                      Data de Início *
-                    </label>
-                    <DatePicker
-                      value={formValidityStart}
-                      minDate={isEditing ? undefined : todayStr}
-                      onChange={(v) => {
-                        setFormValidityStart(v);
-                        if (v && formValidityEnd && formValidityEnd < v) {
-                          setFormValidityEnd(v);
-                        }
-                      }}
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                      Data de Fim
-                    </label>
-                    <DatePicker
-                      value={formValidityEnd}
-                      minDate={formValidityStart || undefined}
-                      onChange={setFormValidityEnd}
-                      className="w-full"
-                      placeholder="AAAA-MM-DD"
-                    />
-                    <p className="text-[10px] text-muted-foreground/70 mt-1">
-                      Em branco = vigência em aberto
-                    </p>
-                  </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                    Data de Início *
+                  </label>
+                  <DatePicker
+                    value={formValidityStart}
+                    minDate={isEditing ? undefined : todayStr}
+                    onChange={(v) => setFormValidityStart(v)}
+                    className="w-full"
+                  />
+                  <p className="text-[10px] text-muted-foreground/70 mt-1">
+                    A regra entra em vigor a partir desta data sem termo fixo.
+                  </p>
                 </div>
               </div>
 
@@ -781,10 +797,12 @@ export default function ScheduleRulesTab() {
                 </button>
                 <button
                   type="button"
+                  disabled={isSaving}
                   onClick={submitRule}
-                  className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs disabled:opacity-50"
                 >
-                  {isEditing ? "Guardar Alterações" : "Criar Regra"}
+                  {isSaving && <Loader2 size={13} className="animate-spin" />}
+                  <span>{isEditing ? "Guardar Alterações" : "Criar Regra"}</span>
                 </button>
               </div>
             </div>
@@ -816,10 +834,14 @@ export default function ScheduleRulesTab() {
       <ConfirmationModal
         open={deleteRuleTarget !== null}
         onClose={() => setDeleteRuleTarget(null)}
-        onConfirm={() => {
+        onConfirm={async () => {
           if (deleteRuleTarget) {
-            setRules((p) => p.filter((r) => r.id !== deleteRuleTarget.id));
-            setDeleteRuleTarget(null);
+            try {
+              await deleteRuleMutation.mutateAsync(deleteRuleTarget.id);
+              setDeleteRuleTarget(null);
+            } catch {
+              // Notificado no hook
+            }
           }
         }}
         title="Eliminar Regra do Motor"
@@ -828,15 +850,15 @@ export default function ScheduleRulesTab() {
             <>
               Tem a certeza que pretende eliminar a regra de{" "}
               <strong className="text-foreground">
-                {DEFAULT_ACTIVITY_TYPES.find((t) => t.id === deleteRuleTarget.activityTypeId)?.label ?? deleteRuleTarget.activityTypeId}
+                {activityTypes.find((t) => t.id === deleteRuleTarget.activity_type_id)?.name ??
+                  deleteRuleTarget.activity_type_id}
               </strong>{" "}
-              (Vigência: {deleteRuleTarget.start}
-              {deleteRuleTarget.end ? ` — ${deleteRuleTarget.end}` : " — Em aberto"})?
+              (Vigência a partir de {deleteRuleTarget.start})?
               Esta ação removerá esta restrição no cálculo de escalas do motor.
             </>
           ) : ""
         }
-        confirmLabel="Eliminar Regra"
+        confirmLabel={deleteRuleMutation.isPending ? "A eliminar..." : "Eliminar Regra"}
         cancelLabel="Cancelar"
         variant="danger"
       />
