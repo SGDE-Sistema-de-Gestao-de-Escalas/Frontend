@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { AlertTriangle, Pencil, Plus, Trash2, Loader2, Calendar } from "lucide-react";
 import type { EntityId } from "../../types";
 import { Card } from "../ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import DatePicker, { formatToIsoDate, parseFlexibleDate } from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import { ActionTooltip } from "../common/ActionTooltip";
@@ -37,25 +37,42 @@ export default function HolidaysPage() {
   const [newDate, setNewDate] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [holidayDeleteTarget, setHolidayDeleteTarget] = useState<BackendHolidayResource | null>(null);
+  const [formErrors, setFormErrors] = useState<{ name?: string; date?: string }>({});
 
   function openAdd() {
     setEditingHolidayId(null);
     setNewName("");
-    setNewDate("");
+    setNewDate(new Date().toISOString().split("T")[0]);
     setNewDescription("");
+    setFormErrors({});
     setShowAdd(true);
   }
 
   function openEdit(h: BackendHolidayResource) {
+    const clean = (val: string | null | undefined) => (!val || val.trim() === "—" || val.trim() === "-" ? "" : val);
     setEditingHolidayId(h.id);
-    setNewName(h.name);
+    setNewName(clean(h.name));
     setNewDate(formatToIsoDate(h.date) || h.date);
-    setNewDescription(h.description || "");
+    setNewDescription(clean(h.description));
+    setFormErrors({});
     setShowAdd(true);
   }
 
   async function saveHoliday() {
-    if (!newName.trim() || !newDate) return;
+    const errs: { name?: string; date?: string } = {};
+    if (!newName.trim()) {
+      errs.name = "O nome do feriado é obrigatório.";
+    }
+    if (!newDate) {
+      errs.date = "A data do feriado é obrigatória.";
+    }
+
+    if (Object.keys(errs).length > 0) {
+      setFormErrors(errs);
+      return;
+    }
+
+    setFormErrors({});
 
     if (editingHolidayId !== null) {
       await updateMutation.mutateAsync({
@@ -79,6 +96,7 @@ export default function HolidaysPage() {
     setNewName("");
     setNewDate("");
     setNewDescription("");
+    setFormErrors({});
   }
 
   async function handleDeleteConfirm() {
@@ -102,7 +120,7 @@ export default function HolidaysPage() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h3 className="text-sm font-semibold text-foreground">
             Calendário de Feriados
@@ -114,7 +132,7 @@ export default function HolidaysPage() {
         <button
           type="button"
           onClick={openAdd}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors flex-shrink-0 shadow-xs"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors flex-shrink-0 shadow-xs ml-auto"
         >
           <Plus size={12} />
           Adicionar
@@ -243,12 +261,24 @@ export default function HolidaysPage() {
                   </label>
                   <input
                     value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
+                    onChange={(e) => {
+                      setNewName(e.target.value);
+                      if (formErrors.name) setFormErrors((p) => ({ ...p, name: undefined }));
+                    }}
                     onKeyDown={(e) => e.key === "Enter" && !isSaving && saveHoliday()}
                     placeholder="Ex: Carnaval"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 transition-colors ${
+                      formErrors.name
+                        ? "border-destructive focus:ring-destructive"
+                        : "border-border focus:ring-ring"
+                    }`}
                     autoFocus
                   />
+                  {formErrors.name && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {formErrors.name}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
@@ -256,9 +286,18 @@ export default function HolidaysPage() {
                   </label>
                   <DatePicker
                     value={newDate}
-                    onChange={setNewDate}
-                    className="w-full"
+                    minDate={editingHolidayId !== null ? undefined : todayStr}
+                    onChange={(v) => {
+                      setNewDate(v);
+                      if (formErrors.date) setFormErrors((p) => ({ ...p, date: undefined }));
+                    }}
+                    className={`w-full ${formErrors.date ? "border-destructive" : ""}`}
                   />
+                  {formErrors.date && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {formErrors.date}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
@@ -271,27 +310,27 @@ export default function HolidaysPage() {
                     className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </div>
-
-                <div className="flex gap-3 pt-2 border-t border-border">
-                  <button
-                    type="button"
-                    onClick={() => setShowAdd(false)}
-                    disabled={isSaving}
-                    className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={saveHoliday}
-                    disabled={!newName.trim() || !newDate || isSaving}
-                    className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-1.5"
-                  >
-                    {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    {editingHolidayId !== null ? "Guardar Alterações" : "Criar Feriado"}
-                  </button>
-                </div>
               </div>
+
+              <DialogFooter>
+                <button
+                  type="button"
+                  onClick={() => setShowAdd(false)}
+                  disabled={isSaving}
+                  className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={saveHoliday}
+                  disabled={isSaving}
+                  className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-1.5"
+                >
+                  {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {editingHolidayId !== null ? "Guardar Alterações" : "Criar Feriado"}
+                </button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>

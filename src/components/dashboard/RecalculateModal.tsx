@@ -11,7 +11,7 @@ import {
   generateMatrix,
   schools as SCHOOLS,
 } from "../../api/mockData";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { BLOCK_STYLES } from "./blockStyles";
 import DatePicker from "../common/DatePicker";
 import CustomSelect from "../common/CustomSelect";
@@ -39,6 +39,7 @@ export default function RecalculateModal({
   const [substituteSchoolFilter, setSubstituteSchoolFilter] = useState<
     number | "all"
   >("all");
+  const [dateErrors, setDateErrors] = useState<{ start?: string; end?: string }>({});
 
   const currentSchool = SCHOOLS.find((s) => s.id === currentSchoolId);
 
@@ -139,101 +140,148 @@ export default function RecalculateModal({
 
         {/* Step: form */}
         {step === "form" && (
-          <div className="p-5 space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                  Data de Início *
-                </label>
-                <DatePicker
-                  value={startDate}
-                  onChange={setStartDate}
-                  className="w-full"
-                />
+          <>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                    Data de Início *
+                  </label>
+                  <DatePicker
+                    value={startDate}
+                    hasError={!!dateErrors.start}
+                    onChange={(v) => {
+                      setStartDate(v);
+                      if (dateErrors.start) {
+                        setDateErrors((p) => ({ ...p, start: undefined }));
+                      }
+                      if (v && endDate && endDate < v) {
+                        setEndDate(v);
+                      }
+                    }}
+                    className="w-full"
+                  />
+                  {dateErrors.start && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {dateErrors.start}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                    Data de Fim *
+                  </label>
+                  <DatePicker
+                    value={endDate}
+                    hasError={!!dateErrors.end}
+                    minDate={startDate || undefined}
+                    onChange={(v) => {
+                      setEndDate(v);
+                      if (dateErrors.end) {
+                        setDateErrors((p) => ({ ...p, end: undefined }));
+                      }
+                    }}
+                    className="w-full"
+                  />
+                  {dateErrors.end && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {dateErrors.end}
+                    </p>
+                  )}
+                </div>
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                  Data de Fim *
-                </label>
-                <DatePicker
-                  value={endDate}
-                  onChange={setEndDate}
-                  className="w-full"
-                />
-              </div>
-            </div>
 
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                Estratégia de Recálculo
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                  Estratégia de Recálculo
+                </label>
+                <CustomSelect
+                  value={strategy}
+                  onChange={(e: any) => setStrategy(typeof e === "string" ? e : e.target.value)}
+                  options={[
+                    {
+                      value: "auto",
+                      label: "Automático (respeitar regras em vigor)",
+                    },
+                    {
+                      value: "fill",
+                      label: "Preencher lacunas de cobertura",
+                    },
+                    {
+                      value: "full",
+                      label: "Recálculo completo (ignorar ajustes manuais)",
+                    },
+                  ]}
+                />
+              </div>
+
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={respectExceptions}
+                  onChange={(e) => setRespectExceptions(e.target.checked)}
+                  className="w-4 h-4 rounded border-border accent-primary"
+                />
+                <span className="text-xs text-foreground font-medium">
+                  Respeitar exceções individuais (licenças, carga reduzida)
+                </span>
               </label>
-              <CustomSelect
-                value={strategy}
-                onChange={(e: any) => setStrategy(typeof e === "string" ? e : e.target.value)}
-                options={[
-                  {
-                    value: "auto",
-                    label: "Automático (respeitar regras em vigor)",
-                  },
-                  {
-                    value: "fill",
-                    label: "Preencher lacunas de cobertura",
-                  },
-                  {
-                    value: "full",
-                    label: "Recálculo completo (ignorar ajustes manuais)",
-                  },
-                ]}
-              />
+
+              <div className="bg-[#FEF9EC] dark:bg-amber-950/20 border border-[#D97706]/20 rounded-lg p-3 flex items-start gap-2">
+                <AlertTriangle
+                  size={13}
+                  className="text-[#D97706] mt-0.5 flex-shrink-0"
+                />
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  O recálculo <strong>substitui</strong> os horários manuais no
+                  intervalo selecionado. Esta operação fica registada no log de
+                  auditoria.
+                </p>
+              </div>
             </div>
 
-            <label className="flex items-center gap-2.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={respectExceptions}
-                onChange={(e) => setRespectExceptions(e.target.checked)}
-                className="w-4 h-4 rounded border-border accent-primary"
-              />
-              <span className="text-xs text-foreground font-medium">
-                Respeitar exceções individuais (licenças, carga reduzida)
-              </span>
-            </label>
-
-            <div className="bg-[#FEF9EC] dark:bg-amber-950/20 border border-[#D97706]/20 rounded-lg p-3 flex items-start gap-2">
-              <AlertTriangle
-                size={13}
-                className="text-[#D97706] mt-0.5 flex-shrink-0"
-              />
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                O recálculo <strong>substitui</strong> os horários manuais no
-                intervalo selecionado. Esta operação fica registada no log de
-                auditoria.
-              </p>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setStep("gap")}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs"
-              >
-                <RefreshCw size={14} />
-                Executar Recálculo
-              </button>
+            <DialogFooter>
               <button
                 type="button"
                 onClick={handleClose}
-                className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 Cancelar
               </button>
-            </div>
-          </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const errors: { start?: string; end?: string } = {};
+                  if (!startDate) {
+                    errors.start = "A data de início é obrigatória.";
+                  }
+                  if (!endDate) {
+                    errors.end = "A data de fim é obrigatória.";
+                  } else if (startDate && endDate < startDate) {
+                    errors.end = "A data de fim não pode ser anterior à data de início.";
+                  }
+
+                  if (Object.keys(errors).length > 0) {
+                    setDateErrors(errors);
+                    return;
+                  }
+
+                  setDateErrors({});
+                  setStep("gap");
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+              >
+                <RefreshCw size={13} />
+                Executar Recálculo
+              </button>
+            </DialogFooter>
+          </>
         )}
 
         {/* Step: gap */}
         {step === "gap" && (
-          <div className="p-5 space-y-4">
+          <>
+            <div className="p-5 space-y-4">
             {/* Alert */}
             <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-4 flex items-start gap-3">
               <div className="w-8 h-8 rounded-full bg-destructive/10 flex items-center justify-center flex-shrink-0">
@@ -386,25 +434,26 @@ export default function RecalculateModal({
                 </div>
               </div>
             )}
+          </div>
 
-            <div className="flex gap-3 pt-2">
+            <DialogFooter>
+              <button
+                type="button"
+                onClick={() => setStep("done")}
+                className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Ignorar
+              </button>
               <button
                 type="button"
                 onClick={() => setStep("done")}
                 disabled={!selectedSubstituteId}
-                className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
+                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
               >
                 Confirmar Designação
               </button>
-              <button
-                type="button"
-                onClick={() => setStep("done")}
-                className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Ignorar
-              </button>
-            </div>
-          </div>
+            </DialogFooter>
+          </>
         )}
 
         {/* Step: done */}

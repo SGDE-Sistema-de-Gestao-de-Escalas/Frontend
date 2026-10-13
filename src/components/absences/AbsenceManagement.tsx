@@ -38,6 +38,11 @@ export default function AbsenceManagement() {
   const [formNote, setFormNote] = useState("");
   const [formStatus, setFormStatus] = useState<"" | "justified" | "unjustified">("");
   const [formDocumentName, setFormDocumentName] = useState("");
+  const [formErrors, setFormErrors] = useState<{
+    assistant?: string;
+    startDate?: string;
+    endDate?: string;
+  }>({});
 
   const filteredAbsences = absencesList.filter(
     (a) => statusFilter === "all" || a.status === statusFilter
@@ -55,6 +60,7 @@ export default function AbsenceManagement() {
     setFormNote("");
     setFormStatus("");
     setFormDocumentName("");
+    setFormErrors({});
     setShowForm(true);
   }
 
@@ -73,11 +79,30 @@ export default function AbsenceManagement() {
         : (absence.status as "justified" | "unjustified")
     );
     setFormDocumentName(absence.documentPath ?? "");
+    setFormErrors({});
     setShowForm(true);
   }
 
   function handleSave() {
-    if (!formAssistant || !formStartDate || !formEndDate) return;
+    const errors: { assistant?: string; startDate?: string; endDate?: string } = {};
+    if (!formAssistant) {
+      errors.assistant = "Selecione o assistente.";
+    }
+    if (!formStartDate) {
+      errors.startDate = "A data de início é obrigatória.";
+    }
+    if (!formEndDate) {
+      errors.endDate = "A data de fim é obrigatória.";
+    } else if (formStartDate && formEndDate < formStartDate) {
+      errors.endDate = "A data de fim não pode ser anterior à data de início.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+
+    setFormErrors({});
     const assistant = ASSISTANTS.find((a) => a.name === formAssistant);
     const status = formStatus !== "" ? formStatus : "pending";
     if (editId !== null) {
@@ -220,13 +245,25 @@ export default function AbsenceManagement() {
                   </label>
                   <CustomSelect
                     value={formAssistant}
-                    onChange={(e: any) => setFormAssistant(typeof e === "string" ? e : e.target.value)}
+                    hasError={!!formErrors.assistant}
+                    onChange={(e: any) => {
+                      const val = typeof e === "string" ? e : e.target.value;
+                      setFormAssistant(val);
+                      if (formErrors.assistant) {
+                        setFormErrors((p) => ({ ...p, assistant: undefined }));
+                      }
+                    }}
                     placeholder="Selecionar assistente..."
                     options={ASSISTANTS.map((a) => ({
                       value: a.name,
                       label: a.name,
                     }))}
                   />
+                  {formErrors.assistant && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {formErrors.assistant}
+                    </p>
+                  )}
                 </div>
                 {/* Dates & Times */}
                 <div className="grid grid-cols-2 gap-3">
@@ -236,9 +273,23 @@ export default function AbsenceManagement() {
                     </label>
                     <DatePicker
                       value={formStartDate}
-                      onChange={setFormStartDate}
+                      hasError={!!formErrors.startDate}
+                      onChange={(v) => {
+                        setFormStartDate(v);
+                        if (formErrors.startDate) {
+                          setFormErrors((p) => ({ ...p, startDate: undefined }));
+                        }
+                        if (v && formEndDate && formEndDate < v) {
+                          setFormEndDate(v);
+                        }
+                      }}
                       className="w-full"
                     />
+                    {formErrors.startDate && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {formErrors.startDate}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
@@ -256,9 +307,21 @@ export default function AbsenceManagement() {
                     </label>
                     <DatePicker
                       value={formEndDate}
-                      onChange={setFormEndDate}
+                      hasError={!!formErrors.endDate}
+                      minDate={formStartDate || undefined}
+                      onChange={(v) => {
+                        setFormEndDate(v);
+                        if (formErrors.endDate) {
+                          setFormErrors((p) => ({ ...p, endDate: undefined }));
+                        }
+                      }}
                       className="w-full"
                     />
+                    {formErrors.endDate && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {formErrors.endDate}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
@@ -380,8 +443,7 @@ export default function AbsenceManagement() {
                 <button
                   type="button"
                   onClick={handleSave}
-                  disabled={!formAssistant || !formStartDate || !formEndDate}
-                  className="flex-1 py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 disabled:opacity-40 transition-colors"
+                  className="flex-1 py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
                 >
                   {editId !== null ? "Guardar Alterações" : "Registar"}
                 </button>

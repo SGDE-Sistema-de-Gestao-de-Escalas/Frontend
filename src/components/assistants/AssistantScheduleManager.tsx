@@ -27,20 +27,36 @@ import {
 } from "../dashboard/blockStyles";
 import { HOUR_LABELS } from "../../api/mockData";
 import type { BlockState, EntityId } from "../../types";
+import {
+  useAssistantSchedules,
+  useCreateAssistantSchedule,
+  useUpdateAssistantSchedule,
+  useDeleteAssistantSchedule,
+} from "../../hooks/api/useAssistantSchedules";
+import {
+  apiProfileToScheduleItem,
+  scheduleItemToApiPayload,
+} from "../../api/services/assistantSchedules.service";
 
 export interface AssistantScheduleItem {
-  id: number;
+  id: string | number;
   type: "fixed" | "rotating";
   period?: "Semanal" | "Quinzenal" | "Mensal";
   entry?: string;
   exit?: string;
-  shiftA?: { entry: string; exit: string };
-  shiftB?: { entry: string; exit: string };
+  shiftA?: { entry: string; exit: string; lunch?: { start: string; end: string; duration: number } };
+  shiftB?: { entry: string; exit: string; lunch?: { start: string; end: string; duration: number } };
   days: string[];
   lunch?: { start: string; end: string; duration: number };
   startsWith?: "A" | "B";
   from: string;
   to: string | null;
+  status?: "upcoming" | "current" | "superseded";
+  can_edit?: boolean;
+  can_change_end_date?: boolean;
+  can_delete?: boolean;
+  cannot_edit_reason?: string | null;
+  cannot_delete_reason?: string | null;
 }
 
 function addDays(dateStr: string, days: number): string {
@@ -89,53 +105,23 @@ interface AssistantScheduleManagerProps {
 export default function AssistantScheduleManager({
   assistantId,
 }: AssistantScheduleManagerProps) {
-  const [schedules, setSchedules] = useState<AssistantScheduleItem[]>([
-    {
-      id: 1,
-      type: "rotating",
-      period: "Quinzenal",
-      shiftA: { entry: "07:30", exit: "15:30" },
-      shiftB: { entry: "10:00", exit: "17:00" },
-      days: ["Seg", "Ter", "Qua", "Qui", "Sex"],
-      startsWith: "A",
-      from: "2026-02-01",
-      to: null,
-    },
-    {
-      id: 2,
-      type: "fixed",
-      entry: "08:00",
-      exit: "16:00",
-      days: ["Seg", "Ter", "Qua", "Qui", "Sex"],
-      lunch: { start: "12:00", end: "13:30", duration: 30 },
-      from: "2025-09-01",
-      to: "2026-01-31",
-    },
-    {
-      id: 3,
-      type: "fixed",
-      entry: "07:30",
-      exit: "15:30",
-      days: ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"],
-      lunch: { start: "11:30", end: "13:00", duration: 30 },
-      from: "2024-01-01",
-      to: "2025-08-31",
-    },
-    {
-      id: 4,
-      type: "fixed",
-      entry: "07:00",
-      exit: "15:00",
-      days: ["Seg", "Ter", "Qua", "Qui", "Sex"],
-      lunch: { start: "12:00", end: "13:00", duration: 30 },
-      from: "2022-09-01",
-      to: "2023-12-31",
-    },
-  ]);
+  const { data: apiProfiles } = useAssistantSchedules(assistantId);
+  const createScheduleMutation = useCreateAssistantSchedule();
+  const updateScheduleMutation = useUpdateAssistantSchedule();
+  const deleteScheduleMutation = useDeleteAssistantSchedule();
+
+  const [schedules, setSchedules] = useState<AssistantScheduleItem[]>([]);
+
+  React.useEffect(() => {
+    if (apiProfiles) {
+      setSchedules(apiProfiles.map(apiProfileToScheduleItem));
+    }
+  }, [apiProfiles]);
 
   const [showAddScheduleModal, setShowAddScheduleModal] = useState(false);
   const [editingScheduleId, setEditingScheduleId] = useState<number | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleFieldErrors, setScheduleFieldErrors] = useState<{ start?: string; end?: string }>({});
   const [scheduleToDelete, setScheduleToDelete] = useState<AssistantScheduleItem | null>(null);
 
   // Form states for adding/editing schedule
@@ -205,6 +191,7 @@ export default function AssistantScheduleManager({
   function handleOpenAddSchedule() {
     setEditingScheduleId(null);
     setScheduleError(null);
+    setScheduleFieldErrors({});
     setShiftProfile("fixed");
     setFixedEntry("08:00");
     setFixedExit("16:00");
@@ -247,6 +234,7 @@ export default function AssistantScheduleManager({
   function handleOpenEditSchedule(item: AssistantScheduleItem) {
     setEditingScheduleId(item.id);
     setScheduleError(null);
+    setScheduleFieldErrors({});
     setShiftProfile(item.type);
 
     if (item.type === "fixed") {
@@ -275,10 +263,26 @@ export default function AssistantScheduleManager({
       if (item.shiftA) {
         setFixedEntry(item.shiftA.entry);
         setFixedExit(item.shiftA.exit);
+        if (item.shiftA.lunch) {
+          setLunchEnabled(true);
+          setLunchStart(item.shiftA.lunch.start);
+          setLunchEnd(item.shiftA.lunch.end);
+          setLunchDuration(String(item.shiftA.lunch.duration));
+        } else {
+          setLunchEnabled(false);
+        }
       }
       if (item.shiftB) {
         setShiftBEntry(item.shiftB.entry);
         setShiftBExit(item.shiftB.exit);
+        if (item.shiftB.lunch) {
+          setShiftBLunchEnabled(true);
+          setShiftBLunchStart(item.shiftB.lunch.start);
+          setShiftBLunchEnd(item.shiftB.lunch.end);
+          setShiftBLunchDuration(String(item.shiftB.lunch.duration));
+        } else {
+          setShiftBLunchEnabled(false);
+        }
       }
       setFixedDays(item.days || ["Seg", "Ter", "Qua", "Qui", "Sex"]);
       setShiftBDays(item.days || ["Seg", "Ter", "Qua", "Qui", "Sex"]);
@@ -291,10 +295,21 @@ export default function AssistantScheduleManager({
 
   function handleSaveSchedule() {
     setScheduleError(null);
+    setScheduleFieldErrors({});
 
     const isFixed = shiftProfile === "fixed";
     const startVal = (isFixed ? fixedStartDate : rotStartDate).trim();
     const endVal = (isFixed ? fixedEndDate : rotEndDate).trim() || null;
+
+    if (!isEditingActiveSchedule && !startVal) {
+      setScheduleFieldErrors({ start: "A data de início de vigência é obrigatória." });
+      return;
+    }
+
+    if (endVal && startVal && endVal < startVal) {
+      setScheduleFieldErrors({ end: "A data de fim não pode ser anterior à data de início." });
+      return;
+    }
 
     if (isEditingActiveSchedule && editingSchedule) {
       if (!endVal) {
@@ -317,7 +332,7 @@ export default function AssistantScheduleManager({
         }
 
         if (endVal < editingSchedule.from) {
-          setScheduleError("A data de término não pode ser anterior à data de início.");
+          setScheduleFieldErrors({ end: "A data de término não pode ser anterior à data de início." });
           return;
         }
 
@@ -340,19 +355,16 @@ export default function AssistantScheduleManager({
       setSchedules((prev) =>
         prev.map((s) => (s.id === editingSchedule.id ? { ...s, to: endVal } : s))
       );
+      if (assistantId) {
+        updateScheduleMutation.mutate({
+          id: editingSchedule.id,
+          assistantId: String(assistantId),
+          data: { valid_until: endVal },
+        });
+      }
       notify.success("Data de fim de vigência atualizada!");
       setShowAddScheduleModal(false);
       setEditingScheduleId(null);
-      return;
-    }
-
-    if (!startVal) {
-      setScheduleError("A data de início de vigência é obrigatória.");
-      return;
-    }
-
-    if (endVal && endVal < startVal) {
-      setScheduleError("A data de fim não pode ser anterior à data de início.");
       return;
     }
 
@@ -404,10 +416,24 @@ export default function AssistantScheduleManager({
             shiftA: {
               entry: fixedEntry,
               exit: fixedExit,
+              lunch: lunchEnabled
+                ? {
+                    start: lunchStart,
+                    end: lunchEnd,
+                    duration: parseInt(lunchDuration, 10) || 30,
+                  }
+                : undefined,
             },
             shiftB: {
               entry: shiftBEntry,
               exit: shiftBExit,
+              lunch: shiftBLunchEnabled
+                ? {
+                    start: shiftBLunchStart,
+                    end: shiftBLunchEnd,
+                    duration: parseInt(shiftBLunchDuration, 10) || 30,
+                  }
+                : undefined,
             },
           }),
     };
@@ -429,6 +455,23 @@ export default function AssistantScheduleManager({
 
       return list.sort((a, b) => (b.from > a.from ? 1 : -1));
     });
+
+    if (assistantId) {
+      if (editingScheduleId) {
+        updateScheduleMutation.mutate({
+          id: editingScheduleId,
+          assistantId: String(assistantId),
+          data: {
+            valid_from: itemToSave.from,
+            valid_until: itemToSave.to,
+          },
+        });
+      } else {
+        createScheduleMutation.mutate(
+          scheduleItemToApiPayload(String(assistantId), itemToSave)
+        );
+      }
+    }
 
     notify.success(
       editingScheduleId
@@ -473,6 +516,13 @@ export default function AssistantScheduleManager({
       return nextList;
     });
 
+    if (assistantId && scheduleToDelete) {
+      deleteScheduleMutation.mutate({
+        id: scheduleToDelete.id,
+        assistantId: String(assistantId),
+      });
+    }
+
     notify.success(
       isFuture
         ? "Horário agendado eliminado. A vigência do horário atual ficou em aberto."
@@ -482,7 +532,7 @@ export default function AssistantScheduleManager({
   }
 
   return (
-    <Card className="p-5 col-span-1 md:col-span-2 lg:col-span-3">
+    <Card className="p-5 w-full">
       {/* Box Header */}
       <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-border/50 flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
@@ -507,7 +557,7 @@ export default function AssistantScheduleManager({
         <button
           type="button"
           onClick={handleOpenAddSchedule}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs ml-auto"
         >
           <Plus size={12} />
           Adicionar Horário
@@ -516,7 +566,12 @@ export default function AssistantScheduleManager({
 
       {/* History list */}
       <div className="space-y-3">
-        {schedules.map((h) => {
+        {schedules.length === 0 ? (
+          <div className="py-8 text-center text-xs text-muted-foreground bg-muted/20 rounded-lg border border-dashed border-border p-4">
+            Nenhum perfil de horário configurado para este assistente.
+          </div>
+        ) : (
+          schedules.map((h) => {
           const status = getScheduleTypeStatus(h, schedules);
           const isActiveSchedule = status === "active";
           const isFutureSchedule = status === "future";
@@ -571,22 +626,32 @@ export default function AssistantScheduleManager({
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEditSchedule(h)}
-                    className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                    title={
-                      isActiveSchedule
-                        ? "Editar vigência do horário em vigor"
-                        : "Editar horário"
-                    }
-                  >
-                    <Pencil size={13} />
-                  </button>
+                  {(h.can_edit !== false || h.can_change_end_date) && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditSchedule(h)}
+                      className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      title={
+                        h.cannot_edit_reason ||
+                        (h.can_edit === false && h.can_change_end_date
+                          ? "Apenas a data de fim pode ser ajustada para este horário."
+                          : "Editar horário")
+                      }
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  )}
 
                   <button
                     type="button"
                     onClick={() => {
+                      if (h.can_delete === false) {
+                        notify.error(
+                          h.cannot_delete_reason ||
+                            "Não é possível eliminar este horário."
+                        );
+                        return;
+                      }
                       if (isActiveSchedule) {
                         notify.error(
                           "Não é possível eliminar o horário em vigor. O assistente tem de ter sempre um horário ativo."
@@ -599,18 +664,19 @@ export default function AssistantScheduleManager({
                       }
                       setScheduleToDelete(h);
                     }}
-                    disabled={isActiveSchedule || schedules.length <= 1}
+                    disabled={h.can_delete === false || isActiveSchedule || schedules.length <= 1}
                     className={`p-1.5 rounded-md transition-colors ${
-                      isActiveSchedule || schedules.length <= 1
+                      h.can_delete === false || isActiveSchedule || schedules.length <= 1
                         ? "opacity-30 cursor-not-allowed text-muted-foreground"
                         : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
                     }`}
                     title={
-                      isActiveSchedule
+                      h.cannot_delete_reason ||
+                      (isActiveSchedule
                         ? "Não é possível eliminar o horário em vigor."
                         : schedules.length <= 1
                         ? "O assistente tem de ter pelo menos um horário."
-                        : "Eliminar horário"
+                        : "Eliminar horário")
                     }
                   >
                     <Trash2 size={13} />
@@ -729,6 +795,11 @@ export default function AssistantScheduleManager({
                           </div>
                           <span>
                             {s?.entry} – {s?.exit}
+                            {s?.lunch && (
+                              <span className="text-muted-foreground ml-1.5 text-[11px]">
+                                · Almoço: {s.lunch.start}–{s.lunch.end} ({s.lunch.duration}m)
+                              </span>
+                            )}
                           </span>
                         </div>
                       );
@@ -744,7 +815,7 @@ export default function AssistantScheduleManager({
               </div>
             </div>
           );
-        })}
+        }))}
       </div>
 
       {/* ── Add / Edit schedule modal ── */}
@@ -768,6 +839,28 @@ export default function AssistantScheduleManager({
             setScheduleError(null);
           }}
           maxWidth="max-w-4xl"
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddScheduleModal(false);
+                  setEditingScheduleId(null);
+                  setScheduleError(null);
+                }}
+                className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveSchedule}
+                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+              >
+                Guardar Horário
+              </button>
+            </>
+          }
         >
           <div className="space-y-5">
             {/* Active schedule banner */}
@@ -812,7 +905,7 @@ export default function AssistantScheduleManager({
             {/* Fixed shift */}
             {shiftProfile === "fixed" && (
               <Card className="p-5 space-y-4">
-                <div className={isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}>
+                <div className={`space-y-4 ${isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}`}>
                   <div>
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
                       Horário Diário
@@ -868,7 +961,7 @@ export default function AssistantScheduleManager({
                   <div className="border-t border-border/60 pt-4">
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Pausa de Almoço
+                        Pausa de almoço
                       </p>
                       <Switch
                         checked={lunchEnabled}
@@ -941,13 +1034,26 @@ export default function AssistantScheduleManager({
                       <div className={isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}>
                         <DatePicker
                           value={fixedStartDate}
+                          hasError={!!scheduleFieldErrors.start}
+                          minDate={isEditingActiveSchedule ? undefined : TODAY_STR}
                           onChange={(v) => {
                             setFixedStartDate(v);
                             setScheduleError(null);
+                            if (scheduleFieldErrors.start) {
+                              setScheduleFieldErrors((prev) => ({ ...prev, start: undefined }));
+                            }
+                            if (v && fixedEndDate && fixedEndDate < v) {
+                              setFixedEndDate(v);
+                            }
                           }}
                           className="w-full"
                         />
                       </div>
+                      {scheduleFieldErrors.start && (
+                        <p className="text-[11px] text-destructive mt-1 font-medium">
+                          {scheduleFieldErrors.start}
+                        </p>
+                      )}
                       {!isEditingActiveSchedule && activeSchedule && (
                         <p className="text-[10px] text-muted-foreground mt-1">
                           {activeSchedule.to
@@ -967,20 +1073,31 @@ export default function AssistantScheduleManager({
                       </label>
                       <DatePicker
                         value={fixedEndDate}
+                        hasError={!!scheduleFieldErrors.end}
+                        minDate={fixedStartDate || undefined}
                         onChange={(v) => {
                           setFixedEndDate(v);
                           setScheduleError(null);
+                          if (scheduleFieldErrors.end) {
+                            setScheduleFieldErrors((prev) => ({ ...prev, end: undefined }));
+                          }
                         }}
                         className="w-full"
                         placeholder="AAAA-MM-DD"
                       />
-                      <p className="text-[10px] text-muted-foreground/70 mt-1">
-                        {isEditingActiveSchedule
-                          ? futureSchedule
-                            ? `Próximo horário inicia a ${formatDatePT(futureSchedule.from)}. O término deve ser ${formatDatePT(addDays(futureSchedule.from, -1))}.`
-                            : "Requer um novo horário agendado para definir término."
-                          : "Em branco = vigência em aberto"}
-                      </p>
+                      {scheduleFieldErrors.end ? (
+                        <p className="text-[11px] text-destructive mt-1 font-medium">
+                          {scheduleFieldErrors.end}
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground/70 mt-1">
+                          {isEditingActiveSchedule
+                            ? futureSchedule
+                              ? `Próximo horário inicia a ${formatDatePT(futureSchedule.from)}. O término deve ser ${formatDatePT(addDays(futureSchedule.from, -1))}.`
+                              : "Requer um novo horário agendado para definir término."
+                            : "Em branco = vigência em aberto"}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1012,7 +1129,7 @@ export default function AssistantScheduleManager({
                               onClick={() => setRotPeriod(p.id)}
                               className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                                 rotPeriod === p.id
-                                  ? "bg-primary/10 text-primary border-primary/40 font-semibold"
+                                  ? "bg-primary text-primary-foreground border-primary font-bold shadow-xs"
                                   : "border-border text-muted-foreground hover:text-foreground"
                               }`}
                             >
@@ -1061,7 +1178,7 @@ export default function AssistantScheduleManager({
                     {/* Vigência rotativo */}
                     <div className="border-t border-border/60 pt-4">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                        Vigência da Rotação
+                        Vigência
                       </p>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -1076,13 +1193,33 @@ export default function AssistantScheduleManager({
                           <div className={isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}>
                             <DatePicker
                               value={rotStartDate}
+                              hasError={!!scheduleFieldErrors.start}
+                              minDate={isEditingActiveSchedule ? undefined : TODAY_STR}
                               onChange={(v) => {
                                 setRotStartDate(v);
                                 setScheduleError(null);
+                                if (scheduleFieldErrors.start) {
+                                  setScheduleFieldErrors((prev) => ({ ...prev, start: undefined }));
+                                }
+                                if (v && rotEndDate && rotEndDate < v) {
+                                  setRotEndDate(v);
+                                }
                               }}
                               className="w-full"
                             />
                           </div>
+                          {scheduleFieldErrors.start && (
+                            <p className="text-[11px] text-destructive mt-1 font-medium">
+                              {scheduleFieldErrors.start}
+                            </p>
+                          )}
+                          {!isEditingActiveSchedule && activeSchedule && (
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                              {activeSchedule.to
+                                ? `Deve iniciar no máximo a ${formatDatePT(addDays(activeSchedule.to, 1))} (dia seguinte ao término em vigor).`
+                                : "O horário em vigor terminará automaticamente na véspera desta data."}
+                            </p>
+                          )}
                         </div>
                         <div>
                           <label className="text-xs text-muted-foreground block mb-1.5 flex items-center justify-between">
@@ -1095,13 +1232,31 @@ export default function AssistantScheduleManager({
                           </label>
                           <DatePicker
                             value={rotEndDate}
+                            hasError={!!scheduleFieldErrors.end}
+                            minDate={rotStartDate || undefined}
                             onChange={(v) => {
                               setRotEndDate(v);
                               setScheduleError(null);
+                              if (scheduleFieldErrors.end) {
+                                setScheduleFieldErrors((prev) => ({ ...prev, end: undefined }));
+                              }
                             }}
                             className="w-full"
                             placeholder="AAAA-MM-DD"
                           />
+                          {scheduleFieldErrors.end ? (
+                            <p className="text-[11px] text-destructive mt-1 font-medium">
+                              {scheduleFieldErrors.end}
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground/70 mt-1">
+                              {isEditingActiveSchedule
+                                ? futureSchedule
+                                  ? `Próximo horário inicia a ${formatDatePT(futureSchedule.from)}. O término deve ser ${formatDatePT(addDays(futureSchedule.from, -1))}.`
+                                  : "Requer um novo horário agendado para definir término."
+                                : "Em branco = vigência em aberto"}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1119,6 +1274,14 @@ export default function AssistantScheduleManager({
                     const setExitVal = isA ? setFixedExit : setShiftBExit;
                     const daysVal = isA ? fixedDays : shiftBDays;
                     const setDaysVal = isA ? setFixedDays : setShiftBDays;
+                    const isLunch = isA ? lunchEnabled : shiftBLunchEnabled;
+                    const setIsLunch = isA ? setLunchEnabled : setShiftBLunchEnabled;
+                    const lunchS = isA ? lunchStart : shiftBLunchStart;
+                    const setLunchS = isA ? setLunchStart : setShiftBLunchStart;
+                    const lunchE = isA ? lunchEnd : shiftBLunchEnd;
+                    const setLunchE = isA ? setLunchEnd : setShiftBLunchEnd;
+                    const lunchD = isA ? lunchDuration : shiftBLunchDuration;
+                    const setLunchD = isA ? setLunchDuration : setShiftBLunchDuration;
 
                     return (
                       <Card key={ab} className="p-5 space-y-4">
@@ -1159,7 +1322,7 @@ export default function AssistantScheduleManager({
                           </div>
                         </div>
 
-                        <div className="border-t border-border/60 pt-3">
+                        <div className="border-t border-border/60 pt-4">
                           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                             Dias de Trabalho
                           </p>
@@ -1180,6 +1343,67 @@ export default function AssistantScheduleManager({
                             ))}
                           </div>
                         </div>
+
+                        {/* Pausa de almoço */}
+                        <div className="border-t border-border/60 pt-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                              Pausa de almoço
+                            </p>
+                            <Switch
+                              checked={isLunch}
+                              onCheckedChange={setIsLunch}
+                            />
+                          </div>
+                          {isLunch && (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground block mb-1">
+                                    Início do Almoço
+                                  </label>
+                                  <TimePicker
+                                    value={lunchS}
+                                    onChange={setLunchS}
+                                    className="w-full"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground block mb-1">
+                                    Fim do Almoço
+                                  </label>
+                                  <TimePicker
+                                    value={lunchE}
+                                    onChange={setLunchE}
+                                    className="w-full"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="text-[10px] text-muted-foreground block mb-1">
+                                  Duração Efetiva
+                                </label>
+                                <div className="flex gap-1.5 w-full">
+                                  {["30", "45", "60"].map((m) => (
+                                    <button
+                                      key={m}
+                                      type="button"
+                                      onClick={() => setLunchD(m)}
+                                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                        lunchD === m
+                                          ? "bg-primary text-primary-foreground border-primary font-semibold shadow-xs"
+                                          : "border-border text-muted-foreground hover:text-foreground"
+                                      }`}
+                                    >
+                                      {m}m
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </Card>
                     );
                   })}
@@ -1195,28 +1419,6 @@ export default function AssistantScheduleManager({
               </div>
             )}
 
-            {/* Modal actions */}
-            <div className="flex justify-end gap-3 pt-4 border-t border-border">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAddScheduleModal(false);
-                  setEditingScheduleId(null);
-                  setScheduleError(null);
-                }}
-                className="px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveSchedule}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs"
-              >
-                <Save size={14} />
-                Guardar Horário
-              </button>
-            </div>
           </div>
         </Modal>
       )}

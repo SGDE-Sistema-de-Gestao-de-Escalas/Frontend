@@ -90,7 +90,7 @@ export default function AssistantsListPage({
         <button
           type="button"
           onClick={onAddNew}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs ml-auto"
         >
           <UserPlus size={14} />
           Adicionar Assistente

@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, Trash2, CheckCircle, Info } from "lucide-react";
 
 export type ConfirmationVariant = "danger" | "warning" | "success" | "info";
@@ -88,60 +89,75 @@ export default function ConfirmationModal({
     }
   };
 
-  return (
-    <>
-      {/* Backdrop */}
+  const modalNode = (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-150 pointer-events-auto select-none"
+      onPointerDown={(e) => {
+        e.stopPropagation();
+      }}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+      }}
+      onTouchStart={(e) => {
+        e.stopPropagation();
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (e.target === e.currentTarget && !isLoading) {
+          onClose();
+        }
+      }}
+    >
       <div
-        className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-150"
-        onClick={() => {
-          if (!isLoading) onClose();
-        }}
-      />
-
-      {/* Modal Dialog */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+        role="dialog"
+        aria-modal="true"
+        className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-md p-6 text-center pointer-events-auto select-auto transform transition-all animate-in zoom-in-95 duration-150"
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Icon Badge */}
         <div
-          role="dialog"
-          aria-modal="true"
-          className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-md p-6 text-center pointer-events-auto transform transition-all animate-in zoom-in-95 duration-150"
-          onClick={(e) => e.stopPropagation()}
+          className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 ${getIconWrapperClass()}`}
         >
-          {/* Icon Badge */}
-          <div
-            className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 ${getIconWrapperClass()}`}
+          {getIcon()}
+        </div>
+
+        {/* Title */}
+        <h3 className="font-semibold text-foreground text-base mb-1.5">{title}</h3>
+
+        {/* Body / Description */}
+        <div className="text-xs text-muted-foreground leading-relaxed mb-6">
+          {description}
+        </div>
+
+        {/* Action buttons with strict uniform sizing and ordering: Cancel on Left, Confirm on Right */}
+        <div className="flex items-stretch gap-3">
+          <button
+            type="button"
+            disabled={isLoading}
+            onClick={onClose}
+            className="flex-1 py-2.5 px-4 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 flex items-center justify-center text-center"
           >
-            {getIcon()}
-          </div>
-
-          {/* Title */}
-          <h3 className="font-semibold text-foreground text-base mb-1.5">{title}</h3>
-
-          {/* Body / Description */}
-          <div className="text-xs text-muted-foreground leading-relaxed mb-6">
-            {description}
-          </div>
-
-          {/* Action buttons with strict uniform sizing and ordering: Cancel on Left, Confirm on Right */}
-          <div className="flex items-stretch gap-3">
-            <button
-              type="button"
-              disabled={isLoading}
-              onClick={onClose}
-              className="flex-1 py-2.5 px-4 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 flex items-center justify-center text-center"
-            >
-              {cancelLabel}
-            </button>
-            <button
-              type="button"
-              disabled={isLoading}
-              onClick={onConfirm}
-              className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium shadow-xs transition-colors disabled:opacity-50 flex items-center justify-center text-center leading-tight ${getConfirmButtonClass()}`}
-            >
-              {isLoading ? "A processar..." : confirmLabel}
-            </button>
-          </div>
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            disabled={isLoading}
+            onClick={onConfirm}
+            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium shadow-xs transition-colors disabled:opacity-50 flex items-center justify-center text-center leading-tight ${getConfirmButtonClass()}`}
+          >
+            {isLoading ? "A processar..." : confirmLabel}
+          </button>
         </div>
       </div>
-    </>
+    </div>
   );
+
+  if (typeof document !== "undefined") {
+    return createPortal(modalNode, document.body);
+  }
+
+  return modalNode;
 }

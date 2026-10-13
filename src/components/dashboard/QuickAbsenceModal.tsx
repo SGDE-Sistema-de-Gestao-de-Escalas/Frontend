@@ -1,11 +1,12 @@
 import React, { useState } from "react";
-import { Building2, Check, ChevronDown } from "lucide-react";
+import { Building2, ChevronDown } from "lucide-react";
+import { notify } from "../common/FeedbackNotification";
 import {
   assistants as ASSISTANTS,
   generateMatrix,
   schools as SCHOOLS,
 } from "../../api/mockData";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { BLOCK_STYLES } from "./blockStyles";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
@@ -29,10 +30,10 @@ export default function QuickAbsenceModal({
   const [endTime, setEndTime] = useState("17:00");
   const [reason, setReason] = useState("Doença");
   const [note, setNote] = useState("");
-  const [done, setDone] = useState(false);
   const [showCoverage, setShowCoverage] = useState(false);
   const [coverageSchool, setCoverageSchool] = useState<number | "">("");
   const [coverageAssistantId, setCoverageAssistantId] = useState<number | "">("");
+  const [dateErrors, setDateErrors] = useState<{ start?: string; end?: string }>({});
 
   if (!assistantName) return null;
 
@@ -55,8 +56,27 @@ export default function QuickAbsenceModal({
   );
 
   function submit() {
-    if (!start || !end) return;
-    setDone(true);
+    const errors: { start?: string; end?: string } = {};
+    if (!start) {
+      errors.start = "A data de início é obrigatória.";
+    }
+    if (!end) {
+      errors.end = "A data de fim é obrigatória.";
+    } else if (start && end < start) {
+      errors.end = "A data de fim não pode ser anterior à data de início.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setDateErrors(errors);
+      return;
+    }
+
+    setDateErrors({});
+    notify.success(
+      `A falta de ${assistantName} foi registada com sucesso.`,
+      "Ausência Registada"
+    );
+    onClose();
   }
 
   const hasDates = Boolean(start && end);
@@ -73,44 +93,6 @@ export default function QuickAbsenceModal({
           </p>
         </DialogHeader>
 
-        {done ? (
-          <div className="p-8 text-center">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
-              <Check size={22} className="text-primary" />
-            </div>
-            <p className="text-sm font-semibold text-foreground">
-              Ausência registada
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              A falta de <span className="font-medium text-foreground">{assistantName}</span> foi registada com sucesso.
-            </p>
-            <div className="mt-2 px-3 py-2 rounded-lg bg-muted/40 border border-border text-xs font-mono text-muted-foreground">
-              {start} {startTime} → {end} {endTime}
-            </div>
-            {selectedCovSub && (
-              <div className="mt-3 px-4 py-2.5 rounded-xl bg-primary/5 border border-primary/20 text-xs text-left">
-                <p className="font-medium text-primary mb-0.5">
-                  Cobertura inter-escolar agendada
-                </p>
-                <p className="text-muted-foreground">
-                  {selectedCovSub.name} (
-                  {
-                    SCHOOLS.find((s) => s.id === selectedCovSub.schoolId)
-                      ?.name
-                  }
-                  ) cobre de {start} {startTime} a {end} {endTime}.
-                </p>
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="mt-5 px-6 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-            >
-              Fechar
-            </button>
-          </div>
-        ) : (
           <div className="p-5 space-y-4">
             {/* Assistant summary header */}
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-muted/50 border border-border">
@@ -137,9 +119,23 @@ export default function QuickAbsenceModal({
                 </label>
                 <DatePicker
                   value={start}
-                  onChange={setStart}
+                  hasError={!!dateErrors.start}
+                  onChange={(v) => {
+                    setStart(v);
+                    if (dateErrors.start) {
+                      setDateErrors((p) => ({ ...p, start: undefined }));
+                    }
+                    if (v && end && end < v) {
+                      setEnd(v);
+                    }
+                  }}
                   className="w-full"
                 />
+                {dateErrors.start && (
+                  <p className="text-[11px] text-destructive mt-1 font-medium">
+                    {dateErrors.start}
+                  </p>
+                )}
                 <TimePicker
                   value={startTime}
                   onChange={setStartTime}
@@ -152,9 +148,21 @@ export default function QuickAbsenceModal({
                 </label>
                 <DatePicker
                   value={end}
-                  onChange={setEnd}
+                  hasError={!!dateErrors.end}
+                  minDate={start || undefined}
+                  onChange={(v) => {
+                    setEnd(v);
+                    if (dateErrors.end) {
+                      setDateErrors((p) => ({ ...p, end: undefined }));
+                    }
+                  }}
                   className="w-full"
                 />
+                {dateErrors.end && (
+                  <p className="text-[11px] text-destructive mt-1 font-medium">
+                    {dateErrors.end}
+                  </p>
+                )}
                 <TimePicker
                   value={endTime}
                   onChange={setEndTime}
@@ -307,25 +315,23 @@ export default function QuickAbsenceModal({
               )}
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={submit}
-                disabled={!hasDates}
-                className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors"
-              >
-                Registar Ausência
-              </button>
+            <DialogFooter>
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 Cancelar
               </button>
-            </div>
+              <button
+                type="button"
+                onClick={submit}
+                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+              >
+                Registar Ausência
+              </button>
+            </DialogFooter>
           </div>
-        )}
       </DialogContent>
     </Dialog>
   );

@@ -78,12 +78,14 @@ export default function ActivityTypesTab() {
   const [formColor, setFormColor] = useState("#6366F1");
   const [formActive, setFormActive] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<BackendActivityTypeResource | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   function openAdd() {
     setEditingId(null);
     setFormName("");
     setFormColor("#6366F1");
     setFormActive(true);
+    setFormError(null);
     setShowDialog(true);
   }
 
@@ -92,11 +94,16 @@ export default function ActivityTypesTab() {
     setFormName(t.name);
     setFormColor(t.color);
     setFormActive(t.active ?? true);
+    setFormError(null);
     setShowDialog(true);
   }
 
   async function saveType() {
-    if (!formName.trim()) return;
+    if (!formName.trim()) {
+      setFormError("O nome do tipo de atividade é obrigatório.");
+      return;
+    }
+    setFormError(null);
 
     if (editingId) {
       await updateMutation.mutateAsync({
@@ -117,6 +124,7 @@ export default function ActivityTypesTab() {
     setShowDialog(false);
     setEditingId(null);
     setFormName("");
+    setFormError(null);
   }
 
   async function handleDeleteConfirm() {
@@ -143,7 +151,7 @@ export default function ActivityTypesTab() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h3 className="text-sm font-semibold text-foreground">
             Tipos de Atividade
@@ -155,7 +163,7 @@ export default function ActivityTypesTab() {
         <button
           type="button"
           onClick={openAdd}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors flex-shrink-0 shadow-xs"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors flex-shrink-0 shadow-xs ml-auto"
         >
           <Plus size={12} /> Novo Tipo
         </button>
@@ -318,12 +326,24 @@ export default function ActivityTypesTab() {
                 </label>
                 <input
                   value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
+                  onChange={(e) => {
+                    setFormName(e.target.value);
+                    if (formError) setFormError(null);
+                  }}
                   onKeyDown={(e) => e.key === "Enter" && !isSaving && saveType()}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 transition-colors ${
+                    formError
+                      ? "border-destructive focus:ring-destructive"
+                      : "border-border focus:ring-ring"
+                  }`}
                   placeholder="Ex: Apoio Refeitório"
                   autoFocus
                 />
+                {formError && (
+                  <p className="text-[11px] text-destructive mt-1 font-medium">
+                    {formError}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
@@ -365,7 +385,7 @@ export default function ActivityTypesTab() {
               </label>
             </div>
           </div>
-          <div className="px-5 py-4 border-t border-border flex gap-3 bg-muted/10">
+          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/10 rounded-b-xl">
             <button
               type="button"
               onClick={() => {
@@ -374,15 +394,15 @@ export default function ActivityTypesTab() {
                 setFormName("");
               }}
               disabled={isSaving}
-              className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
               type="button"
               onClick={saveType}
-              disabled={!formName.trim() || isSaving}
-              className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-1.5"
+              disabled={isSaving}
+              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-1.5"
             >
               {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               {editingId ? "Guardar Alterações" : "Criar Tipo"}

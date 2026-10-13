@@ -22,6 +22,7 @@ import {
   UserPlus,
   UserX,
   XCircle,
+  Calendar,
 } from "lucide-react";
 import usersService from "../../api/services/users.service";
 import schoolsService, { BackendSchoolResource } from "../../api/services/schools.service";
@@ -42,9 +43,10 @@ import FeedbackNotification, {
 } from "../common/FeedbackNotification";
 import { useSchool } from "../../context/SchoolContext";
 import { useAuth } from "../../context/AuthContext";
+import HolidaysPage from "./HolidaysPage";
 
 export default function PlatformSettingsPage() {
-  const [activeTab, setActiveTab] = useState<"schools" | "users" | "absence-types">("schools");
+  const [activeTab, setActiveTab] = useState<"schools" | "users" | "absence-types" | "holidays">("schools");
   const { refreshSchools: refreshGlobalSchools } = useSchool();
   const { user: currentUser } = useAuth();
 
@@ -112,12 +114,14 @@ export default function PlatformSettingsPage() {
     setShowSchoolForm(true);
   }
 
+  const clean = (val: string | null | undefined) => (!val || val.trim() === "—" || val.trim() === "-" ? "" : val);
+
   function openEditSchool(s: School) {
-    setSchoolName(s.name);
-    setSchoolAcronym(s.acronym || "");
-    setSchoolAddress(s.address || "");
-    setSchoolPhone(s.phone || "");
-    setSchoolEmail(s.email || "");
+    setSchoolName(clean(s.name));
+    setSchoolAcronym(clean(s.acronym));
+    setSchoolAddress(clean(s.address));
+    setSchoolPhone(clean(s.phone));
+    setSchoolEmail(clean(s.email));
     setSchoolEditId(s.id);
     setSchoolFormErrors({});
     setShowSchoolForm(true);
@@ -591,9 +595,9 @@ export default function PlatformSettingsPage() {
   }
 
   function openEditAdmin(admin: AdminUser) {
-    setAdminFirstName(admin.first_name || "");
-    setAdminLastName(admin.last_name || "");
-    setAdminEmail(admin.email);
+    setAdminFirstName(clean(admin.first_name));
+    setAdminLastName(clean(admin.last_name));
+    setAdminEmail(clean(admin.email));
     setAdminActive(admin.is_active ?? admin.active ?? true);
     setAdminEditId(admin.id);
     setAdminFormErrors({});
@@ -791,6 +795,11 @@ export default function PlatformSettingsPage() {
       icon: <ShieldCheck size={14} />,
     },
     {
+      id: "holidays" as const,
+      label: "Feriados Globais",
+      icon: <Calendar size={14} />,
+    },
+    {
       id: "absence-types" as const,
       label: "Tipos de Falta",
       icon: <FileText size={14} />,
@@ -798,7 +807,7 @@ export default function PlatformSettingsPage() {
   ];
 
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-5xl">
       {/* Header */}
       <div className="flex items-center gap-2 mb-1">
         <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -862,7 +871,7 @@ export default function PlatformSettingsPage() {
       {/* Tab: Escolas */}
       {activeTab === "schools" && (
         <>
-          <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
             <div>
               <h3 className="text-sm font-semibold text-foreground">
                 Escolas Registadas
@@ -874,7 +883,7 @@ export default function PlatformSettingsPage() {
             <button
               type="button"
               onClick={openAddSchool}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs ml-auto"
             >
               <Plus size={12} />
               Nova Escola
@@ -1038,6 +1047,27 @@ export default function PlatformSettingsPage() {
               title={schoolEditId !== null ? "Editar Escola" : "Nova Escola"}
               subtitle="Dados de identificação da escola"
               onClose={() => !savingSchool && setShowSchoolForm(false)}
+              footer={
+                <>
+                  <button
+                    type="button"
+                    disabled={savingSchool}
+                    onClick={() => setShowSchoolForm(false)}
+                    className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveSchool}
+                    disabled={savingSchool}
+                    className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-1.5"
+                  >
+                    {savingSchool && <Loader2 size={13} className="animate-spin" />}
+                    {schoolEditId !== null ? "Guardar Alterações" : "Criar Escola"}
+                  </button>
+                </>
+              }
             >
               <div className="space-y-4">
                 <div>
@@ -1174,25 +1204,6 @@ export default function PlatformSettingsPage() {
                     </p>
                   )}
                 </div>
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    disabled={savingSchool}
-                    onClick={() => setShowSchoolForm(false)}
-                    className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveSchool}
-                    disabled={!schoolName.trim() || !schoolAcronym.trim() || savingSchool}
-                    className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-2"
-                  >
-                    {savingSchool && <Loader2 size={14} className="animate-spin" />}
-                    {schoolEditId !== null ? "Guardar Alterações" : "Criar Escola"}
-                  </button>
-                </div>
               </div>
             </Modal>
           )}
@@ -1258,7 +1269,7 @@ export default function PlatformSettingsPage() {
       {/* Tab: Administradores */}
       {activeTab === "users" && (
         <>
-          <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
             <div>
               <h3 className="text-sm font-semibold text-foreground">
                 Utilizadores Administradores
@@ -1270,7 +1281,7 @@ export default function PlatformSettingsPage() {
             <button
               type="button"
               onClick={openAddAdmin}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs ml-auto"
             >
               <UserPlus size={12} />
               Novo Administrador
@@ -1479,6 +1490,24 @@ export default function PlatformSettingsPage() {
               title={adminEditId !== null ? "Editar Administrador" : "Novo Administrador"}
               subtitle="Preencha os dados de acesso e identificação"
               onClose={() => setShowAdminForm(false)}
+              footer={
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminForm(false)}
+                    className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveAdmin}
+                    className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
+                  >
+                    {adminEditId !== null ? "Guardar Alterações" : "Criar Administrador"}
+                  </button>
+                </>
+              }
             >
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
@@ -1577,24 +1606,6 @@ export default function PlatformSettingsPage() {
                     onCheckedChange={setAdminActive}
                   />
                 </div>
-
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminForm(false)}
-                    className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveAdmin}
-                    disabled={!adminFirstName.trim() || !adminLastName.trim() || !adminEmail.trim()}
-                    className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
-                  >
-                    {adminEditId !== null ? "Guardar Alterações" : "Criar Administrador"}
-                  </button>
-                </div>
               </div>
             </Modal>
           )}
@@ -1684,7 +1695,7 @@ export default function PlatformSettingsPage() {
       {/* Tab: Tipos de Falta */}
       {activeTab === "absence-types" && (
         <>
-          <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
             <div>
               <h3 className="text-sm font-semibold text-foreground">
                 Tipos de Falta
@@ -1696,7 +1707,7 @@ export default function PlatformSettingsPage() {
             <button
               type="button"
               onClick={openAddAbsenceType}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs ml-auto"
             >
               <Plus size={12} />
               Novo Tipo
@@ -1757,68 +1768,95 @@ export default function PlatformSettingsPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="space-y-2">
-                {paginatedAbsenceTypes.map((t) => (
-                  <div
-                    key={t.id}
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border bg-card"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <FileText size={14} className="text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">{t.name}</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {(t.requiresDocument ?? t.requires_document) ? (
-                          <span className="flex items-center gap-1">
-                            <Paperclip size={10} />
-                            Requer documento comprovativo
-                          </span>
-                        ) : (
-                          "Sem documento obrigatório"
-                        )}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <ActionTooltip content="Editar tipo de falta">
-                        <button
-                          type="button"
-                          onClick={() => openEditAbsenceType(t)}
-                          className="p-1.5 rounded hover:bg-muted transition-colors"
-                        >
-                          <Pencil size={13} className="text-muted-foreground" />
-                        </button>
-                      </ActionTooltip>
-
-                      {t.can_delete === false ? (
-                        <ActionTooltip
-                          content={
-                            t.cannot_delete_reason ||
-                            "Este tipo de falta tem faltas associadas e não pode ser eliminado."
-                          }
-                        >
-                          <span className="p-1.5 cursor-not-allowed opacity-40">
-                            <Trash2 size={13} className="text-muted-foreground" />
-                          </span>
-                        </ActionTooltip>
-                      ) : (
-                        <ActionTooltip content="Eliminar tipo de falta">
-                          <button
-                            type="button"
-                            onClick={() => setAbsenceTypeDeleteConfirm(t)}
-                            className="p-1.5 rounded hover:bg-destructive/10 transition-colors"
+              <Card className="overflow-hidden border-border bg-card">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/20">
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Tipo de Falta
+                        </th>
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Documento Comprovativo
+                        </th>
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Ações
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedAbsenceTypes.map((t) => {
+                        const reqDoc = t.requiresDocument ?? t.requires_document;
+                        return (
+                          <tr
+                            key={t.id}
+                            className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors"
                           >
-                            <Trash2
-                              size={13}
-                              className="text-muted-foreground hover:text-destructive"
-                            />
-                          </button>
-                        </ActionTooltip>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                            <td className="px-4 py-3 font-medium text-foreground">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                  <FileText size={13} className="text-primary" />
+                                </div>
+                                <span className="font-semibold text-foreground text-sm">
+                                  {t.name}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-xs">
+                              {reqDoc ? (
+                                <Badge variant="secondary" className="gap-1 font-normal text-[11px] bg-primary/10 text-primary border border-primary/20">
+                                  <Paperclip size={11} />
+                                  Obrigatório
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">
+                                  Não obrigatório
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center gap-1 justify-end">
+                                <ActionTooltip content="Editar tipo de falta">
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditAbsenceType(t)}
+                                    className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                  >
+                                    <Pencil size={13} />
+                                  </button>
+                                </ActionTooltip>
+
+                                {t.can_delete === false ? (
+                                  <ActionTooltip
+                                    content={
+                                      t.cannot_delete_reason ||
+                                      "Este tipo de falta tem faltas associadas e não pode ser eliminado."
+                                    }
+                                  >
+                                    <span className="p-1.5 cursor-not-allowed opacity-40">
+                                      <Trash2 size={13} className="text-muted-foreground" />
+                                    </span>
+                                  </ActionTooltip>
+                                ) : (
+                                  <ActionTooltip content="Eliminar tipo de falta">
+                                    <button
+                                      type="button"
+                                      onClick={() => setAbsenceTypeDeleteConfirm(t)}
+                                      className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  </ActionTooltip>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
 
               {/* Paginação */}
               <ListPagination
@@ -1840,6 +1878,34 @@ export default function PlatformSettingsPage() {
               }
               subtitle="Parametrização do tipo de ausência"
               onClose={() => setShowAbsenceTypeForm(false)}
+              footer={
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowAbsenceTypeForm(false)}
+                    className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveAbsenceType}
+                    disabled={savingAbsenceType}
+                    className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
+                  >
+                    {savingAbsenceType ? (
+                      <>
+                        <Loader2 size={13} className="animate-spin inline mr-1" />
+                        A guardar...
+                      </>
+                    ) : absenceTypeEditId !== null ? (
+                      "Guardar Alterações"
+                    ) : (
+                      "Criar Tipo"
+                    )}
+                  </button>
+                </>
+              }
             >
               <div className="space-y-4">
                 <div>
@@ -1881,32 +1947,6 @@ export default function PlatformSettingsPage() {
                     className="data-[state=checked]:bg-accent"
                   />
                 </div>
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAbsenceTypeForm(false)}
-                    className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveAbsenceType}
-                    disabled={savingAbsenceType || !absenceTypeName.trim()}
-                    className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
-                  >
-                    {savingAbsenceType ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin inline mr-1" />
-                        A guardar...
-                      </>
-                    ) : absenceTypeEditId !== null ? (
-                      "Guardar Alterações"
-                    ) : (
-                      "Criar Tipo"
-                    )}
-                  </button>
-                </div>
               </div>
             </Modal>
           )}
@@ -1941,6 +1981,13 @@ export default function PlatformSettingsPage() {
             variant="danger"
           />
         </>
+      )}
+
+      {/* ── Tab: Holidays (Feriados Globais do Agrupamento) ─────────────── */}
+      {activeTab === "holidays" && (
+        <div className="pt-2">
+          <HolidaysPage />
+        </div>
       )}
     </div>
   );

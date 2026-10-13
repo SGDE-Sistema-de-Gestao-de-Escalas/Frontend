@@ -41,8 +41,35 @@ import {
   useToggleAssistantStatus,
   useAnonymizeAssistant,
 } from "../../hooks/api/useAssistants";
+import {
+  useAssistantExceptions,
+  useCreateAssistantException,
+  useUpdateAssistantException,
+  useDeleteAssistantException,
+} from "../../hooks/api/useAssistantExceptions";
 import type { EntityId } from "../../types";
 
+const WEEK_DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
+const DAY_MAP_TO_NUM: Record<string, number> = {
+  Seg: 0,
+  Ter: 1,
+  Qua: 2,
+  Qui: 3,
+  Sex: 4,
+  Sáb: 5,
+  Dom: 6,
+};
+
+const NUM_TO_DAY_MAP: Record<number, string> = {
+  0: "Seg",
+  1: "Ter",
+  2: "Qua",
+  3: "Qui",
+  4: "Sex",
+  5: "Sáb",
+  6: "Dom",
+};
 
 interface ExceptionRule {
   id: string;
@@ -50,47 +77,23 @@ interface ExceptionRule {
   detalhe: string;
   entrada?: string;
   saida?: string;
+  dias?: string[];
+  pausaAlmoco?: {
+    ativo: boolean;
+    inicio: string;
+    fim: string;
+    duracao: number;
+  };
   inicio: string;
   fim?: string;
   status?: string;
   className?: string;
+  canEdit?: boolean;
+  canChangeEndDate?: boolean;
+  canDelete?: boolean;
+  cannotEditReason?: string | null;
+  cannotDeleteReason?: string | null;
 }
-
-const INITIAL_EXCEPTIONS: ExceptionRule[] = [
-  {
-    id: "exc-1",
-    tipo: "Licença Amamentação",
-    detalhe: "Carga horária → 6h/dia",
-    entrada: "09:30",
-    saida: "16:30",
-    inicio: "2025-09-15",
-    fim: "2026-09-14",
-    status: "Vigente",
-    className: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
-  },
-  {
-    id: "exc-2",
-    tipo: "Horário Especial",
-    detalhe: "Entrada diferida 09:30",
-    entrada: "09:30",
-    saida: "17:00",
-    inicio: "2025-01-01",
-    fim: "2025-08-31",
-    status: "Expirado",
-    className: "bg-muted text-muted-foreground border-border",
-  },
-  {
-    id: "exc-3",
-    tipo: "Licença Médica",
-    detalhe: "Ausência total",
-    entrada: "",
-    saida: "",
-    inicio: "2024-07-03",
-    fim: "2024-07-14",
-    status: "Histórico",
-    className: "bg-muted text-muted-foreground border-border",
-  },
-];
 
 interface AssistantProfileProps {
   onBack?: () => void;
@@ -123,23 +126,97 @@ export default function AssistantProfile({
     (assistant?.first_name ? `${assistant.first_name[0] || ""}${assistant.last_name?.[0] || ""}`.toUpperCase() : "") ||
     initials;
 
-  const [activeTab, setActiveTab] = useState<"info" | "history" | "exceptions">("info");
+  const TODAY_STR = new Date().toISOString().split("T")[0];
+
+  const { data: apiExceptions } = useAssistantExceptions(assistantId);
+  const createExceptionMutation = useCreateAssistantException();
+  const updateExceptionMutation = useUpdateAssistantException();
+  const deleteExceptionMutation = useDeleteAssistantException();
+
+  const [activeTab, setActiveTab] = useState<"info" | "schedule" | "history">("info");
   const [showAddException, setShowAddException] = useState(false);
-  const [exceptions, setExceptions] = useState<ExceptionRule[]>(INITIAL_EXCEPTIONS);
+  const [exceptions, setExceptions] = useState<ExceptionRule[]>([]);
   const [editingExceptionId, setEditingExceptionId] = useState<string | null>(null);
   const [deleteExceptionTarget, setDeleteExceptionTarget] = useState<ExceptionRule | null>(null);
   const [exceptionType, setExceptionType] = useState("");
   const [exceptionDetail, setExceptionDetail] = useState("");
   const [exceptionEntry, setExceptionEntry] = useState("09:30");
   const [exceptionExit, setExceptionExit] = useState("16:30");
-  const [exceptionStartDate, setExceptionStartDate] = useState("");
+  const [exceptionStartDate, setExceptionStartDate] = useState(TODAY_STR);
   const [exceptionEndDate, setExceptionEndDate] = useState("");
+  const [exceptionErrors, setExceptionErrors] = useState<{
+    type?: string;
+    startDate?: string;
+    endDate?: string;
+    days?: string;
+    time?: string;
+  }>({});
+  const [exceptionDays, setExceptionDays] = useState<string[]>([
+    "Seg",
+    "Ter",
+    "Qua",
+    "Qui",
+    "Sex",
+  ]);
+  const [exceptionLunchEnabled, setExceptionLunchEnabled] = useState(true);
+  const [exceptionLunchStart, setExceptionLunchStart] = useState("12:00");
+  const [exceptionLunchEnd, setExceptionLunchEnd] = useState("13:30");
+  const [exceptionLunchDuration, setExceptionLunchDuration] = useState("30");
   const [editing, setEditing] = useState(false);
   const [availableForTransfer, setAvailableForTransfer] = useState(false);
   const [isActive, setIsActive] = useState<boolean>(initialActive);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showAnonymizeModal, setShowAnonymizeModal] = useState(false);
+
+  function toggleExceptionDay(day: string) {
+    if (exceptionDays.includes(day)) {
+      setExceptionDays(exceptionDays.filter((d) => d !== day));
+    } else {
+      setExceptionDays([...exceptionDays, day]);
+    }
+  }
+
+  React.useEffect(() => {
+    if (apiExceptions) {
+      setExceptions(
+        apiExceptions.map((e) => ({
+          id: String(e.id),
+          tipo: e.type,
+          detalhe:
+            e.description ||
+            (e.start_time && e.end_time
+              ? `Horário diferido ${e.start_time}–${e.end_time}`
+              : "Horário especial"),
+          entrada: e.start_time || undefined,
+          saida: e.end_time || undefined,
+          dias: e.days && e.days.length > 0 ? e.days.map((n) => NUM_TO_DAY_MAP[n] || String(n)) : undefined,
+          pausaAlmoco: e.lunch_enabled
+            ? {
+                ativo: true,
+                inicio: e.lunch_start || "12:00",
+                fim: e.lunch_end || "13:30",
+                duracao: e.lunch_duration_minutes ?? 30,
+              }
+            : undefined,
+          inicio: e.valid_from,
+          fim: e.valid_until || undefined,
+          status: e.status === "upcoming" ? "Agendado" : e.status === "superseded" ? "Expirado" : "Vigente",
+          className:
+            e.status === "upcoming"
+              ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+              : e.status === "superseded"
+              ? "bg-muted text-muted-foreground border-border"
+              : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+          canEdit: e.can_edit,
+          canChangeEndDate: e.can_change_end_date,
+          canDelete: e.can_delete,
+          cannotEditReason: e.cannot_edit_reason,
+          cannotDeleteReason: e.cannot_delete_reason,
+        }))
+      );
+    }
+  }, [apiExceptions]);
 
   useDocumentTitle(`${resolvedName} - Perfil`);
 
@@ -180,8 +257,14 @@ export default function AssistantProfile({
     setExceptionDetail("");
     setExceptionEntry("09:30");
     setExceptionExit("16:30");
-    setExceptionStartDate("");
+    setExceptionStartDate(TODAY_STR);
     setExceptionEndDate("");
+    setExceptionDays(["Seg", "Ter", "Qua", "Qui", "Sex"]);
+    setExceptionLunchEnabled(true);
+    setExceptionLunchStart("12:00");
+    setExceptionLunchEnd("13:30");
+    setExceptionLunchDuration("30");
+    setExceptionErrors({});
     setShowAddException(true);
   }
 
@@ -193,16 +276,86 @@ export default function AssistantProfile({
     setExceptionExit(item.saida || "16:30");
     setExceptionStartDate(item.inicio);
     setExceptionEndDate(item.fim || "");
+    setExceptionDays(item.dias || ["Seg", "Ter", "Qua", "Qui", "Sex"]);
+    if (item.pausaAlmoco) {
+      setExceptionLunchEnabled(item.pausaAlmoco.ativo);
+      setExceptionLunchStart(item.pausaAlmoco.inicio);
+      setExceptionLunchEnd(item.pausaAlmoco.fim);
+      setExceptionLunchDuration(String(item.pausaAlmoco.duracao));
+    } else {
+      setExceptionLunchEnabled(false);
+      setExceptionLunchStart("12:00");
+      setExceptionLunchEnd("13:30");
+      setExceptionLunchDuration("30");
+    }
+    setExceptionErrors({});
     setShowAddException(true);
   }
 
   function handleSaveException() {
-    if (!exceptionType.trim() || !exceptionStartDate) return;
+    const errors: {
+      type?: string;
+      startDate?: string;
+      endDate?: string;
+      days?: string;
+      time?: string;
+    } = {};
+
+    if (!exceptionType.trim()) {
+      errors.type = "O tipo de exceção é obrigatório.";
+    }
+
+    if (!exceptionStartDate) {
+      errors.startDate = "A data de início de vigência é obrigatória.";
+    }
+
+    if (exceptionEndDate && exceptionEndDate < exceptionStartDate) {
+      errors.endDate = "A data de fim não pode ser anterior à data de início.";
+    }
+
+    if (exceptionDays.length === 0) {
+      errors.days = "Selecione pelo menos um dia de trabalho.";
+    }
+
+    if (exceptionEntry && exceptionExit && exceptionExit <= exceptionEntry) {
+      errors.time = "A hora de saída tem de ser posterior à hora de entrada.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setExceptionErrors(errors);
+      return;
+    }
+
+    setExceptionErrors({});
+
     const computedDetail = exceptionDetail.trim()
       ? exceptionDetail.trim()
       : exceptionEntry && exceptionExit
       ? `Horário diferido ${exceptionEntry}–${exceptionExit}`
       : "Horário especial";
+
+    const lunchData = exceptionLunchEnabled
+      ? {
+          ativo: true,
+          inicio: exceptionLunchStart,
+          fim: exceptionLunchEnd,
+          duracao: parseInt(exceptionLunchDuration, 10) || 30,
+        }
+      : undefined;
+
+    const commonPayload = {
+      type: exceptionType.trim(),
+      description: computedDetail,
+      start_time: exceptionEntry || null,
+      end_time: exceptionExit || null,
+      valid_from: exceptionStartDate,
+      valid_until: exceptionEndDate || null,
+      days: exceptionDays.map((d) => DAY_MAP_TO_NUM[d] ?? 0),
+      lunch_enabled: exceptionLunchEnabled,
+      lunch_start: exceptionLunchEnabled ? exceptionLunchStart : null,
+      lunch_end: exceptionLunchEnabled ? exceptionLunchEnd : null,
+      lunch_duration_minutes: exceptionLunchEnabled ? parseInt(exceptionLunchDuration, 10) || 30 : null,
+    };
 
     if (editingExceptionId) {
       setExceptions((prev) =>
@@ -214,12 +367,21 @@ export default function AssistantProfile({
                 detalhe: computedDetail,
                 entrada: exceptionEntry,
                 saida: exceptionExit,
+                dias: exceptionDays,
+                pausaAlmoco: lunchData,
                 inicio: exceptionStartDate,
                 fim: exceptionEndDate || undefined,
               }
             : e
         )
       );
+      if (assistant?.id) {
+        updateExceptionMutation.mutate({
+          id: editingExceptionId,
+          assistantId: String(assistant.id),
+          data: commonPayload,
+        });
+      }
     } else {
       const newRule: ExceptionRule = {
         id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
@@ -227,10 +389,18 @@ export default function AssistantProfile({
         detalhe: computedDetail,
         entrada: exceptionEntry,
         saida: exceptionExit,
+        dias: exceptionDays,
+        pausaAlmoco: lunchData,
         inicio: exceptionStartDate,
         fim: exceptionEndDate || undefined,
       };
       setExceptions((prev) => [newRule, ...prev]);
+      if (assistant?.id) {
+        createExceptionMutation.mutate({
+          assistant_id: String(assistant.id),
+          ...commonPayload,
+        });
+      }
     }
     setShowAddException(false);
   }
@@ -238,6 +408,12 @@ export default function AssistantProfile({
   function confirmDeleteException() {
     if (deleteExceptionTarget) {
       setExceptions((prev) => prev.filter((e) => e.id !== deleteExceptionTarget.id));
+      if (assistant?.id) {
+        deleteExceptionMutation.mutate({
+          id: deleteExceptionTarget.id,
+          assistantId: String(assistant.id),
+        });
+      }
       setDeleteExceptionTarget(null);
     }
   }
@@ -455,8 +631,8 @@ export default function AssistantProfile({
       <div className="flex gap-px border-b border-border mb-6">
         {[
           { id: "info" as const, label: "Informações Gerais", icon: <User size={13} /> },
-          { id: "history" as const, label: "Horários & Escalas", icon: <Calendar size={13} /> },
-          { id: "exceptions" as const, label: "Regras de Exceção", icon: <AlertTriangle size={13} /> },
+          { id: "schedule" as const, label: "Horários & Exceções", icon: <Clock size={13} /> },
+          { id: "history" as const, label: "Escalas & Histórico", icon: <Calendar size={13} /> },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -478,23 +654,13 @@ export default function AssistantProfile({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Card 1: Identificação & Contactos */}
           <Card className="p-5 md:col-span-2 lg:col-span-2">
-            <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-border/50">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-md bg-primary/10 text-primary">
-                  <User size={15} />
-                </div>
-                <h3 className="text-sm font-semibold text-foreground">
-                  Identificação & Contactos
-                </h3>
+            <div className="flex items-center gap-2 pb-2 mb-2.5 border-b border-border/50">
+              <div className="p-1.5 rounded-md bg-primary/10 text-primary">
+                <User size={15} />
               </div>
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
-              >
-                <Edit2 size={11} />
-                Editar Dados
-              </button>
+              <h3 className="text-sm font-semibold text-foreground">
+                Identificação & Contactos
+              </h3>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -628,7 +794,7 @@ export default function AssistantProfile({
                   {assistant?.address_street || "Não especificado"}
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/40">
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/40">
                 <div>
                   <span className="text-muted-foreground block mb-0.5">Código Postal</span>
                   <span className="font-mono text-xs font-medium text-foreground">
@@ -664,7 +830,7 @@ export default function AssistantProfile({
                     {assistant.emergency_contact_name}
                   </p>
                 </div>
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/40">
+                <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-border/40">
                   <div>
                     <span className="text-muted-foreground block mb-0.5">Grau de Parentesco</span>
                     <span className="text-xs font-medium text-foreground">
@@ -726,7 +892,7 @@ export default function AssistantProfile({
                 })()}
               </div>
 
-              <div className="pt-2 border-t border-border/40 text-xs">
+              <div className="pt-3 border-t border-border/40 text-xs">
                 <span className="text-muted-foreground block mb-0.5">Data de Validade</span>
                 <span className="font-mono text-xs font-medium text-foreground">
                   {formatDateDisplay(assistant?.criminal_record_expiry)}
@@ -765,30 +931,158 @@ export default function AssistantProfile({
               />
             </div>
           </Card>
-
-          {/* Card 7: Horário Padrão & Vigências */}
-          <AssistantScheduleManager assistantId={assistant?.id} />
         </div>
       )}
 
-      {/* ── Regras de Exceção tab ── */}
-      {activeTab === "exceptions" && (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-foreground">
-                Regras de Exceção e Vigências
-              </h3>
-              {!isDeletedOrAnonymized && (
-                <button
-                  type="button"
-                  onClick={openAddException}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
-                >
-                  <Plus size={12} />
-                  Nova Exceção
-                </button>
+      {/* ── Horários & Exceções tab (Lado a Lado) ── */}
+      {activeTab === "schedule" && (
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+          {/* Lado Esquerdo: Horário Padrão & Vigências */}
+          <div className="xl:col-span-7 space-y-4">
+            <AssistantScheduleManager assistantId={assistant?.id} />
+          </div>
+
+          {/* Lado Direito: Regras de Exceção */}
+          <div className="xl:col-span-5 space-y-4">
+            <Card className="p-5 w-full">
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-border/50 flex-wrap gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600">
+                    <AlertTriangle size={16} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Regras de Exceção
+                      </h3>
+                      <Badge variant="outline" className="text-[11px] font-normal">
+                        {exceptions.length} {exceptions.length === 1 ? "regra" : "regras"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Horários especiais sobrepostos ao horário padrão.
+                    </p>
+                  </div>
+                </div>
+
+                {!isDeletedOrAnonymized && (
+                  <button
+                    type="button"
+                    onClick={openAddException}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs ml-auto"
+                  >
+                    <Plus size={12} />
+                    Nova Exceção
+                  </button>
+                )}
+              </div>
+
+              {/* Lista de Exceções */}
+              {exceptions.length === 0 ? (
+                <div className="py-8 text-center text-xs text-muted-foreground bg-muted/20 rounded-lg border border-dashed border-border p-4">
+                  Nenhuma regra de exceção registada para este assistente.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {exceptions.map((row) => {
+                    const { status, className } = getStatusInfo(row);
+                    return (
+                      <div
+                        key={row.id}
+                        className="p-3.5 rounded-xl border border-border bg-card hover:border-border/80 transition-colors space-y-2 shadow-2xs"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-semibold text-sm text-foreground truncate">
+                              {row.tipo}
+                            </span>
+                            <Badge variant="outline" className={`text-[10px] px-2 py-0 ${className}`}>
+                              {status}
+                            </Badge>
+                          </div>
+                          {!isDeletedOrAnonymized && (
+                            <div className="flex items-center gap-1 shrink-0">
+                              {(row.canEdit !== false || row.canChangeEndDate) && (
+                                <button
+                                  type="button"
+                                  onClick={() => openEditException(row)}
+                                  className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                  title={
+                                    row.canEdit === false && row.canChangeEndDate
+                                      ? "Apenas a data de fim pode ser ajustada para esta exceção em vigor."
+                                      : "Editar exceção"
+                                  }
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                disabled={row.canDelete === false}
+                                onClick={() => setDeleteExceptionTarget(row)}
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  row.canDelete === false
+                                    ? "opacity-30 cursor-not-allowed text-muted-foreground"
+                                    : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                                }`}
+                                title={
+                                  row.cannotDeleteReason ||
+                                  (row.canDelete === false
+                                    ? "Não é possível eliminar esta exceção."
+                                    : "Eliminar exceção")
+                                }
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {row.detalhe && (
+                          <p className="text-xs text-muted-foreground">
+                            {row.detalhe}
+                          </p>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs pt-2 border-t border-border/40 text-muted-foreground">
+                          <div>
+                            <span className="font-medium text-foreground">Vigência:</span>{" "}
+                            <span className="font-mono">{formatDateDisplay(row.inicio)}</span>
+                            {row.fim ? (
+                              <> → <span className="font-mono">{formatDateDisplay(row.fim)}</span></>
+                            ) : (
+                              " → Em aberto"
+                            )}
+                          </div>
+                          {(row.entrada || row.saida) && (
+                            <div className="flex items-center gap-1">
+                              <Clock size={11} className="text-muted-foreground" />
+                              <span>
+                                {row.entrada || "—"} às {row.saida || "—"}
+                              </span>
+                            </div>
+                          )}
+                          {row.dias && row.dias.length > 0 && (
+                            <div>
+                              <span className="font-medium text-foreground">Dias:</span>{" "}
+                              <span>{row.dias.join(", ")}</span>
+                            </div>
+                          )}
+                          {row.pausaAlmoco?.ativo && (
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium text-foreground">Pausa de almoço:</span>{" "}
+                              <span>
+                                {row.pausaAlmoco.inicio}–{row.pausaAlmoco.fim} ({row.pausaAlmoco.duracao}m)
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
-            </div>
+            </Card>
 
             {showAddException && (
               <Modal
@@ -803,6 +1097,24 @@ export default function AssistantProfile({
                     : "Horário especial com data de vigência"
                 }
                 onClose={() => setShowAddException(false)}
+                footer={
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddException(false)}
+                      className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveException}
+                      className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
+                    >
+                      {editingExceptionId ? "Guardar Alterações" : "Criar Exceção"}
+                    </button>
+                  </>
+                }
               >
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
@@ -814,9 +1126,23 @@ export default function AssistantProfile({
                         type="text"
                         placeholder="Ex: Licença Amamentação"
                         value={exceptionType}
-                        onChange={(e) => setExceptionType(e.target.value)}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        onChange={(e) => {
+                          setExceptionType(e.target.value);
+                          if (exceptionErrors.type) {
+                            setExceptionErrors((prev) => ({ ...prev, type: undefined }));
+                          }
+                        }}
+                        className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                          exceptionErrors.type
+                            ? "border-destructive focus:ring-destructive"
+                            : "border-border focus:ring-ring"
+                        }`}
                       />
+                      {exceptionErrors.type && (
+                        <p className="text-[11px] text-destructive mt-1 font-medium">
+                          {exceptionErrors.type}
+                        </p>
+                      )}
                     </div>
                     <div className="col-span-2">
                       <label className="text-xs font-medium text-muted-foreground block mb-1">
@@ -836,7 +1162,13 @@ export default function AssistantProfile({
                       </label>
                       <TimePicker
                         value={exceptionEntry}
-                        onChange={setExceptionEntry}
+                        hasError={!!exceptionErrors.time}
+                        onChange={(v) => {
+                          setExceptionEntry(v);
+                          if (exceptionErrors.time) {
+                            setExceptionErrors((prev) => ({ ...prev, time: undefined }));
+                          }
+                        }}
                         className="w-full"
                       />
                     </div>
@@ -846,137 +1178,180 @@ export default function AssistantProfile({
                       </label>
                       <TimePicker
                         value={exceptionExit}
-                        onChange={setExceptionExit}
+                        hasError={!!exceptionErrors.time}
+                        onChange={(v) => {
+                          setExceptionExit(v);
+                          if (exceptionErrors.time) {
+                            setExceptionErrors((prev) => ({ ...prev, time: undefined }));
+                          }
+                        }}
                         className="w-full"
                       />
                     </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground block mb-1">
-                        Data de Início *
-                      </label>
-                      <DatePicker
-                        value={exceptionStartDate}
-                        onChange={setExceptionStartDate}
-                        className="w-full"
-                      />
+                    {exceptionErrors.time && (
+                      <div className="col-span-2">
+                        <p className="text-[11px] text-destructive font-medium">
+                          {exceptionErrors.time}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Dias de trabalho */}
+                    <div className="col-span-2 border-t border-border/60 pt-3">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                        Dias de Trabalho
+                      </p>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {WEEK_DAYS.map((d) => (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => {
+                              toggleExceptionDay(d);
+                              if (exceptionErrors.days) {
+                                setExceptionErrors((prev) => ({ ...prev, days: undefined }));
+                              }
+                            }}
+                            className={`w-8 h-8 rounded-lg border text-xs font-medium transition-colors ${
+                              exceptionDays.includes(d)
+                                ? "bg-primary text-primary-foreground border-primary font-bold shadow-xs"
+                                : "border-border text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+                      {exceptionErrors.days && (
+                        <p className="text-[11px] text-destructive mt-1.5 font-medium">
+                          {exceptionErrors.days}
+                        </p>
+                      )}
                     </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground block mb-1">
-                        Data de Fim (opcional)
-                      </label>
-                      <DatePicker
-                        value={exceptionEndDate}
-                        onChange={setExceptionEndDate}
-                        className="w-full"
-                      />
+
+                    {/* Pausa de almoço */}
+                    <div className="col-span-2 border-t border-border/60 pt-3">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Pausa de almoço
+                        </p>
+                        <Switch
+                          checked={exceptionLunchEnabled}
+                          onCheckedChange={setExceptionLunchEnabled}
+                        />
+                      </div>
+                      {exceptionLunchEnabled && (
+                        <div className="grid grid-cols-3 gap-2.5">
+                          <div>
+                            <label className="text-[11px] text-muted-foreground block mb-1">
+                              Início do Almoço
+                            </label>
+                            <TimePicker
+                              value={exceptionLunchStart}
+                              onChange={setExceptionLunchStart}
+                              className="w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] text-muted-foreground block mb-1">
+                              Fim do Almoço
+                            </label>
+                            <TimePicker
+                              value={exceptionLunchEnd}
+                              onChange={setExceptionLunchEnd}
+                              className="w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] text-muted-foreground block mb-1">
+                              Duração Efetiva
+                            </label>
+                            <div className="flex gap-1">
+                              {["30", "45", "60"].map((m) => (
+                                <button
+                                  key={m}
+                                  type="button"
+                                  onClick={() => setExceptionLunchDuration(m)}
+                                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                    exceptionLunchDuration === m
+                                      ? "bg-primary text-primary-foreground border-primary font-semibold"
+                                      : "border-border text-muted-foreground hover:text-foreground"
+                                  }`}
+                                >
+                                  {m}m
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  <div className="flex gap-2 pt-2 border-t border-border">
-                    <button
-                      type="button"
-                      onClick={handleSaveException}
-                      disabled={!exceptionType.trim() || !exceptionStartDate}
-                      className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
-                    >
-                      {editingExceptionId ? "Guardar Alterações" : "Guardar"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddException(false)}
-                      className="px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Cancelar
-                    </button>
+
+                    {/* Vigência */}
+                    <div className="col-span-2 border-t border-border/60 pt-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                        Vigência
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                            Data de Início *
+                          </label>
+                          <DatePicker
+                            value={exceptionStartDate}
+                            hasError={!!exceptionErrors.startDate}
+                            minDate={editingExceptionId ? undefined : TODAY_STR}
+                            onChange={(v) => {
+                              setExceptionStartDate(v);
+                              if (exceptionErrors.startDate) {
+                                setExceptionErrors((prev) => ({ ...prev, startDate: undefined }));
+                              }
+                              if (v && exceptionEndDate && exceptionEndDate < v) {
+                                setExceptionEndDate(v);
+                              }
+                            }}
+                            className="w-full"
+                          />
+                          {exceptionErrors.startDate && (
+                            <p className="text-[11px] text-destructive mt-1 font-medium">
+                              {exceptionErrors.startDate}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                            Data de Fim
+                          </label>
+                          <DatePicker
+                            value={exceptionEndDate}
+                            hasError={!!exceptionErrors.endDate}
+                            minDate={exceptionStartDate || TODAY_STR}
+                            onChange={(v) => {
+                              setExceptionEndDate(v);
+                              if (exceptionErrors.endDate) {
+                                setExceptionErrors((prev) => ({ ...prev, endDate: undefined }));
+                              }
+                            }}
+                            className="w-full"
+                            placeholder="AAAA-MM-DD"
+                          />
+                          {exceptionErrors.endDate ? (
+                            <p className="text-[11px] text-destructive mt-1 font-medium">
+                              {exceptionErrors.endDate}
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground/70 mt-1">
+                              Em branco = vigência em aberto
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </Modal>
             )}
-
-            <Card className="overflow-hidden border-border bg-card">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/30">
-                    {[
-                      "Tipo de Exceção",
-                      "Detalhe",
-                      "Data Início",
-                      "Data Fim",
-                      "Estado",
-                      "",
-                    ].map((h, i) => (
-                      <th
-                        key={i}
-                        className={`px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide ${
-                          h === "" ? "text-right w-24" : "text-left"
-                        }`}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {exceptions.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="px-4 py-8 text-center text-xs text-muted-foreground"
-                      >
-                        Nenhuma regra de exceção registada para este assistente.
-                      </td>
-                    </tr>
-                  ) : (
-                    exceptions.map((row) => {
-                      const { status, className } = getStatusInfo(row);
-                      return (
-                        <tr
-                          key={row.id}
-                          className="border-b border-border/50 hover:bg-muted/20 transition-colors"
-                        >
-                          <td className="px-4 py-3 font-medium text-sm text-foreground">
-                            {row.tipo}
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground text-xs">
-                            {row.detalhe}
-                          </td>
-                          <td className="px-4 py-3 font-mono text-xs">
-                            {formatDateDisplay(row.inicio)}
-                          </td>
-                          <td className="px-4 py-3 font-mono text-xs">
-                            {formatDateDisplay(row.fim)}
-                          </td>
-                          <td className="px-4 py-3">
-                            <Badge variant="outline" className={className}>
-                              {status}
-                            </Badge>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                type="button"
-                                onClick={() => openEditException(row)}
-                                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                                title="Editar exceção"
-                              >
-                                <Pencil size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeleteExceptionTarget(row)}
-                                className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                                title="Eliminar exceção"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </Card>
+          </div>
         </div>
       )}
 
@@ -999,7 +1374,7 @@ export default function AssistantProfile({
             </div>
             <button
               type="button"
-              onClick={() => setActiveTab("info")}
+              onClick={() => setActiveTab("schedule")}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
             >
               <Clock size={13} />

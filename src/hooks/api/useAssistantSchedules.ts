@@ -1,0 +1,91 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { notify } from "../../components/common/FeedbackNotification";
+import assistantSchedulesService from "../../api/services/assistantSchedules.service";
+import {
+  CreateAssistantScheduleProfilePayload,
+  UpdateAssistantScheduleProfilePayload,
+} from "../../types/assistantSchedule.types";
+import { EntityId } from "../../types";
+
+export const ASSISTANT_SCHEDULES_KEY = ["assistant-schedules"];
+
+export function useAssistantSchedules(assistantId?: EntityId) {
+  const aid = assistantId ? String(assistantId) : "";
+
+  return useQuery({
+    queryKey: [...ASSISTANT_SCHEDULES_KEY, aid],
+    queryFn: () => assistantSchedulesService.getAll(aid),
+    enabled: !!aid,
+  });
+}
+
+export function useCreateAssistantSchedule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: CreateAssistantScheduleProfilePayload) =>
+      assistantSchedulesService.create(payload),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [...ASSISTANT_SCHEDULES_KEY, String(variables.assistant_id)],
+      });
+      notify.success("Horário padrão configurado com sucesso.", "Horário Guardado");
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || "Não foi possível registar o horário.";
+      notify.error(message, "Erro ao Guardar");
+    },
+  });
+}
+
+export function useUpdateAssistantSchedule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string | number;
+      data: UpdateAssistantScheduleProfilePayload;
+      assistantId: string;
+    }) => assistantSchedulesService.update(id, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [...ASSISTANT_SCHEDULES_KEY, String(variables.assistantId)],
+      });
+      notify.success("Vigência do horário atualizada com sucesso.", "Horário Atualizado");
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || "Não foi possível atualizar o horário.";
+      notify.error(message, "Erro ao Atualizar");
+    },
+  });
+}
+
+export function useDeleteAssistantSchedule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+    }: {
+      id: string | number;
+      assistantId: string;
+    }) => assistantSchedulesService.delete(id),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [...ASSISTANT_SCHEDULES_KEY, String(variables.assistantId)],
+      });
+      notify.success("Horário eliminado com sucesso.", "Horário Eliminado");
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || "Não foi possível eliminar o horário.";
+      notify.error(message, "Erro ao Eliminar");
+    },
+  });
+}
+
