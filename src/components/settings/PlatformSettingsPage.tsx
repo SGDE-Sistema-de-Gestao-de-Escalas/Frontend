@@ -869,7 +869,7 @@ export default function PlatformSettingsPage() {
       {/* Tab: Escolas */}
       {activeTab === "schools" && (
         <>
-          <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
             <div>
               <h3 className="text-sm font-semibold text-foreground">
                 Escolas Registadas
@@ -881,7 +881,7 @@ export default function PlatformSettingsPage() {
             <button
               type="button"
               onClick={openAddSchool}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs ml-auto"
             >
               <Plus size={12} />
               Nova Escola
@@ -1267,7 +1267,7 @@ export default function PlatformSettingsPage() {
       {/* Tab: Administradores */}
       {activeTab === "users" && (
         <>
-          <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
             <div>
               <h3 className="text-sm font-semibold text-foreground">
                 Utilizadores Administradores
@@ -1279,7 +1279,7 @@ export default function PlatformSettingsPage() {
             <button
               type="button"
               onClick={openAddAdmin}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs ml-auto"
             >
               <UserPlus size={12} />
               Novo Administrador
@@ -1694,7 +1694,7 @@ export default function PlatformSettingsPage() {
       {/* Tab: Tipos de Falta */}
       {activeTab === "absence-types" && (
         <>
-          <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
             <div>
               <h3 className="text-sm font-semibold text-foreground">
                 Tipos de Falta
@@ -1706,7 +1706,7 @@ export default function PlatformSettingsPage() {
             <button
               type="button"
               onClick={openAddAbsenceType}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs ml-auto"
             >
               <Plus size={12} />
               Novo Tipo

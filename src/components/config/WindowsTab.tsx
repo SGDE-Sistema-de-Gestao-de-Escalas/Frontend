@@ -348,7 +348,7 @@ export default function WindowsTab() {
         </div>
 
         {isAdmin && (
-          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          <div className="flex items-center gap-2 self-end sm:self-auto ml-auto flex-wrap justify-end">
             <button
               type="button"
               onClick={openCreateExceptionModal}

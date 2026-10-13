@@ -547,7 +547,7 @@ export default function AssistantScheduleManager({
         <button
           type="button"
           onClick={handleOpenAddSchedule}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs ml-auto"
         >
           <Plus size={12} />
           Adicionar Horário
@@ -558,7 +558,7 @@ export default function AssistantScheduleManager({
       <div className="space-y-3">
         {schedules.length === 0 ? (
           <div className="py-8 text-center text-xs text-muted-foreground bg-muted/20 rounded-lg border border-dashed border-border p-4">
-            Nenhum perfil de horário configurado para este assistente. Clique em "Adicionar Horário" para definir o horário.
+            Nenhum perfil de horário configurado para este assistente.
           </div>
         ) : (
           schedules.map((h) => {
