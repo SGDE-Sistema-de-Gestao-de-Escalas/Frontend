@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { AlertTriangle, Pencil, Plus, Trash2, Loader2, Calendar } from "lucide-react";
 import type { EntityId } from "../../types";
 import { Card } from "../ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import DatePicker, { formatToIsoDate, parseFlexibleDate } from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import { ActionTooltip } from "../common/ActionTooltip";
@@ -272,27 +272,27 @@ export default function HolidaysPage() {
                     className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </div>
-
-                <div className="flex gap-3 pt-4 border-t border-border">
-                  <button
-                    type="button"
-                    onClick={() => setShowAdd(false)}
-                    disabled={isSaving}
-                    className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={saveHoliday}
-                    disabled={!newName.trim() || !newDate || isSaving}
-                    className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-1.5"
-                  >
-                    {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    {editingHolidayId !== null ? "Guardar Alterações" : "Criar Feriado"}
-                  </button>
-                </div>
               </div>
+
+              <DialogFooter>
+                <button
+                  type="button"
+                  onClick={() => setShowAdd(false)}
+                  disabled={isSaving}
+                  className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={saveHoliday}
+                  disabled={!newName.trim() || !newDate || isSaving}
+                  className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-1.5"
+                >
+                  {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {editingHolidayId !== null ? "Guardar Alterações" : "Criar Feriado"}
+                </button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>

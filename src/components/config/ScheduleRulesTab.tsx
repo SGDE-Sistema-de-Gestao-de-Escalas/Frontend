@@ -698,20 +698,20 @@ export default function ScheduleRulesTab() {
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={submitRule}
-                  className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs"
-                >
-                  {isEditing ? "Guardar Alterações" : "Criar Regra"}
-                </button>
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/10 rounded-b-xl -mx-5 -mb-5 mt-4">
                 <button
                   type="button"
                   onClick={() => setShowAdd(false)}
-                  className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={submitRule}
+                  className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+                >
+                  {isEditing ? "Guardar Alterações" : "Criar Regra"}
                 </button>
               </div>
             </div>
@@ -735,20 +735,20 @@ export default function ScheduleRulesTab() {
                   </p>
                 </div>
               </div>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={confirmCreate}
-                  className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs"
-                >
-                  Continuar e Criar
-                </button>
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/10 rounded-b-xl -mx-5 -mb-5 mt-4">
                 <button
                   type="button"
                   onClick={() => setFormStep("form")}
-                  className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Voltar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmCreate}
+                  className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+                >
+                  Continuar e Criar
                 </button>
               </div>
             </div>

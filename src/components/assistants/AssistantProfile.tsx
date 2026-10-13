@@ -945,6 +945,25 @@ export default function AssistantProfile({
                 }
                 onClose={() => setShowAddException(false)}
                 overflowVisible={true}
+                footer={
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddException(false)}
+                      className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveException}
+                      disabled={!exceptionType.trim() || !exceptionStartDate}
+                      className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
+                    >
+                      {editingExceptionId ? "Guardar Alterações" : "Criar Exceção"}
+                    </button>
+                  </>
+                }
               >
                 <div className="space-y-4">
                   {exceptionDateError && (
@@ -1039,23 +1058,6 @@ export default function AssistantProfile({
                         className="w-full"
                       />
                     </div>
-                  </div>
-                  <div className="flex gap-2 pt-4 border-t border-border">
-                    <button
-                      type="button"
-                      onClick={handleSaveException}
-                      disabled={!exceptionType.trim() || !exceptionStartDate}
-                      className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
-                    >
-                      {editingExceptionId ? "Guardar Alterações" : "Guardar"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddException(false)}
-                      className="px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Cancelar
-                    </button>
                   </div>
                 </div>
               </Modal>

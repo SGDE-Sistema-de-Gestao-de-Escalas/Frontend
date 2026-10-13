@@ -1045,6 +1045,27 @@ export default function PlatformSettingsPage() {
               title={schoolEditId !== null ? "Editar Escola" : "Nova Escola"}
               subtitle="Dados de identificação da escola"
               onClose={() => !savingSchool && setShowSchoolForm(false)}
+              footer={
+                <>
+                  <button
+                    type="button"
+                    disabled={savingSchool}
+                    onClick={() => setShowSchoolForm(false)}
+                    className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveSchool}
+                    disabled={!schoolName.trim() || !schoolAcronym.trim() || savingSchool}
+                    className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-1.5"
+                  >
+                    {savingSchool && <Loader2 size={13} className="animate-spin" />}
+                    {schoolEditId !== null ? "Guardar Alterações" : "Criar Escola"}
+                  </button>
+                </>
+              }
             >
               <div className="space-y-4">
                 <div>
@@ -1180,25 +1201,6 @@ export default function PlatformSettingsPage() {
                       {schoolFormErrors.email}
                     </p>
                   )}
-                </div>
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    disabled={savingSchool}
-                    onClick={() => setShowSchoolForm(false)}
-                    className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveSchool}
-                    disabled={!schoolName.trim() || !schoolAcronym.trim() || savingSchool}
-                    className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-2"
-                  >
-                    {savingSchool && <Loader2 size={14} className="animate-spin" />}
-                    {schoolEditId !== null ? "Guardar Alterações" : "Criar Escola"}
-                  </button>
                 </div>
               </div>
             </Modal>
@@ -1486,6 +1488,25 @@ export default function PlatformSettingsPage() {
               title={adminEditId !== null ? "Editar Administrador" : "Novo Administrador"}
               subtitle="Preencha os dados de acesso e identificação"
               onClose={() => setShowAdminForm(false)}
+              footer={
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminForm(false)}
+                    className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveAdmin}
+                    disabled={!adminFirstName.trim() || !adminLastName.trim() || !adminEmail.trim()}
+                    className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
+                  >
+                    {adminEditId !== null ? "Guardar Alterações" : "Criar Administrador"}
+                  </button>
+                </>
+              }
             >
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
@@ -1583,24 +1604,6 @@ export default function PlatformSettingsPage() {
                     checked={adminActive}
                     onCheckedChange={setAdminActive}
                   />
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminForm(false)}
-                    className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveAdmin}
-                    disabled={!adminFirstName.trim() || !adminLastName.trim() || !adminEmail.trim()}
-                    className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
-                  >
-                    {adminEditId !== null ? "Guardar Alterações" : "Criar Administrador"}
-                  </button>
                 </div>
               </div>
             </Modal>
@@ -1874,6 +1877,34 @@ export default function PlatformSettingsPage() {
               }
               subtitle="Parametrização do tipo de ausência"
               onClose={() => setShowAbsenceTypeForm(false)}
+              footer={
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowAbsenceTypeForm(false)}
+                    className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveAbsenceType}
+                    disabled={savingAbsenceType || !absenceTypeName.trim()}
+                    className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
+                  >
+                    {savingAbsenceType ? (
+                      <>
+                        <Loader2 size={13} className="animate-spin inline mr-1" />
+                        A guardar...
+                      </>
+                    ) : absenceTypeEditId !== null ? (
+                      "Guardar Alterações"
+                    ) : (
+                      "Criar Tipo"
+                    )}
+                  </button>
+                </>
+              }
             >
               <div className="space-y-4">
                 <div>
@@ -1914,32 +1945,6 @@ export default function PlatformSettingsPage() {
                     onCheckedChange={setAbsenceTypeRequiresDoc}
                     className="data-[state=checked]:bg-accent"
                   />
-                </div>
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAbsenceTypeForm(false)}
-                    className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveAbsenceType}
-                    disabled={savingAbsenceType || !absenceTypeName.trim()}
-                    className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
-                  >
-                    {savingAbsenceType ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin inline mr-1" />
-                        A guardar...
-                      </>
-                    ) : absenceTypeEditId !== null ? (
-                      "Guardar Alterações"
-                    ) : (
-                      "Criar Tipo"
-                    )}
-                  </button>
                 </div>
               </div>
             </Modal>

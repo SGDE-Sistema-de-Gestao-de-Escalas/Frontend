@@ -5,7 +5,7 @@ import {
   generateMatrix,
   schools as SCHOOLS,
 } from "../../api/mockData";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { BLOCK_STYLES } from "./blockStyles";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
@@ -307,23 +307,23 @@ export default function QuickAbsenceModal({
               )}
             </div>
 
-            <div className="flex gap-3 pt-2">
+            <DialogFooter>
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancelar
+              </button>
               <button
                 type="button"
                 onClick={submit}
                 disabled={!hasDates}
-                className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors"
+                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
               >
                 Registar Ausência
               </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
+            </DialogFooter>
           </div>
         )}
       </DialogContent>

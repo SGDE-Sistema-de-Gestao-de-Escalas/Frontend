@@ -365,7 +365,7 @@ export default function ActivityTypesTab() {
               </label>
             </div>
           </div>
-          <div className="px-5 py-4 border-t border-border flex gap-3 bg-muted/10">
+          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/10 rounded-b-xl">
             <button
               type="button"
               onClick={() => {
@@ -374,7 +374,7 @@ export default function ActivityTypesTab() {
                 setFormName("");
               }}
               disabled={isSaving}
-              className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
             >
               Cancelar
             </button>
@@ -382,7 +382,7 @@ export default function ActivityTypesTab() {
               type="button"
               onClick={saveType}
               disabled={!formName.trim() || isSaving}
-              className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-1.5"
+              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-1.5"
             >
               {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               {editingId ? "Guardar Alterações" : "Criar Tipo"}
