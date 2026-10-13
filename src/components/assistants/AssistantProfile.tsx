@@ -1110,37 +1110,6 @@ export default function AssistantProfile({
                     </div>
                     <div>
                       <label className="text-xs font-medium text-muted-foreground block mb-1">
-                        Data de Início *
-                      </label>
-                      <DatePicker
-                        value={exceptionStartDate}
-                        minDate={editingExceptionId ? undefined : TODAY_STR}
-                        onChange={(v) => {
-                          setExceptionStartDate(v);
-                          setExceptionDateError(null);
-                          if (v && exceptionEndDate && exceptionEndDate < v) {
-                            setExceptionEndDate(v);
-                          }
-                        }}
-                        className="w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground block mb-1">
-                        Data de Fim (opcional)
-                      </label>
-                      <DatePicker
-                        value={exceptionEndDate}
-                        minDate={exceptionStartDate || TODAY_STR}
-                        onChange={(v) => {
-                          setExceptionEndDate(v);
-                          setExceptionDateError(null);
-                        }}
-                        className="w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground block mb-1">
                         Hora de Entrada
                       </label>
                       <TimePicker
@@ -1245,6 +1214,50 @@ export default function AssistantProfile({
                           </div>
                         </div>
                       )}
+                    </div>
+
+                    {/* Vigência */}
+                    <div className="col-span-2 border-t border-border/60 pt-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                        Vigência
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                            Data de Início *
+                          </label>
+                          <DatePicker
+                            value={exceptionStartDate}
+                            minDate={editingExceptionId ? undefined : TODAY_STR}
+                            onChange={(v) => {
+                              setExceptionStartDate(v);
+                              setExceptionDateError(null);
+                              if (v && exceptionEndDate && exceptionEndDate < v) {
+                                setExceptionEndDate(v);
+                              }
+                            }}
+                            className="w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                            Data de Fim
+                          </label>
+                          <DatePicker
+                            value={exceptionEndDate}
+                            minDate={exceptionStartDate || TODAY_STR}
+                            onChange={(v) => {
+                              setExceptionEndDate(v);
+                              setExceptionDateError(null);
+                            }}
+                            className="w-full"
+                            placeholder="AAAA-MM-DD"
+                          />
+                          <p className="text-[10px] text-muted-foreground/70 mt-1">
+                            Em branco = vigência em aberto
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

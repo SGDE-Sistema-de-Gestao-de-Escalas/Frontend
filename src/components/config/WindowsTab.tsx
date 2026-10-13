@@ -802,29 +802,8 @@ export default function WindowsTab() {
               </div>
             )}
 
-            {/* Data de Início da Versão */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground block">
-                Data de Início da Versão *
-              </label>
-              <div className="max-w-xs">
-                <DatePicker
-                  value={ruleValidFrom}
-                  minDate={editingRule ? undefined : todayStr}
-                  onChange={setRuleValidFrom}
-                  placeholder="AAAA-MM-DD"
-                />
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Esta versão vigorará a partir desta data até à data em que uma versão futura comece.
-              </p>
-              {ruleFormErrors.valid_from && (
-                <p className="text-xs text-red-500">{ruleFormErrors.valid_from.join(", ")}</p>
-              )}
-            </div>
-
             {/* Ação rápida para preencher dias da semana */}
-            <div className="flex items-center justify-between border-t border-border pt-4">
+            <div className="flex items-center justify-between">
               <div>
                 <span className="text-xs font-semibold text-foreground block">
                   Configuração dos 7 Dias da Semana
@@ -994,6 +973,30 @@ export default function WindowsTab() {
                 );
               })}
             </div>
+
+            {/* Vigência */}
+            <div className="border-t border-border/60 pt-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Vigência
+              </p>
+              <div className="max-w-xs space-y-1.5">
+                <label className="text-xs text-muted-foreground block font-medium">
+                  Data de Início *
+                </label>
+                <DatePicker
+                  value={ruleValidFrom}
+                  minDate={editingRule ? undefined : todayStr}
+                  onChange={setRuleValidFrom}
+                  placeholder="AAAA-MM-DD"
+                />
+                <p className="text-[10px] text-muted-foreground/70">
+                  Em vigor a partir desta data até à data em que uma nova versão comece.
+                </p>
+                {ruleFormErrors.valid_from && (
+                  <p className="text-xs text-red-500">{ruleFormErrors.valid_from.join(", ")}</p>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/10 rounded-b-xl">
@@ -1073,45 +1076,6 @@ export default function WindowsTab() {
                 onChange={(e) => setExcIsClosed(e.target.checked)}
                 className="w-4 h-4 rounded border-border text-primary focus:ring-primary disabled:opacity-50 cursor-pointer"
               />
-            </div>
-
-            {/* Período (Datas de Início e Fim) */}
-            <div className="grid grid-cols-2 gap-3.5">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-foreground block">
-                  Data de Início *
-                </label>
-                <DatePicker
-                  value={excValidFrom}
-                  minDate={editingException ? undefined : todayStr}
-                  disabled={Boolean(editingException && !editingException.can_edit_all)}
-                  onChange={(v) => {
-                    setExcValidFrom(v);
-                    if (v && excValidUntil && excValidUntil < v) {
-                      setExcValidUntil(v);
-                    }
-                  }}
-                  placeholder="AAAA-MM-DD"
-                />
-                {excFormErrors.valid_from && (
-                  <p className="text-xs text-red-500">{excFormErrors.valid_from.join(", ")}</p>
-                )}
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-foreground block">
-                  Data de Fim *
-                </label>
-                <DatePicker
-                  value={excValidUntil}
-                  minDate={excValidFrom || undefined}
-                  disabled={Boolean(editingException && !editingException.can_edit_all && !editingException.can_change_end_date)}
-                  onChange={setExcValidUntil}
-                  placeholder="AAAA-MM-DD"
-                />
-                {excFormErrors.valid_until && (
-                  <p className="text-xs text-red-500">{excFormErrors.valid_until.join(", ")}</p>
-                )}
-              </div>
             </div>
 
             {/* Horários especiais caso não esteja fechada */}
@@ -1198,6 +1162,50 @@ export default function WindowsTab() {
                 </div>
               </div>
             )}
+
+            {/* Vigência */}
+            <div className="border-t border-border/60 pt-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Vigência
+              </p>
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground block font-medium">
+                    Data de Início *
+                  </label>
+                  <DatePicker
+                    value={excValidFrom}
+                    minDate={editingException ? undefined : todayStr}
+                    disabled={Boolean(editingException && !editingException.can_edit_all)}
+                    onChange={(v) => {
+                      setExcValidFrom(v);
+                      if (v && excValidUntil && excValidUntil < v) {
+                        setExcValidUntil(v);
+                      }
+                    }}
+                    placeholder="AAAA-MM-DD"
+                  />
+                  {excFormErrors.valid_from && (
+                    <p className="text-xs text-red-500">{excFormErrors.valid_from.join(", ")}</p>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground block font-medium">
+                    Data de Fim *
+                  </label>
+                  <DatePicker
+                    value={excValidUntil}
+                    minDate={excValidFrom || undefined}
+                    disabled={Boolean(editingException && !editingException.can_edit_all && !editingException.can_change_end_date)}
+                    onChange={setExcValidUntil}
+                    placeholder="AAAA-MM-DD"
+                  />
+                  {excFormErrors.valid_until && (
+                    <p className="text-xs text-red-500">{excFormErrors.valid_until.join(", ")}</p>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/10 rounded-b-xl">

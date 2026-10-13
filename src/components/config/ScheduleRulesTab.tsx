@@ -665,36 +665,42 @@ export default function ScheduleRulesTab() {
               </div>
 
               {/* Vigência */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                    Início de vigência *
-                  </label>
-                  <DatePicker
-                    value={formValidityStart}
-                    minDate={isEditing ? undefined : todayStr}
-                    onChange={(v) => {
-                      setFormValidityStart(v);
-                      if (v && formValidityEnd && formValidityEnd < v) {
-                        setFormValidityEnd(v);
-                      }
-                    }}
-                    className="w-full"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                    Fim de vigência
-                  </label>
-                  <DatePicker
-                    value={formValidityEnd}
-                    minDate={formValidityStart || undefined}
-                    onChange={setFormValidityEnd}
-                    className="w-full"
-                  />
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    Em branco = vigência em aberto
-                  </p>
+              <div className="border-t border-border/60 pt-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                  Vigência
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                      Data de Início *
+                    </label>
+                    <DatePicker
+                      value={formValidityStart}
+                      minDate={isEditing ? undefined : todayStr}
+                      onChange={(v) => {
+                        setFormValidityStart(v);
+                        if (v && formValidityEnd && formValidityEnd < v) {
+                          setFormValidityEnd(v);
+                        }
+                      }}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                      Data de Fim
+                    </label>
+                    <DatePicker
+                      value={formValidityEnd}
+                      minDate={formValidityStart || undefined}
+                      onChange={setFormValidityEnd}
+                      className="w-full"
+                      placeholder="AAAA-MM-DD"
+                    />
+                    <p className="text-[10px] text-muted-foreground/70 mt-1">
+                      Em branco = vigência em aberto
+                    </p>
+                  </div>
                 </div>
               </div>
 
