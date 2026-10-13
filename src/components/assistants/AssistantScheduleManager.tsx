@@ -818,7 +818,6 @@ export default function AssistantScheduleManager({
             setScheduleError(null);
           }}
           maxWidth="max-w-4xl"
-          overflowVisible={true}
           footer={
             <>
               <button
@@ -835,9 +834,8 @@ export default function AssistantScheduleManager({
               <button
                 type="button"
                 onClick={handleSaveSchedule}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
               >
-                <Save size={13} />
                 Guardar Horário
               </button>
             </>
@@ -1091,7 +1089,7 @@ export default function AssistantScheduleManager({
                               onClick={() => setRotPeriod(p.id)}
                               className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                                 rotPeriod === p.id
-                                  ? "bg-primary/10 text-primary border-primary/40 font-semibold"
+                                  ? "bg-primary text-primary-foreground border-primary font-bold shadow-xs"
                                   : "border-border text-muted-foreground hover:text-foreground"
                               }`}
                             >
@@ -1134,6 +1132,73 @@ export default function AssistantScheduleManager({
                             ? "Alterna a cada 14 dias"
                             : "Alterna a cada 30 dias"}
                         </p>
+                      </div>
+                    </div>
+
+                    {/* Vigência rotativo */}
+                    <div className="border-t border-border/60 pt-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                        Vigência
+                      </p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1.5 flex items-center justify-between">
+                            <span>Data de Início *</span>
+                            {isEditingActiveSchedule && (
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-normal">
+                                <Lock size={10} /> Bloqueado em vigor
+                              </span>
+                            )}
+                          </label>
+                          <div className={isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}>
+                            <DatePicker
+                              value={rotStartDate}
+                              minDate={isEditingActiveSchedule ? undefined : TODAY_STR}
+                              onChange={(v) => {
+                                setRotStartDate(v);
+                                setScheduleError(null);
+                                if (v && rotEndDate && rotEndDate < v) {
+                                  setRotEndDate(v);
+                                }
+                              }}
+                              className="w-full"
+                            />
+                          </div>
+                          {!isEditingActiveSchedule && activeSchedule && (
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                              {activeSchedule.to
+                                ? `Deve iniciar no máximo a ${formatDatePT(addDays(activeSchedule.to, 1))} (dia seguinte ao término em vigor).`
+                                : "O horário em vigor terminará automaticamente na véspera desta data."}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1.5 flex items-center justify-between">
+                            <span>Data de Fim</span>
+                            {isEditingActiveSchedule && (
+                              <span className="text-[10px] text-primary font-medium">
+                                Editável
+                              </span>
+                            )}
+                          </label>
+                          <DatePicker
+                            value={rotEndDate}
+                            minDate={rotStartDate || undefined}
+                            onChange={(v) => {
+                              setRotEndDate(v);
+                              setScheduleError(null);
+                            }}
+                            className="w-full"
+                            placeholder="AAAA-MM-DD"
+                          />
+                          <p className="text-[10px] text-muted-foreground/70 mt-1">
+                            {isEditingActiveSchedule
+                              ? futureSchedule
+                                ? `Próximo horário inicia a ${formatDatePT(futureSchedule.from)}. O término deve ser ${formatDatePT(addDays(futureSchedule.from, -1))}.`
+                                : "Requer um novo horário agendado para definir término."
+                              : "Em branco = vigência em aberto"}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1284,73 +1349,6 @@ export default function AssistantScheduleManager({
                     );
                   })}
                 </div>
-
-                {/* Vigência rotativo */}
-                <Card className="p-5">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                    Vigência
-                  </p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1.5 flex items-center justify-between">
-                        <span>Data de Início *</span>
-                        {isEditingActiveSchedule && (
-                          <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-normal">
-                            <Lock size={10} /> Bloqueado em vigor
-                          </span>
-                        )}
-                      </label>
-                      <div className={isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}>
-                        <DatePicker
-                          value={rotStartDate}
-                          minDate={isEditingActiveSchedule ? undefined : TODAY_STR}
-                          onChange={(v) => {
-                            setRotStartDate(v);
-                            setScheduleError(null);
-                            if (v && rotEndDate && rotEndDate < v) {
-                              setRotEndDate(v);
-                            }
-                          }}
-                          className="w-full"
-                        />
-                      </div>
-                      {!isEditingActiveSchedule && activeSchedule && (
-                        <p className="text-[10px] text-muted-foreground mt-1">
-                          {activeSchedule.to
-                            ? `Deve iniciar no máximo a ${formatDatePT(addDays(activeSchedule.to, 1))} (dia seguinte ao término em vigor).`
-                            : "O horário em vigor terminará automaticamente na véspera desta data."}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1.5 flex items-center justify-between">
-                        <span>Data de Fim</span>
-                        {isEditingActiveSchedule && (
-                          <span className="text-[10px] text-primary font-medium">
-                            Editável
-                          </span>
-                        )}
-                      </label>
-                      <DatePicker
-                        value={rotEndDate}
-                        minDate={rotStartDate || undefined}
-                        onChange={(v) => {
-                          setRotEndDate(v);
-                          setScheduleError(null);
-                        }}
-                        className="w-full"
-                        placeholder="AAAA-MM-DD"
-                      />
-                      <p className="text-[10px] text-muted-foreground/70 mt-1">
-                        {isEditingActiveSchedule
-                          ? futureSchedule
-                            ? `Próximo horário inicia a ${formatDatePT(futureSchedule.from)}. O término deve ser ${formatDatePT(addDays(futureSchedule.from, -1))}.`
-                            : "Requer um novo horário agendado para definir término."
-                          : "Em branco = vigência em aberto"}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
               </div>
             )}
 

@@ -1051,7 +1051,6 @@ export default function AssistantProfile({
                     : "Horário especial com data de vigência"
                 }
                 onClose={() => setShowAddException(false)}
-                overflowVisible={true}
                 footer={
                   <>
                     <button
