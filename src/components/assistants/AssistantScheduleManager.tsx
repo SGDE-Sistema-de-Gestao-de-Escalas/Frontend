@@ -39,7 +39,7 @@ import {
 } from "../../api/services/assistantSchedules.service";
 
 export interface AssistantScheduleItem {
-  id: number;
+  id: string | number;
   type: "fixed" | "rotating";
   period?: "Semanal" | "Quinzenal" | "Mensal";
   entry?: string;
@@ -51,6 +51,12 @@ export interface AssistantScheduleItem {
   startsWith?: "A" | "B";
   from: string;
   to: string | null;
+  status?: "upcoming" | "current" | "superseded";
+  can_edit?: boolean;
+  can_change_end_date?: boolean;
+  can_delete?: boolean;
+  cannot_edit_reason?: string | null;
+  cannot_delete_reason?: string | null;
 }
 
 function addDays(dateStr: string, days: number): string {
@@ -620,22 +626,32 @@ export default function AssistantScheduleManager({
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEditSchedule(h)}
-                    className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                    title={
-                      isActiveSchedule
-                        ? "Editar vigência do horário em vigor"
-                        : "Editar horário"
-                    }
-                  >
-                    <Pencil size={13} />
-                  </button>
+                  {(h.can_edit !== false || h.can_change_end_date) && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditSchedule(h)}
+                      className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      title={
+                        h.cannot_edit_reason ||
+                        (h.can_edit === false && h.can_change_end_date
+                          ? "Apenas a data de fim pode ser ajustada para este horário."
+                          : "Editar horário")
+                      }
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  )}
 
                   <button
                     type="button"
                     onClick={() => {
+                      if (h.can_delete === false) {
+                        notify.error(
+                          h.cannot_delete_reason ||
+                            "Não é possível eliminar este horário."
+                        );
+                        return;
+                      }
                       if (isActiveSchedule) {
                         notify.error(
                           "Não é possível eliminar o horário em vigor. O assistente tem de ter sempre um horário ativo."
@@ -648,18 +664,19 @@ export default function AssistantScheduleManager({
                       }
                       setScheduleToDelete(h);
                     }}
-                    disabled={isActiveSchedule || schedules.length <= 1}
+                    disabled={h.can_delete === false || isActiveSchedule || schedules.length <= 1}
                     className={`p-1.5 rounded-md transition-colors ${
-                      isActiveSchedule || schedules.length <= 1
+                      h.can_delete === false || isActiveSchedule || schedules.length <= 1
                         ? "opacity-30 cursor-not-allowed text-muted-foreground"
                         : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
                     }`}
                     title={
-                      isActiveSchedule
+                      h.cannot_delete_reason ||
+                      (isActiveSchedule
                         ? "Não é possível eliminar o horário em vigor."
                         : schedules.length <= 1
                         ? "O assistente tem de ter pelo menos um horário."
-                        : "Eliminar horário"
+                        : "Eliminar horário")
                     }
                   >
                     <Trash2 size={13} />

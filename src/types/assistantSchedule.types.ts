@@ -24,6 +24,12 @@ export interface AssistantScheduleProfileApi {
   starts_with?: ShiftLabel | null;
   valid_from: string;
   valid_until?: string | null;
+  status?: "upcoming" | "current" | "superseded";
+  can_edit?: boolean;
+  can_change_end_date?: boolean;
+  can_delete?: boolean;
+  cannot_edit_reason?: string | null;
+  cannot_delete_reason?: string | null;
   shifts?: AssistantScheduleShiftApi[];
   created_at?: string;
   updated_at?: string;
@@ -62,6 +68,12 @@ export interface AssistantExceptionApi {
   lunch_start?: string | null;
   lunch_end?: string | null;
   lunch_duration_minutes?: number | null;
+  status?: "upcoming" | "current" | "superseded";
+  can_edit?: boolean;
+  can_change_end_date?: boolean;
+  can_delete?: boolean;
+  cannot_edit_reason?: string | null;
+  cannot_delete_reason?: string | null;
   created_at?: string;
   updated_at?: string;
 }

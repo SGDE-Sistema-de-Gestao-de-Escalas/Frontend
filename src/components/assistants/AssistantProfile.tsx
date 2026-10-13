@@ -88,6 +88,11 @@ interface ExceptionRule {
   fim?: string;
   status?: string;
   className?: string;
+  canEdit?: boolean;
+  canChangeEndDate?: boolean;
+  canDelete?: boolean;
+  cannotEditReason?: string | null;
+  cannotDeleteReason?: string | null;
 }
 
 interface AssistantProfileProps {
@@ -196,6 +201,18 @@ export default function AssistantProfile({
             : undefined,
           inicio: e.valid_from,
           fim: e.valid_until || undefined,
+          status: e.status === "upcoming" ? "Agendado" : e.status === "superseded" ? "Expirado" : "Vigente",
+          className:
+            e.status === "upcoming"
+              ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+              : e.status === "superseded"
+              ? "bg-muted text-muted-foreground border-border"
+              : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+          canEdit: e.can_edit,
+          canChangeEndDate: e.can_change_end_date,
+          canDelete: e.can_delete,
+          cannotEditReason: e.cannot_edit_reason,
+          cannotDeleteReason: e.cannot_delete_reason,
         }))
       );
     }
@@ -985,19 +1002,35 @@ export default function AssistantProfile({
                           </div>
                           {!isDeletedOrAnonymized && (
                             <div className="flex items-center gap-1 shrink-0">
+                              {(row.canEdit !== false || row.canChangeEndDate) && (
+                                <button
+                                  type="button"
+                                  onClick={() => openEditException(row)}
+                                  className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                  title={
+                                    row.canEdit === false && row.canChangeEndDate
+                                      ? "Apenas a data de fim pode ser ajustada para esta exceção em vigor."
+                                      : "Editar exceção"
+                                  }
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                              )}
                               <button
                                 type="button"
-                                onClick={() => openEditException(row)}
-                                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                                title="Editar exceção"
-                              >
-                                <Pencil size={13} />
-                              </button>
-                              <button
-                                type="button"
+                                disabled={row.canDelete === false}
                                 onClick={() => setDeleteExceptionTarget(row)}
-                                className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                                title="Eliminar exceção"
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  row.canDelete === false
+                                    ? "opacity-30 cursor-not-allowed text-muted-foreground"
+                                    : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                                }`}
+                                title={
+                                  row.cannotDeleteReason ||
+                                  (row.canDelete === false
+                                    ? "Não é possível eliminar esta exceção."
+                                    : "Eliminar exceção")
+                                }
                               >
                                 <Trash2 size={13} />
                               </button>

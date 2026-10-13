@@ -116,7 +116,7 @@ export function apiProfileToScheduleItem(
 
   if (isFixed) {
     return {
-      id: profile.id as any,
+      id: profile.id,
       type: "fixed",
       entry: shiftA?.entry_time || "08:00",
       exit: shiftA?.exit_time || "16:00",
@@ -130,6 +130,12 @@ export function apiProfileToScheduleItem(
         : undefined,
       from: profile.valid_from,
       to: profile.valid_until || null,
+      status: profile.status,
+      can_edit: profile.can_edit,
+      can_change_end_date: profile.can_change_end_date,
+      can_delete: profile.can_delete,
+      cannot_edit_reason: profile.cannot_edit_reason,
+      cannot_delete_reason: profile.cannot_delete_reason,
     };
   }
 
@@ -140,7 +146,7 @@ export function apiProfileToScheduleItem(
   };
 
   return {
-    id: profile.id as any,
+    id: profile.id,
     type: "rotating",
     period: periodMap[profile.rotation_period || "biweekly"] || "Quinzenal",
     startsWith: (profile.starts_with as "A" | "B") || "A",
@@ -169,6 +175,12 @@ export function apiProfileToScheduleItem(
     days: daysA,
     from: profile.valid_from,
     to: profile.valid_until || null,
+    status: profile.status,
+    can_edit: profile.can_edit,
+    can_change_end_date: profile.can_change_end_date,
+    can_delete: profile.can_delete,
+    cannot_edit_reason: profile.cannot_edit_reason,
+    cannot_delete_reason: profile.cannot_delete_reason,
   };
 }
 
