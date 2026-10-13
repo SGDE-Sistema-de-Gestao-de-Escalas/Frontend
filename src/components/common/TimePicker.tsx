@@ -12,6 +12,7 @@ interface TimePickerProps {
   operatingEnd?: number;
   unrestricted?: boolean;
   disabled?: boolean;
+  hasError?: boolean;
 }
 
 export default function TimePicker({
@@ -22,6 +23,7 @@ export default function TimePicker({
   operatingEnd,
   unrestricted = false,
   disabled = false,
+  hasError = false,
 }: TimePickerProps) {
   let contextStart = 7;
   let contextEnd = 21;
@@ -81,6 +83,7 @@ export default function TimePicker({
       <CustomSelect
         value={String(hVal)}
         disabled={disabled}
+        hasError={hasError}
         onValueChange={(val) => setHour(Number(val))}
         className="flex-1"
         triggerClassName="font-mono text-sm py-2 px-2.5 rounded-lg border-border"
@@ -93,6 +96,7 @@ export default function TimePicker({
       <CustomSelect
         value={String(mVal)}
         disabled={disabled}
+        hasError={hasError}
         onValueChange={(val) => setMinute(Number(val))}
         className="flex-1"
         triggerClassName="font-mono text-sm py-2 px-2.5 rounded-lg border-border"

@@ -7,8 +7,10 @@ import {
   ChevronDown,
   ChevronUp,
   GripVertical,
+  Info,
   Pencil,
   Plus,
+  ShieldAlert,
   Trash2,
   Users,
 } from "lucide-react";
@@ -20,6 +22,7 @@ import {
 import type { ScheduleRule, EntityId } from "../../types";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
+import { Checkbox } from "../ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import TimePicker from "../common/TimePicker";
 import DatePicker, { formatToIsoDate } from "../common/DatePicker";
@@ -56,6 +59,7 @@ export default function ScheduleRulesTab() {
   const [formValidityEnd, setFormValidityEnd] = useState("");
   const [formAssistantIds, setFormAssistantIds] = useState<EntityId[]>(allAssistantIds);
   const [formStep, setFormStep] = useState<"form" | "conflict" | "done">("form");
+  const [formError, setFormError] = useState<string | null>(null);
 
   const isEditing = editingRuleId !== null;
   const selectedActivity = DEFAULT_ACTIVITY_TYPES.find(
@@ -90,6 +94,7 @@ export default function ScheduleRulesTab() {
     setFormValidityEnd("");
     setFormAssistantIds(allAssistantIds);
     setOrderedAssistantIds(allAssistantIds);
+    setFormError(null);
     setFormStep("form");
     setShowAdd(true);
   }
@@ -109,6 +114,7 @@ export default function ScheduleRulesTab() {
     // Preservar a ordem dos selecionados e depois os restantes não selecionados
     const unselected = allAssistantIds.filter((id) => !selected.includes(id));
     setOrderedAssistantIds([...selected, ...unselected]);
+    setFormError(null);
     setFormStep("form");
     setShowAdd(true);
   }
@@ -118,12 +124,14 @@ export default function ScheduleRulesTab() {
   const [draggedAssistantId, setDraggedAssistantId] = useState<EntityId | null>(null);
 
   function toggleAssistant(id: EntityId) {
+    setFormError(null);
     setFormAssistantIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   }
 
   function toggleAllAssistants() {
+    setFormError(null);
     const allSelected = formAssistantIds.length === ASSISTANTS.length;
     setFormAssistantIds(allSelected ? [] : ASSISTANTS.map((a) => a.id));
   }
@@ -170,6 +178,25 @@ export default function ScheduleRulesTab() {
   }
 
   function submitRule() {
+    const minCount = Math.max(1, parseInt(formMinStaff, 10) || 1);
+    const requiredCount = formRuleType === "mandatory" ? minCount + 1 : minCount;
+    const selectedCount = formAssistantIds.length;
+
+    if (selectedCount < requiredCount) {
+      if (formRuleType === "mandatory") {
+        setFormError(
+          `Selecione pelo menos ${requiredCount} funcionários (${minCount} efetivos + 1 suplente obrigatório).`
+        );
+      } else {
+        setFormError(
+          `Selecione pelo menos ${minCount} ${minCount === 1 ? "funcionário" : "funcionários"} para a dotação mínima.`
+        );
+      }
+      return;
+    }
+
+    setFormError(null);
+
     if (!isEditing && conflictingRule) {
       setFormStep("conflict");
       return;
@@ -490,7 +517,10 @@ export default function ScheduleRulesTab() {
                     min="1"
                     max="12"
                     value={formMinStaff}
-                    onChange={(e) => setFormMinStaff(e.target.value)}
+                    onChange={(e) => {
+                      setFormMinStaff(e.target.value);
+                      setFormError(null);
+                    }}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </div>
@@ -500,9 +530,10 @@ export default function ScheduleRulesTab() {
                   </label>
                   <CustomSelect
                     value={formRuleType}
-                    onChange={(e: any) =>
-                      setFormRuleType((typeof e === "string" ? e : e.target.value) as "mandatory" | "optional")
-                    }
+                    onChange={(e: any) => {
+                      setFormRuleType((typeof e === "string" ? e : e.target.value) as "mandatory" | "optional");
+                      setFormError(null);
+                    }}
                     options={[
                       { value: "mandatory", label: "Obrigatório" },
                       { value: "optional", label: "Facultativo" },
@@ -512,7 +543,7 @@ export default function ScheduleRulesTab() {
               </div>
 
               {/* Assistentes Afetos e Ordem de Prioridade (Lista Única Intuitiva) */}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div>
                     <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
@@ -520,7 +551,7 @@ export default function ScheduleRulesTab() {
                       Funcionários Afetos & Ordem de Prioridade
                     </label>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Marque para afetar à regra e arraste na pega para definir a prioridade do motor ({formAssistantIds.length}/{ASSISTANTS.length} selecionados)
+                      Marque para afetar à regra e arraste na pega para definir a prioridade ({formAssistantIds.length}/{ASSISTANTS.length} selecionados)
                     </p>
                   </div>
                   <button
@@ -534,8 +565,53 @@ export default function ScheduleRulesTab() {
                   </button>
                 </div>
 
+                {/* Requisito de dotação antes da listagem */}
+                {(() => {
+                  const parsedMin = Math.max(1, parseInt(formMinStaff, 10) || 1);
+                  const reqStaff = formRuleType === "mandatory" ? parsedMin + 1 : parsedMin;
+                  const isShort = formAssistantIds.length < reqStaff;
+
+                  return (
+                    <div
+                      className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs transition-colors border ${
+                        isShort
+                          ? "bg-amber-500/10 border-amber-500/25 text-amber-800 dark:text-amber-200"
+                          : "bg-muted/30 border-border/60 text-muted-foreground"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Info size={14} className={`shrink-0 ${isShort ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
+                        <span>
+                          {formRuleType === "mandatory" ? (
+                            <>
+                              Mínimo exigido: <strong>{reqStaff} funcionários</strong> ({parsedMin} efetivos + 1 suplente de salvaguarda).
+                            </>
+                          ) : (
+                            <>
+                              Mínimo exigido: <strong>{reqStaff} {reqStaff === 1 ? "funcionário" : "funcionários"}</strong> para cumprir a dotação.
+                            </>
+                          )}
+                        </span>
+                      </div>
+                      <span
+                        className={`text-[11px] font-semibold px-2 py-0.5 rounded-md shrink-0 ${
+                          isShort
+                            ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                            : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                        }`}
+                      >
+                        {formAssistantIds.length} / {reqStaff} min
+                      </span>
+                    </div>
+                  );
+                })()}
+
                 {/* Lista Unificada: Checkbox + Drag & Drop */}
-                <div className="rounded-lg border border-border bg-card overflow-hidden">
+                <div
+                  className={`rounded-lg border bg-card overflow-hidden transition-colors ${
+                    formError ? "border-destructive ring-1 ring-destructive/40" : "border-border"
+                  }`}
+                >
                   <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b border-border text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                     <span className="flex items-center gap-2">
                       <span>Ordem</span>
@@ -647,21 +723,26 @@ export default function ScheduleRulesTab() {
                               </button>
                             </div>
 
-                            {/* Checkbox customizado e acessível */}
-                            <label className="cursor-pointer p-1">
-                              <input
-                                type="checkbox"
+                            {/* Checkbox com check branco */}
+                            <div className="p-1 flex items-center">
+                              <Checkbox
                                 checked={isSelected}
-                                onChange={() => toggleAssistant(id)}
-                                className="w-4 h-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-0 cursor-pointer accent-primary"
+                                onCheckedChange={() => toggleAssistant(id)}
                               />
-                            </label>
+                            </div>
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 </div>
+
+                {formError && (
+                  <p className="text-xs text-destructive flex items-center gap-1.5 font-medium mt-1">
+                    <AlertTriangle size={13} className="shrink-0" />
+                    <span>{formError}</span>
+                  </p>
+                )}
               </div>
 
               {/* Vigência */}

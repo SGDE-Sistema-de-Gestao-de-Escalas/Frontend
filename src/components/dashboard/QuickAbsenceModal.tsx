@@ -33,6 +33,7 @@ export default function QuickAbsenceModal({
   const [showCoverage, setShowCoverage] = useState(false);
   const [coverageSchool, setCoverageSchool] = useState<number | "">("");
   const [coverageAssistantId, setCoverageAssistantId] = useState<number | "">("");
+  const [dateErrors, setDateErrors] = useState<{ start?: string; end?: string }>({});
 
   if (!assistantName) return null;
 
@@ -55,7 +56,22 @@ export default function QuickAbsenceModal({
   );
 
   function submit() {
-    if (!start || !end) return;
+    const errors: { start?: string; end?: string } = {};
+    if (!start) {
+      errors.start = "A data de início é obrigatória.";
+    }
+    if (!end) {
+      errors.end = "A data de fim é obrigatória.";
+    } else if (start && end < start) {
+      errors.end = "A data de fim não pode ser anterior à data de início.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setDateErrors(errors);
+      return;
+    }
+
+    setDateErrors({});
     setDone(true);
   }
 
@@ -137,9 +153,23 @@ export default function QuickAbsenceModal({
                 </label>
                 <DatePicker
                   value={start}
-                  onChange={setStart}
+                  hasError={!!dateErrors.start}
+                  onChange={(v) => {
+                    setStart(v);
+                    if (dateErrors.start) {
+                      setDateErrors((p) => ({ ...p, start: undefined }));
+                    }
+                    if (v && end && end < v) {
+                      setEnd(v);
+                    }
+                  }}
                   className="w-full"
                 />
+                {dateErrors.start && (
+                  <p className="text-[11px] text-destructive mt-1 font-medium">
+                    {dateErrors.start}
+                  </p>
+                )}
                 <TimePicker
                   value={startTime}
                   onChange={setStartTime}
@@ -152,9 +182,21 @@ export default function QuickAbsenceModal({
                 </label>
                 <DatePicker
                   value={end}
-                  onChange={setEnd}
+                  hasError={!!dateErrors.end}
+                  minDate={start || undefined}
+                  onChange={(v) => {
+                    setEnd(v);
+                    if (dateErrors.end) {
+                      setDateErrors((p) => ({ ...p, end: undefined }));
+                    }
+                  }}
                   className="w-full"
                 />
+                {dateErrors.end && (
+                  <p className="text-[11px] text-destructive mt-1 font-medium">
+                    {dateErrors.end}
+                  </p>
+                )}
                 <TimePicker
                   value={endTime}
                   onChange={setEndTime}
@@ -318,8 +360,7 @@ export default function QuickAbsenceModal({
               <button
                 type="button"
                 onClick={submit}
-                disabled={!hasDates}
-                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
+                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
               >
                 Registar Ausência
               </button>

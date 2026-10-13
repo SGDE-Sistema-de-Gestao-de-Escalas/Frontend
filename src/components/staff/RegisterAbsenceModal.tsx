@@ -24,6 +24,7 @@ export default function RegisterAbsenceModal({
   const [note, setNote] = useState("");
   const [fileName, setFileName] = useState("");
   const [isDone, setIsDone] = useState(false);
+  const [dateErrors, setDateErrors] = useState<{ start?: string; end?: string }>({});
 
   const absenceDays =
     startDate && endDate
@@ -131,9 +132,23 @@ export default function RegisterAbsenceModal({
                     </label>
                     <DatePicker
                       value={startDate}
-                      onChange={setStartDate}
+                      hasError={!!dateErrors.start}
+                      onChange={(v) => {
+                        setStartDate(v);
+                        if (dateErrors.start) {
+                          setDateErrors((p) => ({ ...p, start: undefined }));
+                        }
+                        if (v && endDate && endDate < v) {
+                          setEndDate(v);
+                        }
+                      }}
                       className="w-full"
                     />
+                    {dateErrors.start && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {dateErrors.start}
+                      </p>
+                    )}
                     <TimePicker
                       value={startTime}
                       onChange={setStartTime}
@@ -146,9 +161,21 @@ export default function RegisterAbsenceModal({
                     </label>
                     <DatePicker
                       value={endDate}
-                      onChange={setEndDate}
+                      hasError={!!dateErrors.end}
+                      minDate={startDate || undefined}
+                      onChange={(v) => {
+                        setEndDate(v);
+                        if (dateErrors.end) {
+                          setDateErrors((p) => ({ ...p, end: undefined }));
+                        }
+                      }}
                       className="w-full"
                     />
+                    {dateErrors.end && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {dateErrors.end}
+                      </p>
+                    )}
                     <TimePicker
                       value={endTime}
                       onChange={setEndTime}
@@ -166,9 +193,26 @@ export default function RegisterAbsenceModal({
                 )}
                 <button
                   type="button"
-                  disabled={!startDate || !endDate}
-                  onClick={() => setStep(2)}
-                  className="w-full py-2.5 rounded-lg bg-accent text-white text-sm font-medium disabled:opacity-40 hover:bg-accent/90 transition-colors"
+                  onClick={() => {
+                    const errors: { start?: string; end?: string } = {};
+                    if (!startDate) {
+                      errors.start = "A data de início é obrigatória.";
+                    }
+                    if (!endDate) {
+                      errors.end = "A data de fim é obrigatória.";
+                    } else if (startDate && endDate < startDate) {
+                      errors.end = "A data de fim não pode ser anterior à data de início.";
+                    }
+
+                    if (Object.keys(errors).length > 0) {
+                      setDateErrors(errors);
+                      return;
+                    }
+
+                    setDateErrors({});
+                    setStep(2);
+                  }}
+                  className="w-full py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
                 >
                   Continuar
                 </button>

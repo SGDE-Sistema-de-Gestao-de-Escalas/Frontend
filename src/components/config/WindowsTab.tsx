@@ -1050,12 +1050,17 @@ export default function WindowsTab() {
                 type="text"
                 disabled={editingException && !editingException.can_edit_all}
                 value={excName}
-                onChange={(e) => setExcName(e.target.value)}
+                onChange={(e) => {
+                  setExcName(e.target.value);
+                  if (excFormErrors.name) setExcFormErrors((prev) => ({ ...prev, name: undefined }));
+                }}
                 placeholder="Ex: Férias de Verão, Semana de Exames, Tolerância de Ponto"
-                className="w-full px-3 py-1.5 rounded-lg border border-border bg-background text-foreground text-xs focus:ring-1 focus:ring-primary disabled:opacity-50"
+                className={`w-full px-3 py-1.5 rounded-lg border bg-background text-foreground text-xs focus:ring-1 focus:ring-primary disabled:opacity-50 transition-colors ${
+                  excFormErrors.name ? "border-destructive focus:ring-destructive" : "border-border"
+                }`}
               />
               {excFormErrors.name && (
-                <p className="text-xs text-red-500">{excFormErrors.name.join(", ")}</p>
+                <p className="text-[11px] text-destructive font-medium mt-1">{excFormErrors.name.join(", ")}</p>
               )}
             </div>
 

@@ -10,6 +10,7 @@ interface DatePickerProps {
   minDate?: string; // Formato YYYY-MM-DD
   maxDate?: string; // Formato YYYY-MM-DD
   disabled?: boolean;
+  hasError?: boolean;
 }
 
 export function parseFlexibleDate(value: string | null | undefined): Date | null {
@@ -114,6 +115,7 @@ export default function DatePicker({
   minDate,
   maxDate,
   disabled = false,
+  hasError = false,
 }: DatePickerProps) {
   const [open, setOpen] = useState(false);
 
@@ -209,7 +211,9 @@ export default function DatePicker({
               setViewMonth(parsed.getMonth());
             }
           }}
-          className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-border bg-input-background font-mono focus:outline-none focus:ring-1 focus:ring-ring text-left hover:border-accent/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+          className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-input-background font-mono focus:outline-none focus:ring-1 text-left hover:border-accent/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+            hasError ? "!border-destructive focus:!ring-destructive" : "border-border focus:ring-ring"
+          } ${className}`}
         >
           <Calendar size={13} className="text-muted-foreground flex-shrink-0" />
           <span

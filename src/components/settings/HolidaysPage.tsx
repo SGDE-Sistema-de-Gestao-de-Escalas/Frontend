@@ -37,12 +37,14 @@ export default function HolidaysPage() {
   const [newDate, setNewDate] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [holidayDeleteTarget, setHolidayDeleteTarget] = useState<BackendHolidayResource | null>(null);
+  const [formErrors, setFormErrors] = useState<{ name?: string; date?: string }>({});
 
   function openAdd() {
     setEditingHolidayId(null);
     setNewName("");
     setNewDate(new Date().toISOString().split("T")[0]);
     setNewDescription("");
+    setFormErrors({});
     setShowAdd(true);
   }
 
@@ -51,11 +53,25 @@ export default function HolidaysPage() {
     setNewName(h.name);
     setNewDate(formatToIsoDate(h.date) || h.date);
     setNewDescription(h.description || "");
+    setFormErrors({});
     setShowAdd(true);
   }
 
   async function saveHoliday() {
-    if (!newName.trim() || !newDate) return;
+    const errs: { name?: string; date?: string } = {};
+    if (!newName.trim()) {
+      errs.name = "O nome do feriado é obrigatório.";
+    }
+    if (!newDate) {
+      errs.date = "A data do feriado é obrigatória.";
+    }
+
+    if (Object.keys(errs).length > 0) {
+      setFormErrors(errs);
+      return;
+    }
+
+    setFormErrors({});
 
     if (editingHolidayId !== null) {
       await updateMutation.mutateAsync({
@@ -79,6 +95,7 @@ export default function HolidaysPage() {
     setNewName("");
     setNewDate("");
     setNewDescription("");
+    setFormErrors({});
   }
 
   async function handleDeleteConfirm() {
@@ -243,12 +260,24 @@ export default function HolidaysPage() {
                   </label>
                   <input
                     value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
+                    onChange={(e) => {
+                      setNewName(e.target.value);
+                      if (formErrors.name) setFormErrors((p) => ({ ...p, name: undefined }));
+                    }}
                     onKeyDown={(e) => e.key === "Enter" && !isSaving && saveHoliday()}
                     placeholder="Ex: Carnaval"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 transition-colors ${
+                      formErrors.name
+                        ? "border-destructive focus:ring-destructive"
+                        : "border-border focus:ring-ring"
+                    }`}
                     autoFocus
                   />
+                  {formErrors.name && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {formErrors.name}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
@@ -257,9 +286,17 @@ export default function HolidaysPage() {
                   <DatePicker
                     value={newDate}
                     minDate={editingHolidayId !== null ? undefined : todayStr}
-                    onChange={setNewDate}
-                    className="w-full"
+                    onChange={(v) => {
+                      setNewDate(v);
+                      if (formErrors.date) setFormErrors((p) => ({ ...p, date: undefined }));
+                    }}
+                    className={`w-full ${formErrors.date ? "border-destructive" : ""}`}
                   />
+                  {formErrors.date && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {formErrors.date}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5 font-medium">

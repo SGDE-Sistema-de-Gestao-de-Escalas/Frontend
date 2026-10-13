@@ -115,6 +115,7 @@ export default function AssistantScheduleManager({
   const [showAddScheduleModal, setShowAddScheduleModal] = useState(false);
   const [editingScheduleId, setEditingScheduleId] = useState<number | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleFieldErrors, setScheduleFieldErrors] = useState<{ start?: string; end?: string }>({});
   const [scheduleToDelete, setScheduleToDelete] = useState<AssistantScheduleItem | null>(null);
 
   // Form states for adding/editing schedule
@@ -184,6 +185,7 @@ export default function AssistantScheduleManager({
   function handleOpenAddSchedule() {
     setEditingScheduleId(null);
     setScheduleError(null);
+    setScheduleFieldErrors({});
     setShiftProfile("fixed");
     setFixedEntry("08:00");
     setFixedExit("16:00");
@@ -226,6 +228,7 @@ export default function AssistantScheduleManager({
   function handleOpenEditSchedule(item: AssistantScheduleItem) {
     setEditingScheduleId(item.id);
     setScheduleError(null);
+    setScheduleFieldErrors({});
     setShiftProfile(item.type);
 
     if (item.type === "fixed") {
@@ -286,10 +289,21 @@ export default function AssistantScheduleManager({
 
   function handleSaveSchedule() {
     setScheduleError(null);
+    setScheduleFieldErrors({});
 
     const isFixed = shiftProfile === "fixed";
     const startVal = (isFixed ? fixedStartDate : rotStartDate).trim();
     const endVal = (isFixed ? fixedEndDate : rotEndDate).trim() || null;
+
+    if (!isEditingActiveSchedule && !startVal) {
+      setScheduleFieldErrors({ start: "A data de início de vigência é obrigatória." });
+      return;
+    }
+
+    if (endVal && startVal && endVal < startVal) {
+      setScheduleFieldErrors({ end: "A data de fim não pode ser anterior à data de início." });
+      return;
+    }
 
     if (isEditingActiveSchedule && editingSchedule) {
       if (!endVal) {
@@ -312,7 +326,7 @@ export default function AssistantScheduleManager({
         }
 
         if (endVal < editingSchedule.from) {
-          setScheduleError("A data de término não pode ser anterior à data de início.");
+          setScheduleFieldErrors({ end: "A data de término não pode ser anterior à data de início." });
           return;
         }
 
@@ -345,16 +359,6 @@ export default function AssistantScheduleManager({
       notify.success("Data de fim de vigência atualizada!");
       setShowAddScheduleModal(false);
       setEditingScheduleId(null);
-      return;
-    }
-
-    if (!startVal) {
-      setScheduleError("A data de início de vigência é obrigatória.");
-      return;
-    }
-
-    if (endVal && endVal < startVal) {
-      setScheduleError("A data de fim não pode ser anterior à data de início.");
       return;
     }
 
@@ -1013,10 +1017,14 @@ export default function AssistantScheduleManager({
                       <div className={isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}>
                         <DatePicker
                           value={fixedStartDate}
+                          hasError={!!scheduleFieldErrors.start}
                           minDate={isEditingActiveSchedule ? undefined : TODAY_STR}
                           onChange={(v) => {
                             setFixedStartDate(v);
                             setScheduleError(null);
+                            if (scheduleFieldErrors.start) {
+                              setScheduleFieldErrors((prev) => ({ ...prev, start: undefined }));
+                            }
                             if (v && fixedEndDate && fixedEndDate < v) {
                               setFixedEndDate(v);
                             }
@@ -1024,6 +1032,11 @@ export default function AssistantScheduleManager({
                           className="w-full"
                         />
                       </div>
+                      {scheduleFieldErrors.start && (
+                        <p className="text-[11px] text-destructive mt-1 font-medium">
+                          {scheduleFieldErrors.start}
+                        </p>
+                      )}
                       {!isEditingActiveSchedule && activeSchedule && (
                         <p className="text-[10px] text-muted-foreground mt-1">
                           {activeSchedule.to
@@ -1043,21 +1056,31 @@ export default function AssistantScheduleManager({
                       </label>
                       <DatePicker
                         value={fixedEndDate}
+                        hasError={!!scheduleFieldErrors.end}
                         minDate={fixedStartDate || undefined}
                         onChange={(v) => {
                           setFixedEndDate(v);
                           setScheduleError(null);
+                          if (scheduleFieldErrors.end) {
+                            setScheduleFieldErrors((prev) => ({ ...prev, end: undefined }));
+                          }
                         }}
                         className="w-full"
                         placeholder="AAAA-MM-DD"
                       />
-                      <p className="text-[10px] text-muted-foreground/70 mt-1">
-                        {isEditingActiveSchedule
-                          ? futureSchedule
-                            ? `Próximo horário inicia a ${formatDatePT(futureSchedule.from)}. O término deve ser ${formatDatePT(addDays(futureSchedule.from, -1))}.`
-                            : "Requer um novo horário agendado para definir término."
-                          : "Em branco = vigência em aberto"}
-                      </p>
+                      {scheduleFieldErrors.end ? (
+                        <p className="text-[11px] text-destructive mt-1 font-medium">
+                          {scheduleFieldErrors.end}
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground/70 mt-1">
+                          {isEditingActiveSchedule
+                            ? futureSchedule
+                              ? `Próximo horário inicia a ${formatDatePT(futureSchedule.from)}. O término deve ser ${formatDatePT(addDays(futureSchedule.from, -1))}.`
+                              : "Requer um novo horário agendado para definir término."
+                            : "Em branco = vigência em aberto"}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1153,10 +1176,14 @@ export default function AssistantScheduleManager({
                           <div className={isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}>
                             <DatePicker
                               value={rotStartDate}
+                              hasError={!!scheduleFieldErrors.start}
                               minDate={isEditingActiveSchedule ? undefined : TODAY_STR}
                               onChange={(v) => {
                                 setRotStartDate(v);
                                 setScheduleError(null);
+                                if (scheduleFieldErrors.start) {
+                                  setScheduleFieldErrors((prev) => ({ ...prev, start: undefined }));
+                                }
                                 if (v && rotEndDate && rotEndDate < v) {
                                   setRotEndDate(v);
                                 }
@@ -1164,6 +1191,11 @@ export default function AssistantScheduleManager({
                               className="w-full"
                             />
                           </div>
+                          {scheduleFieldErrors.start && (
+                            <p className="text-[11px] text-destructive mt-1 font-medium">
+                              {scheduleFieldErrors.start}
+                            </p>
+                          )}
                           {!isEditingActiveSchedule && activeSchedule && (
                             <p className="text-[10px] text-muted-foreground mt-1">
                               {activeSchedule.to
@@ -1183,21 +1215,31 @@ export default function AssistantScheduleManager({
                           </label>
                           <DatePicker
                             value={rotEndDate}
+                            hasError={!!scheduleFieldErrors.end}
                             minDate={rotStartDate || undefined}
                             onChange={(v) => {
                               setRotEndDate(v);
                               setScheduleError(null);
+                              if (scheduleFieldErrors.end) {
+                                setScheduleFieldErrors((prev) => ({ ...prev, end: undefined }));
+                              }
                             }}
                             className="w-full"
                             placeholder="AAAA-MM-DD"
                           />
-                          <p className="text-[10px] text-muted-foreground/70 mt-1">
-                            {isEditingActiveSchedule
-                              ? futureSchedule
-                                ? `Próximo horário inicia a ${formatDatePT(futureSchedule.from)}. O término deve ser ${formatDatePT(addDays(futureSchedule.from, -1))}.`
-                                : "Requer um novo horário agendado para definir término."
-                              : "Em branco = vigência em aberto"}
-                          </p>
+                          {scheduleFieldErrors.end ? (
+                            <p className="text-[11px] text-destructive mt-1 font-medium">
+                              {scheduleFieldErrors.end}
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground/70 mt-1">
+                              {isEditingActiveSchedule
+                                ? futureSchedule
+                                  ? `Próximo horário inicia a ${formatDatePT(futureSchedule.from)}. O término deve ser ${formatDatePT(addDays(futureSchedule.from, -1))}.`
+                                  : "Requer um novo horário agendado para definir término."
+                                : "Em branco = vigência em aberto"}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -78,12 +78,14 @@ export default function ActivityTypesTab() {
   const [formColor, setFormColor] = useState("#6366F1");
   const [formActive, setFormActive] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<BackendActivityTypeResource | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   function openAdd() {
     setEditingId(null);
     setFormName("");
     setFormColor("#6366F1");
     setFormActive(true);
+    setFormError(null);
     setShowDialog(true);
   }
 
@@ -92,11 +94,16 @@ export default function ActivityTypesTab() {
     setFormName(t.name);
     setFormColor(t.color);
     setFormActive(t.active ?? true);
+    setFormError(null);
     setShowDialog(true);
   }
 
   async function saveType() {
-    if (!formName.trim()) return;
+    if (!formName.trim()) {
+      setFormError("O nome do tipo de atividade é obrigatório.");
+      return;
+    }
+    setFormError(null);
 
     if (editingId) {
       await updateMutation.mutateAsync({
@@ -117,6 +124,7 @@ export default function ActivityTypesTab() {
     setShowDialog(false);
     setEditingId(null);
     setFormName("");
+    setFormError(null);
   }
 
   async function handleDeleteConfirm() {
@@ -318,12 +326,24 @@ export default function ActivityTypesTab() {
                 </label>
                 <input
                   value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
+                  onChange={(e) => {
+                    setFormName(e.target.value);
+                    if (formError) setFormError(null);
+                  }}
                   onKeyDown={(e) => e.key === "Enter" && !isSaving && saveType()}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 transition-colors ${
+                    formError
+                      ? "border-destructive focus:ring-destructive"
+                      : "border-border focus:ring-ring"
+                  }`}
                   placeholder="Ex: Apoio Refeitório"
                   autoFocus
                 />
+                {formError && (
+                  <p className="text-[11px] text-destructive mt-1 font-medium">
+                    {formError}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1.5 font-medium">

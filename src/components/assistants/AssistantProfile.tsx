@@ -139,8 +139,13 @@ export default function AssistantProfile({
   const [exceptionExit, setExceptionExit] = useState("16:30");
   const [exceptionStartDate, setExceptionStartDate] = useState(TODAY_STR);
   const [exceptionEndDate, setExceptionEndDate] = useState("");
-  const [exceptionDateError, setExceptionDateError] = useState<string | null>(null);
-  const [exceptionTimeError, setExceptionTimeError] = useState<string | null>(null);
+  const [exceptionErrors, setExceptionErrors] = useState<{
+    type?: string;
+    startDate?: string;
+    endDate?: string;
+    days?: string;
+    time?: string;
+  }>({});
   const [exceptionDays, setExceptionDays] = useState<string[]>([
     "Seg",
     "Ter",
@@ -242,8 +247,7 @@ export default function AssistantProfile({
     setExceptionLunchStart("12:00");
     setExceptionLunchEnd("13:30");
     setExceptionLunchDuration("30");
-    setExceptionDateError(null);
-    setExceptionTimeError(null);
+    setExceptionErrors({});
     setShowAddException(true);
   }
 
@@ -267,36 +271,45 @@ export default function AssistantProfile({
       setExceptionLunchEnd("13:30");
       setExceptionLunchDuration("30");
     }
-    setExceptionDateError(null);
-    setExceptionTimeError(null);
+    setExceptionErrors({});
     setShowAddException(true);
   }
 
   function handleSaveException() {
-    setExceptionDateError(null);
-    setExceptionTimeError(null);
+    const errors: {
+      type?: string;
+      startDate?: string;
+      endDate?: string;
+      days?: string;
+      time?: string;
+    } = {};
 
-    if (!exceptionType.trim()) return;
+    if (!exceptionType.trim()) {
+      errors.type = "O tipo de exceção é obrigatório.";
+    }
 
     if (!exceptionStartDate) {
-      setExceptionDateError("A data de início de vigência é obrigatória.");
-      return;
+      errors.startDate = "A data de início de vigência é obrigatória.";
     }
 
     if (exceptionEndDate && exceptionEndDate < exceptionStartDate) {
-      setExceptionDateError("A data de fim não pode ser anterior à data de início.");
-      return;
+      errors.endDate = "A data de fim não pode ser anterior à data de início.";
     }
 
     if (exceptionDays.length === 0) {
-      setExceptionDateError("Selecione pelo menos um dia de trabalho para a exceção.");
-      return;
+      errors.days = "Selecione pelo menos um dia de trabalho.";
     }
 
     if (exceptionEntry && exceptionExit && exceptionExit <= exceptionEntry) {
-      setExceptionTimeError("A hora de saída tem de ser posterior à hora de entrada.");
+      errors.time = "A hora de saída tem de ser posterior à hora de entrada.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setExceptionErrors(errors);
       return;
     }
+
+    setExceptionErrors({});
 
     const computedDetail = exceptionDetail.trim()
       ? exceptionDetail.trim()
@@ -1072,16 +1085,6 @@ export default function AssistantProfile({
                 }
               >
                 <div className="space-y-4">
-                  {exceptionDateError && (
-                    <div className="p-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs font-medium">
-                      {exceptionDateError}
-                    </div>
-                  )}
-                  {exceptionTimeError && (
-                    <div className="p-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs font-medium">
-                      {exceptionTimeError}
-                    </div>
-                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
                       <label className="text-xs font-medium text-muted-foreground block mb-1">
@@ -1091,9 +1094,23 @@ export default function AssistantProfile({
                         type="text"
                         placeholder="Ex: Licença Amamentação"
                         value={exceptionType}
-                        onChange={(e) => setExceptionType(e.target.value)}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        onChange={(e) => {
+                          setExceptionType(e.target.value);
+                          if (exceptionErrors.type) {
+                            setExceptionErrors((prev) => ({ ...prev, type: undefined }));
+                          }
+                        }}
+                        className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                          exceptionErrors.type
+                            ? "border-destructive focus:ring-destructive"
+                            : "border-border focus:ring-ring"
+                        }`}
                       />
+                      {exceptionErrors.type && (
+                        <p className="text-[11px] text-destructive mt-1 font-medium">
+                          {exceptionErrors.type}
+                        </p>
+                      )}
                     </div>
                     <div className="col-span-2">
                       <label className="text-xs font-medium text-muted-foreground block mb-1">
@@ -1113,9 +1130,12 @@ export default function AssistantProfile({
                       </label>
                       <TimePicker
                         value={exceptionEntry}
+                        hasError={!!exceptionErrors.time}
                         onChange={(v) => {
                           setExceptionEntry(v);
-                          setExceptionTimeError(null);
+                          if (exceptionErrors.time) {
+                            setExceptionErrors((prev) => ({ ...prev, time: undefined }));
+                          }
                         }}
                         className="w-full"
                       />
@@ -1126,13 +1146,23 @@ export default function AssistantProfile({
                       </label>
                       <TimePicker
                         value={exceptionExit}
+                        hasError={!!exceptionErrors.time}
                         onChange={(v) => {
                           setExceptionExit(v);
-                          setExceptionTimeError(null);
+                          if (exceptionErrors.time) {
+                            setExceptionErrors((prev) => ({ ...prev, time: undefined }));
+                          }
                         }}
                         className="w-full"
                       />
                     </div>
+                    {exceptionErrors.time && (
+                      <div className="col-span-2">
+                        <p className="text-[11px] text-destructive font-medium">
+                          {exceptionErrors.time}
+                        </p>
+                      </div>
+                    )}
 
                     {/* Dias de trabalho */}
                     <div className="col-span-2 border-t border-border/60 pt-3">
@@ -1144,7 +1174,12 @@ export default function AssistantProfile({
                           <button
                             key={d}
                             type="button"
-                            onClick={() => toggleExceptionDay(d)}
+                            onClick={() => {
+                              toggleExceptionDay(d);
+                              if (exceptionErrors.days) {
+                                setExceptionErrors((prev) => ({ ...prev, days: undefined }));
+                              }
+                            }}
                             className={`w-8 h-8 rounded-lg border text-xs font-medium transition-colors ${
                               exceptionDays.includes(d)
                                 ? "bg-primary text-primary-foreground border-primary font-bold shadow-xs"
@@ -1155,6 +1190,11 @@ export default function AssistantProfile({
                           </button>
                         ))}
                       </div>
+                      {exceptionErrors.days && (
+                        <p className="text-[11px] text-destructive mt-1.5 font-medium">
+                          {exceptionErrors.days}
+                        </p>
+                      )}
                     </div>
 
                     {/* Pausa de almoço */}
@@ -1227,16 +1267,24 @@ export default function AssistantProfile({
                           </label>
                           <DatePicker
                             value={exceptionStartDate}
+                            hasError={!!exceptionErrors.startDate}
                             minDate={editingExceptionId ? undefined : TODAY_STR}
                             onChange={(v) => {
                               setExceptionStartDate(v);
-                              setExceptionDateError(null);
+                              if (exceptionErrors.startDate) {
+                                setExceptionErrors((prev) => ({ ...prev, startDate: undefined }));
+                              }
                               if (v && exceptionEndDate && exceptionEndDate < v) {
                                 setExceptionEndDate(v);
                               }
                             }}
                             className="w-full"
                           />
+                          {exceptionErrors.startDate && (
+                            <p className="text-[11px] text-destructive mt-1 font-medium">
+                              {exceptionErrors.startDate}
+                            </p>
+                          )}
                         </div>
                         <div>
                           <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
@@ -1244,17 +1292,26 @@ export default function AssistantProfile({
                           </label>
                           <DatePicker
                             value={exceptionEndDate}
+                            hasError={!!exceptionErrors.endDate}
                             minDate={exceptionStartDate || TODAY_STR}
                             onChange={(v) => {
                               setExceptionEndDate(v);
-                              setExceptionDateError(null);
+                              if (exceptionErrors.endDate) {
+                                setExceptionErrors((prev) => ({ ...prev, endDate: undefined }));
+                              }
                             }}
                             className="w-full"
                             placeholder="AAAA-MM-DD"
                           />
-                          <p className="text-[10px] text-muted-foreground/70 mt-1">
-                            Em branco = vigência em aberto
-                          </p>
+                          {exceptionErrors.endDate ? (
+                            <p className="text-[11px] text-destructive mt-1 font-medium">
+                              {exceptionErrors.endDate}
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground/70 mt-1">
+                              Em branco = vigência em aberto
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>

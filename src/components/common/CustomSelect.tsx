@@ -6,6 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
+import { cn } from "../ui/utils";
 
 export interface SelectOption {
   value: string;
@@ -25,6 +26,7 @@ export interface CustomSelectProps {
   contentClassName?: string;
   size?: "sm" | "default";
   disabled?: boolean;
+  hasError?: boolean;
 }
 
 export default function CustomSelect({
@@ -39,6 +41,7 @@ export default function CustomSelect({
   contentClassName,
   size = "default",
   disabled = false,
+  hasError = false,
 }: CustomSelectProps) {
   const handleChange = (val: string) => {
     if (onValueChange) {
@@ -60,7 +63,13 @@ export default function CustomSelect({
         onValueChange={handleChange}
         disabled={disabled}
       >
-        <SelectTrigger size={size} className={triggerClassName}>
+        <SelectTrigger
+          size={size}
+          className={cn(
+            triggerClassName,
+            hasError && "!border-destructive focus:!ring-destructive focus:!border-destructive"
+          )}
+        >
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent className={contentClassName}>

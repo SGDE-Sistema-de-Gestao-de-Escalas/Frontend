@@ -39,6 +39,7 @@ export default function RecalculateModal({
   const [substituteSchoolFilter, setSubstituteSchoolFilter] = useState<
     number | "all"
   >("all");
+  const [dateErrors, setDateErrors] = useState<{ start?: string; end?: string }>({});
 
   const currentSchool = SCHOOLS.find((s) => s.id === currentSchoolId);
 
@@ -148,9 +149,23 @@ export default function RecalculateModal({
                   </label>
                   <DatePicker
                     value={startDate}
-                    onChange={setStartDate}
+                    hasError={!!dateErrors.start}
+                    onChange={(v) => {
+                      setStartDate(v);
+                      if (dateErrors.start) {
+                        setDateErrors((p) => ({ ...p, start: undefined }));
+                      }
+                      if (v && endDate && endDate < v) {
+                        setEndDate(v);
+                      }
+                    }}
                     className="w-full"
                   />
+                  {dateErrors.start && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {dateErrors.start}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
@@ -158,9 +173,21 @@ export default function RecalculateModal({
                   </label>
                   <DatePicker
                     value={endDate}
-                    onChange={setEndDate}
+                    hasError={!!dateErrors.end}
+                    minDate={startDate || undefined}
+                    onChange={(v) => {
+                      setEndDate(v);
+                      if (dateErrors.end) {
+                        setDateErrors((p) => ({ ...p, end: undefined }));
+                      }
+                    }}
                     className="w-full"
                   />
+                  {dateErrors.end && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {dateErrors.end}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -223,7 +250,25 @@ export default function RecalculateModal({
               </button>
               <button
                 type="button"
-                onClick={() => setStep("gap")}
+                onClick={() => {
+                  const errors: { start?: string; end?: string } = {};
+                  if (!startDate) {
+                    errors.start = "A data de início é obrigatória.";
+                  }
+                  if (!endDate) {
+                    errors.end = "A data de fim é obrigatória.";
+                  } else if (startDate && endDate < startDate) {
+                    errors.end = "A data de fim não pode ser anterior à data de início.";
+                  }
+
+                  if (Object.keys(errors).length > 0) {
+                    setDateErrors(errors);
+                    return;
+                  }
+
+                  setDateErrors({});
+                  setStep("gap");
+                }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
               >
                 <RefreshCw size={13} />
