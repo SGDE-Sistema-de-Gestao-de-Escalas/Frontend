@@ -49,10 +49,11 @@ export default function HolidaysPage() {
   }
 
   function openEdit(h: BackendHolidayResource) {
+    const clean = (val: string | null | undefined) => (!val || val.trim() === "—" || val.trim() === "-" ? "" : val);
     setEditingHolidayId(h.id);
-    setNewName(h.name);
+    setNewName(clean(h.name));
     setNewDate(formatToIsoDate(h.date) || h.date);
-    setNewDescription(h.description || "");
+    setNewDescription(clean(h.description));
     setFormErrors({});
     setShowAdd(true);
   }

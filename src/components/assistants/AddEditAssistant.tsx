@@ -31,36 +31,39 @@ export default function AddEditAssistant({
 }: AddEditAssistantProps) {
   useDocumentTitle(isEdit ? "Editar Assistente" : "Novo Assistente");
 
+  // Helper to ensure empty string instead of null, undefined or dash placeholder
+  const clean = (val: string | null | undefined) => (!val || val.trim() === "—" || val.trim() === "-" ? "" : val);
+
   const [isActive, setIsActive] = useState<boolean>(
     assistant ? (assistant.is_active ?? assistant.active ?? true) : initialActive
   );
 
   // Form states for Personal Data
   const [firstName, setFirstName] = useState<string>(() => {
-    if (assistant?.first_name) return assistant.first_name;
-    if (assistant?.name) return assistant.name.split(" ")[0] || "";
+    if (assistant?.first_name) return clean(assistant.first_name);
+    if (assistant?.name) return clean(assistant.name.split(" ")[0]) || "";
     return "";
   });
   const [lastName, setLastName] = useState<string>(() => {
-    if (assistant?.last_name) return assistant.last_name;
+    if (assistant?.last_name) return clean(assistant.last_name);
     if (assistant?.name) {
       const parts = assistant.name.split(" ");
-      return parts.slice(1).join(" ") || "";
+      return clean(parts.slice(1).join(" ")) || "";
     }
     return "";
   });
   const [internalNumber, setInternalNumber] = useState<string>(() => {
-    return assistant?.internal_number || assistant?.mecanografico || assistant?.staffNumber || "";
+    return clean(assistant?.internal_number || assistant?.mecanografico || assistant?.staffNumber);
   });
-  const [email, setEmail] = useState<string>(assistant?.email || "");
-  const [phone, setPhone] = useState<string>(assistant?.phone || "");
-  const [birthDate, setBirthDate] = useState<string>(assistant?.birth_date || "");
-  const [admissionDate, setAdmissionDate] = useState<string>(assistant?.admission_date || "");
+  const [email, setEmail] = useState<string>(clean(assistant?.email));
+  const [phone, setPhone] = useState<string>(clean(assistant?.phone));
+  const [birthDate, setBirthDate] = useState<string>(clean(assistant?.birth_date));
+  const [admissionDate, setAdmissionDate] = useState<string>(clean(assistant?.admission_date));
 
   // Fiscal / SSN
-  const [nif, setNif] = useState<string>(assistant?.nif || "");
+  const [nif, setNif] = useState<string>(clean(assistant?.nif));
   const [socialSecurityNumber, setSocialSecurityNumber] = useState<string>(
-    assistant?.social_security_number || ""
+    clean(assistant?.social_security_number)
   );
 
   // Criminal Record
@@ -68,25 +71,25 @@ export default function AddEditAssistant({
     assistant?.has_criminal_record ?? true
   );
   const [criminalRecordExpiry, setCriminalRecordExpiry] = useState<string>(
-    assistant?.criminal_record_expiry || ""
+    clean(assistant?.criminal_record_expiry)
   );
 
   // Address
-  const [addressStreet, setAddressStreet] = useState<string>(assistant?.address_street || "");
+  const [addressStreet, setAddressStreet] = useState<string>(clean(assistant?.address_street));
   const [addressZipCode, setAddressZipCode] = useState<string>(
-    assistant?.address_zip_code || ""
+    clean(assistant?.address_zip_code)
   );
-  const [addressCity, setAddressCity] = useState<string>(assistant?.address_city || "");
+  const [addressCity, setAddressCity] = useState<string>(clean(assistant?.address_city));
 
   // Emergency Contact
   const [emergencyName, setEmergencyName] = useState<string>(
-    assistant?.emergency_contact_name || ""
+    clean(assistant?.emergency_contact_name)
   );
   const [emergencyPhone, setEmergencyPhone] = useState<string>(
-    assistant?.emergency_contact_phone || ""
+    clean(assistant?.emergency_contact_phone)
   );
   const [emergencyKinship, setEmergencyKinship] = useState<string>(
-    assistant?.emergency_contact_kinship || ""
+    clean(assistant?.emergency_contact_kinship)
   );
 
   // Availability / Transfer (managed directly on the profile page)

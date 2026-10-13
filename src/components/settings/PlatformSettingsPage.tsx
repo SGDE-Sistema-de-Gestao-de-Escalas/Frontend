@@ -114,12 +114,14 @@ export default function PlatformSettingsPage() {
     setShowSchoolForm(true);
   }
 
+  const clean = (val: string | null | undefined) => (!val || val.trim() === "—" || val.trim() === "-" ? "" : val);
+
   function openEditSchool(s: School) {
-    setSchoolName(s.name);
-    setSchoolAcronym(s.acronym || "");
-    setSchoolAddress(s.address || "");
-    setSchoolPhone(s.phone || "");
-    setSchoolEmail(s.email || "");
+    setSchoolName(clean(s.name));
+    setSchoolAcronym(clean(s.acronym));
+    setSchoolAddress(clean(s.address));
+    setSchoolPhone(clean(s.phone));
+    setSchoolEmail(clean(s.email));
     setSchoolEditId(s.id);
     setSchoolFormErrors({});
     setShowSchoolForm(true);
@@ -593,9 +595,9 @@ export default function PlatformSettingsPage() {
   }
 
   function openEditAdmin(admin: AdminUser) {
-    setAdminFirstName(admin.first_name || "");
-    setAdminLastName(admin.last_name || "");
-    setAdminEmail(admin.email);
+    setAdminFirstName(clean(admin.first_name));
+    setAdminLastName(clean(admin.last_name));
+    setAdminEmail(clean(admin.email));
     setAdminActive(admin.is_active ?? admin.active ?? true);
     setAdminEditId(admin.id);
     setAdminFormErrors({});
