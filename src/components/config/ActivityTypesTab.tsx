@@ -401,7 +401,7 @@ export default function ActivityTypesTab() {
             <button
               type="button"
               onClick={saveType}
-              disabled={!formName.trim() || isSaving}
+              disabled={isSaving}
               className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-1.5"
             >
               {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}

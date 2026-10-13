@@ -1,4 +1,4 @@
-export type DayOfWeekNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export type DayOfWeekNumber = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface OperatingRuleDay {
   day_of_week: DayOfWeekNumber;

@@ -8,23 +8,23 @@ import {
 import { AssistantScheduleItem } from "../../components/assistants/AssistantScheduleManager";
 
 const DAY_MAP_TO_NUM: Record<string, number> = {
-  Seg: 1,
-  Ter: 2,
-  Qua: 3,
-  Qui: 4,
-  Sex: 5,
-  Sáb: 6,
-  Dom: 7,
+  Seg: 0,
+  Ter: 1,
+  Qua: 2,
+  Qui: 3,
+  Sex: 4,
+  Sáb: 5,
+  Dom: 6,
 };
 
 const NUM_TO_DAY_MAP: Record<number, string> = {
-  1: "Seg",
-  2: "Ter",
-  3: "Qua",
-  4: "Qui",
-  5: "Sex",
-  6: "Sáb",
-  7: "Dom",
+  0: "Seg",
+  1: "Ter",
+  2: "Qua",
+  3: "Qui",
+  4: "Sex",
+  5: "Sáb",
+  6: "Dom",
 };
 
 export function scheduleItemToApiPayload(
@@ -49,7 +49,7 @@ export function scheduleItemToApiPayload(
           lunch_end: item.lunch?.end || null,
           lunch_duration_minutes: item.lunch?.duration ?? 30,
           days: (item.days || ["Seg", "Ter", "Qua", "Qui", "Sex"]).map(
-            (d) => DAY_MAP_TO_NUM[d] || 1
+            (d) => DAY_MAP_TO_NUM[d] ?? 0
           ),
         },
       ],
@@ -80,7 +80,7 @@ export function scheduleItemToApiPayload(
         lunch_end: item.shiftA?.lunch?.end || null,
         lunch_duration_minutes: item.shiftA?.lunch?.duration ?? 30,
         days: (item.days || ["Seg", "Ter", "Qua", "Qui", "Sex"]).map(
-          (d) => DAY_MAP_TO_NUM[d] || 1
+          (d) => DAY_MAP_TO_NUM[d] ?? 0
         ),
       },
       {
@@ -92,7 +92,7 @@ export function scheduleItemToApiPayload(
         lunch_end: item.shiftB?.lunch?.end || null,
         lunch_duration_minutes: item.shiftB?.lunch?.duration ?? 30,
         days: (item.days || ["Seg", "Ter", "Qua", "Qui", "Sex"]).map(
-          (d) => DAY_MAP_TO_NUM[d] || 1
+          (d) => DAY_MAP_TO_NUM[d] ?? 0
         ),
       },
     ],

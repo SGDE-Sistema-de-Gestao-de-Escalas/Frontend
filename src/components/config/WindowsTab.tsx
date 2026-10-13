@@ -41,16 +41,16 @@ import {
 } from "../../types/operatingHours.types";
 
 const DAY_NAMES: Record<DayOfWeekNumber, { short: string; full: string }> = {
-  1: { short: "Seg", full: "Segunda-feira" },
-  2: { short: "Ter", full: "Terça-feira" },
-  3: { short: "Qua", full: "Quarta-feira" },
-  4: { short: "Qui", full: "Quinta-feira" },
-  5: { short: "Sex", full: "Sexta-feira" },
-  6: { short: "Sáb", full: "Sábado" },
-  7: { short: "Dom", full: "Domingo" },
+  0: { short: "Seg", full: "Segunda-feira" },
+  1: { short: "Ter", full: "Terça-feira" },
+  2: { short: "Qua", full: "Quarta-feira" },
+  3: { short: "Qui", full: "Quinta-feira" },
+  4: { short: "Sex", full: "Sexta-feira" },
+  5: { short: "Sáb", full: "Sábado" },
+  6: { short: "Dom", full: "Domingo" },
 };
 
-const ALL_DAYS: DayOfWeekNumber[] = [1, 2, 3, 4, 5, 6, 7];
+const ALL_DAYS: DayOfWeekNumber[] = [0, 1, 2, 3, 4, 5, 6];
 
 export default function WindowsTab() {
   const { role } = useAuth();
@@ -126,9 +126,9 @@ export default function WindowsTab() {
     const init: any = {};
     ALL_DAYS.forEach((d) => {
       init[d] = {
-        enabled: d >= 1 && d <= 5,
+        enabled: d >= 0 && d <= 4,
         opening_time: "08:00",
-        closing_time: d === 5 ? "17:30" : "18:30",
+        closing_time: d === 4 ? "17:30" : "18:30",
         lunch_start: "12:15",
         lunch_end: "13:45",
         lunch_duration_minutes: 60,
@@ -145,9 +145,9 @@ export default function WindowsTab() {
     const init: any = {};
     ALL_DAYS.forEach((d) => {
       init[d] = {
-        enabled: d >= 1 && d <= 5,
+        enabled: d >= 0 && d <= 4,
         opening_time: "08:00",
-        closing_time: d === 5 ? "17:30" : "18:30",
+        closing_time: d === 4 ? "17:30" : "18:30",
         lunch_start: "12:15",
         lunch_end: "13:45",
         lunch_duration_minutes: 60,
@@ -192,13 +192,13 @@ export default function WindowsTab() {
   }
 
   function handleCopyMondayToWeekdays() {
-    const monday = ruleDaysState[1];
+    const monday = ruleDaysState[0];
     setRuleDaysState((prev) => ({
       ...prev,
+      1: { ...monday },
       2: { ...monday },
       3: { ...monday },
       4: { ...monday },
-      5: { ...monday },
     }));
   }
 

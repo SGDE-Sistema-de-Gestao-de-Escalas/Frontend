@@ -746,7 +746,7 @@ export default function AddEditAssistant({
           onClick={handleSaveAssistant}
           className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs disabled:opacity-50"
         >
-          {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+          {isSaving && <Loader2 size={14} className="animate-spin" />}
           {isEdit ? "Guardar Alterações" : "Criar Assistente"}
         </button>
       </div>

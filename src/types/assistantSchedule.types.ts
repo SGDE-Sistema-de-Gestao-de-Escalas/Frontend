@@ -57,7 +57,7 @@ export interface AssistantExceptionApi {
   valid_until?: string | null;
   start_time?: string | null;
   end_time?: string | null;
-  days?: number[] | null; // 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sáb, 7=Dom
+  days?: number[] | null; // 0=Seg, 1=Ter, 2=Qua, 3=Qui, 4=Sex, 5=Sáb, 6=Dom
   lunch_enabled?: boolean;
   lunch_start?: string | null;
   lunch_end?: string | null;

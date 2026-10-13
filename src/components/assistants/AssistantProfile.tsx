@@ -52,23 +52,23 @@ import type { EntityId } from "../../types";
 const WEEK_DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
 const DAY_MAP_TO_NUM: Record<string, number> = {
-  Seg: 1,
-  Ter: 2,
-  Qua: 3,
-  Qui: 4,
-  Sex: 5,
-  Sáb: 6,
-  Dom: 7,
+  Seg: 0,
+  Ter: 1,
+  Qua: 2,
+  Qui: 3,
+  Sex: 4,
+  Sáb: 5,
+  Dom: 6,
 };
 
 const NUM_TO_DAY_MAP: Record<number, string> = {
-  1: "Seg",
-  2: "Ter",
-  3: "Qua",
-  4: "Qui",
-  5: "Sex",
-  6: "Sáb",
-  7: "Dom",
+  0: "Seg",
+  1: "Ter",
+  2: "Qua",
+  3: "Qui",
+  4: "Sex",
+  5: "Sáb",
+  6: "Dom",
 };
 
 interface ExceptionRule {
@@ -333,7 +333,7 @@ export default function AssistantProfile({
       end_time: exceptionExit || null,
       valid_from: exceptionStartDate,
       valid_until: exceptionEndDate || null,
-      days: exceptionDays.map((d) => DAY_MAP_TO_NUM[d] || 1),
+      days: exceptionDays.map((d) => DAY_MAP_TO_NUM[d] ?? 0),
       lunch_enabled: exceptionLunchEnabled,
       lunch_start: exceptionLunchEnabled ? exceptionLunchStart : null,
       lunch_end: exceptionLunchEnabled ? exceptionLunchEnd : null,
@@ -1076,7 +1076,6 @@ export default function AssistantProfile({
                     <button
                       type="button"
                       onClick={handleSaveException}
-                      disabled={!exceptionType.trim() || !exceptionStartDate || exceptionDays.length === 0}
                       className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
                     >
                       {editingExceptionId ? "Guardar Alterações" : "Criar Exceção"}

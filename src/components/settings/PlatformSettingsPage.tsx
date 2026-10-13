@@ -1058,7 +1058,7 @@ export default function PlatformSettingsPage() {
                   <button
                     type="button"
                     onClick={handleSaveSchool}
-                    disabled={!schoolName.trim() || !schoolAcronym.trim() || savingSchool}
+                    disabled={savingSchool}
                     className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs flex items-center justify-center gap-1.5"
                   >
                     {savingSchool && <Loader2 size={13} className="animate-spin" />}
@@ -1500,7 +1500,6 @@ export default function PlatformSettingsPage() {
                   <button
                     type="button"
                     onClick={handleSaveAdmin}
-                    disabled={!adminFirstName.trim() || !adminLastName.trim() || !adminEmail.trim()}
                     className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
                   >
                     {adminEditId !== null ? "Guardar Alterações" : "Criar Administrador"}
@@ -1889,7 +1888,7 @@ export default function PlatformSettingsPage() {
                   <button
                     type="button"
                     onClick={handleSaveAbsenceType}
-                    disabled={savingAbsenceType || !absenceTypeName.trim()}
+                    disabled={savingAbsenceType}
                     className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
                   >
                     {savingAbsenceType ? (
