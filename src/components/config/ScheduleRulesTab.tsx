@@ -58,21 +58,13 @@ export default function ScheduleRulesTab() {
   const [formValidityStart, setFormValidityStart] = useState(todayStr);
   const [formValidityEnd, setFormValidityEnd] = useState("");
   const [formAssistantIds, setFormAssistantIds] = useState<EntityId[]>(allAssistantIds);
-  const [formStep, setFormStep] = useState<"form" | "conflict" | "done">("form");
+  const [formStep, setFormStep] = useState<"form" | "done">("form");
   const [formError, setFormError] = useState<string | null>(null);
 
   const isEditing = editingRuleId !== null;
   const selectedActivity = DEFAULT_ACTIVITY_TYPES.find(
     (a) => a.id === formActivityId
   );
-  const conflictingRule = !isEditing
-    ? rules.find(
-        (r) =>
-          r.activityTypeId === formActivityId &&
-          r.periodStart === formPeriodStart &&
-          r.end === null
-      )
-    : null;
 
   function toggleDay(i: number) {
     setFormDays((p) => {
@@ -197,10 +189,6 @@ export default function ScheduleRulesTab() {
 
     setFormError(null);
 
-    if (!isEditing && conflictingRule) {
-      setFormStep("conflict");
-      return;
-    }
     const finalAssistantIds = getSortedSelectedAssistantIds();
     if (isEditing) {
       setRules((prev) =>
@@ -381,9 +369,9 @@ export default function ScheduleRulesTab() {
                     </td>
                     <td className="px-4 py-3">
                       {rule.type === "mandatory" ? (
-                        <Badge variant="destructive" className="text-[10px]">
+                        <span className="inline-flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
                           Obrigatório
-                        </Badge>
+                        </span>
                       ) : (
                         <Badge variant="secondary" className="text-[10px]">
                           Facultativo
@@ -438,8 +426,6 @@ export default function ScheduleRulesTab() {
                 ? isEditing
                   ? "Editar Regra de Horário"
                   : "Nova Regra de Horário"
-                : formStep === "conflict"
-                ? "Sobreposição detetada"
                 : isEditing
                 ? "Regra atualizada"
                 : "Regra criada"}
@@ -804,42 +790,7 @@ export default function ScheduleRulesTab() {
             </div>
           )}
 
-          {formStep === "conflict" && conflictingRule && (
-            <div className="p-5 space-y-4">
-              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
-                <AlertTriangle
-                  size={18}
-                  className="text-amber-600 flex-shrink-0 mt-0.5"
-                />
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <p className="font-semibold text-foreground">
-                    Já existe uma regra ativa para {selectedActivity?.label} às{" "}
-                    {formPeriodStart}.
-                  </p>
-                  <p>
-                    A regra anterior será encerrada na data de início da nova
-                    regra.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/10 rounded-b-xl -mx-5 -mb-5 mt-4">
-                <button
-                  type="button"
-                  onClick={() => setFormStep("form")}
-                  className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Voltar
-                </button>
-                <button
-                  type="button"
-                  onClick={confirmCreate}
-                  className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
-                >
-                  Continuar e Criar
-                </button>
-              </div>
-            </div>
-          )}
+
 
           {formStep === "done" && (
             <div className="p-8 text-center space-y-3">
