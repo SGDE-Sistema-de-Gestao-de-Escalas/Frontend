@@ -74,7 +74,7 @@ export default function AddEditAssistant({
   // Address
   const [addressStreet, setAddressStreet] = useState<string>(assistant?.address_street || "");
   const [addressZipCode, setAddressZipCode] = useState<string>(
-    assistant?.address_zip_code || assistant?.address_postal_code || ""
+    assistant?.address_zip_code || ""
   );
   const [addressCity, setAddressCity] = useState<string>(assistant?.address_city || "");
 

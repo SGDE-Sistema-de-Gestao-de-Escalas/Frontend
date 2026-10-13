@@ -1149,7 +1149,7 @@ export default function WindowsTab() {
                       <span className="text-[10px] text-muted-foreground block mb-1">Duração p/ Assistente *</span>
                       <CustomSelect
                         value={excLunchDuration}
-                        onChange={setExcLunchDuration}
+                        onChange={(v) => setExcLunchDuration(typeof v === "string" ? v : v.target.value)}
                         options={[
                           { value: "30", label: "30 minutos" },
                           { value: "45", label: "45 minutos" },
@@ -1232,9 +1232,9 @@ export default function WindowsTab() {
       <ConfirmationModal
         open={!!deleteRuleTarget}
         title="Eliminar Versão de Horário"
-        message={`Tem a certeza de que pretende eliminar a versão de horário com início a ${deleteRuleTarget?.valid_from}? Esta ação não pode ser desfeita.`}
-        confirmText="Eliminar Versão"
-        cancelText="Cancelar"
+        description={`Tem a certeza de que pretende eliminar a versão de horário com início a ${deleteRuleTarget?.valid_from}? Esta ação não pode ser desfeita.`}
+        confirmLabel="Eliminar Versão"
+        cancelLabel="Cancelar"
         variant="danger"
         onConfirm={async () => {
           if (deleteRuleTarget) {
@@ -1242,16 +1242,16 @@ export default function WindowsTab() {
             setDeleteRuleTarget(null);
           }
         }}
-        onCancel={() => setDeleteRuleTarget(null)}
+        onClose={() => setDeleteRuleTarget(null)}
       />
 
       {/* Confirmação de Eliminar Exceção */}
       <ConfirmationModal
         open={!!deleteExceptionTarget}
         title="Eliminar Exceção"
-        message={`Tem a certeza de que pretende eliminar a exceção "${deleteExceptionTarget?.name}"? O calendário voltará a considerar o horário fixo para este período.`}
-        confirmText="Eliminar Exceção"
-        cancelText="Cancelar"
+        description={`Tem a certeza de que pretende eliminar a exceção "${deleteExceptionTarget?.name}"? O calendário voltará a considerar o horário fixo para este período.`}
+        confirmLabel="Eliminar Exceção"
+        cancelLabel="Cancelar"
         variant="danger"
         onConfirm={async () => {
           if (deleteExceptionTarget) {
@@ -1259,7 +1259,7 @@ export default function WindowsTab() {
             setDeleteExceptionTarget(null);
           }
         }}
-        onCancel={() => setDeleteExceptionTarget(null)}
+        onClose={() => setDeleteExceptionTarget(null)}
       />
     </div>
   );
