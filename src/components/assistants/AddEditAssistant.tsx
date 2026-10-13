@@ -711,7 +711,7 @@ export default function AddEditAssistant({
             </div>
 
             {hasCriminalRecord && (
-              <div className="pt-2 border-t border-border/40">
+              <div className="pt-4 border-t border-border/40">
                 <label className="text-xs font-medium text-muted-foreground block mb-1.5">
                   Data de Validade do Certificado
                 </label>
@@ -729,7 +729,7 @@ export default function AddEditAssistant({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-3 mt-6 pt-4 border-t border-border">
+      <div className="flex items-center gap-3 mt-6 pt-6 border-t border-border">
         <div className="flex-1" />
         <button
           type="button"

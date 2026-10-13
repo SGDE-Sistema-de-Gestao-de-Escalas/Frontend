@@ -671,7 +671,7 @@ export default function AssistantProfile({
                   {assistant?.address_street || "Não especificado"}
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/40">
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/40">
                 <div>
                   <span className="text-muted-foreground block mb-0.5">Código Postal</span>
                   <span className="font-mono text-xs font-medium text-foreground">
@@ -707,7 +707,7 @@ export default function AssistantProfile({
                     {assistant.emergency_contact_name}
                   </p>
                 </div>
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/40">
+                <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-border/40">
                   <div>
                     <span className="text-muted-foreground block mb-0.5">Grau de Parentesco</span>
                     <span className="text-xs font-medium text-foreground">
@@ -769,7 +769,7 @@ export default function AssistantProfile({
                 })()}
               </div>
 
-              <div className="pt-2 border-t border-border/40 text-xs">
+              <div className="pt-3 border-t border-border/40 text-xs">
                 <span className="text-muted-foreground block mb-0.5">Data de Validade</span>
                 <span className="font-mono text-xs font-medium text-foreground">
                   {formatDateDisplay(assistant?.criminal_record_expiry)}
@@ -1040,7 +1040,7 @@ export default function AssistantProfile({
                       />
                     </div>
                   </div>
-                  <div className="flex gap-2 pt-2 border-t border-border">
+                  <div className="flex gap-2 pt-4 border-t border-border">
                     <button
                       type="button"
                       onClick={handleSaveException}

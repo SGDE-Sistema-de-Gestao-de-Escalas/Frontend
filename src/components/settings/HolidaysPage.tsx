@@ -273,7 +273,7 @@ export default function HolidaysPage() {
                   />
                 </div>
 
-                <div className="flex gap-3 pt-2 border-t border-border">
+                <div className="flex gap-3 pt-4 border-t border-border">
                   <button
                     type="button"
                     onClick={() => setShowAdd(false)}

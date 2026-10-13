@@ -828,7 +828,7 @@ export default function AssistantScheduleManager({
             {/* Fixed shift */}
             {shiftProfile === "fixed" && (
               <Card className="p-5 space-y-4">
-                <div className={isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}>
+                <div className={`space-y-4 ${isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}`}>
                   <div>
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
                       Horário Diário
@@ -1185,7 +1185,7 @@ export default function AssistantScheduleManager({
                           </div>
                         </div>
 
-                        <div className="border-t border-border/60 pt-3">
+                        <div className="border-t border-border/60 pt-4">
                           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                             Dias de Trabalho
                           </p>
