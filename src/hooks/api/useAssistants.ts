@@ -33,8 +33,17 @@ export function useAssistant(id?: number | string) {
     queryKey: [...ASSISTANTS_QUERY_KEY, "detail", id],
     queryFn: async (): Promise<Assistant | null> => {
       if (!id) return null;
-      const result = await assistantsService.getById(id);
-      return result.data ?? null;
+      const result: any = await assistantsService.getById(id);
+      const data =
+        result?.data?.assistant ??
+        result?.data?.data ??
+        result?.data ??
+        result?.assistant ??
+        result;
+
+      if (!data || typeof data !== "object") return null;
+      if (Array.isArray(data)) return data[0] ?? null;
+      return data;
     },
     enabled: !!id,
     retry: false,

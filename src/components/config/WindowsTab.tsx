@@ -19,6 +19,7 @@ import TimePicker from "../common/TimePicker";
 import DatePicker from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import CustomSelect from "../common/CustomSelect";
+import ActionTooltip from "../common/ActionTooltip";
 import { useAuth } from "../../context/AuthContext";
 import { useSchool } from "../../context/SchoolContext";
 import {
@@ -417,15 +418,28 @@ export default function WindowsTab() {
                   </button>
                 )}
 
-                {isAdmin && currentRule.can_edit && (
-                  <button
-                    type="button"
-                    onClick={() => openEditRuleModal(currentRule)}
-                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-border hover:bg-muted text-foreground transition-colors"
+                {isAdmin && (
+                  <ActionTooltip
+                    content={
+                      currentRule.can_edit === false
+                        ? currentRule.cannot_edit_reason || "Esta regra não pode ser editada"
+                        : "Editar horário base"
+                    }
                   >
-                    <Pencil size={12} />
-                    Editar
-                  </button>
+                    <button
+                      type="button"
+                      disabled={currentRule.can_edit === false}
+                      onClick={() => openEditRuleModal(currentRule)}
+                      className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-border transition-colors ${
+                        currentRule.can_edit === false
+                          ? "opacity-40 cursor-not-allowed text-muted-foreground bg-muted/20"
+                          : "hover:bg-muted text-foreground cursor-pointer"
+                      }`}
+                    >
+                      <Pencil size={12} />
+                      Editar
+                    </button>
+                  </ActionTooltip>
                 )}
               </div>
             </div>
@@ -511,26 +525,49 @@ export default function WindowsTab() {
 
                         {isAdmin && (
                           <div className="flex items-center gap-1.5">
-                            {r.can_edit && (
+                            <ActionTooltip
+                              content={
+                                r.can_edit === false
+                                  ? r.cannot_edit_reason || "Esta versão não pode ser editada"
+                                  : "Editar versão futura"
+                              }
+                            >
                               <button
                                 type="button"
+                                disabled={r.can_edit === false}
                                 onClick={() => openEditRuleModal(r)}
-                                className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-md border border-border hover:bg-muted text-foreground transition-colors"
+                                className={`flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-md border border-border transition-colors ${
+                                  r.can_edit === false
+                                    ? "opacity-40 cursor-not-allowed text-muted-foreground bg-muted/20"
+                                    : "hover:bg-muted text-foreground cursor-pointer"
+                                }`}
                               >
                                 <Pencil size={11} />
                                 Editar
                               </button>
-                            )}
-                            {r.can_delete && (
+                            </ActionTooltip>
+
+                            <ActionTooltip
+                              content={
+                                r.can_delete === false
+                                  ? r.cannot_delete_reason || "Esta versão não pode ser eliminada"
+                                  : "Eliminar versão futura"
+                              }
+                            >
                               <button
                                 type="button"
+                                disabled={r.can_delete === false}
                                 onClick={() => setDeleteRuleTarget(r)}
-                                className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-md border border-red-500/20 text-red-600 hover:bg-red-500/10 transition-colors"
+                                className={`flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-md border transition-colors ${
+                                  r.can_delete === false
+                                    ? "opacity-40 cursor-not-allowed text-muted-foreground border-border bg-muted/20"
+                                    : "border-red-500/20 text-red-600 hover:bg-red-500/10 cursor-pointer"
+                                }`}
                               >
                                 <Trash2 size={11} />
                                 Eliminar
                               </button>
-                            )}
+                            </ActionTooltip>
                           </div>
                         )}
                       </div>
@@ -750,27 +787,51 @@ export default function WindowsTab() {
 
                   {isAdmin && (
                     <div className="flex items-center justify-end gap-1.5 pt-3 mt-3 border-t border-border">
-                      {(exc.can_edit_all || exc.can_change_end_date) && (
+                      <ActionTooltip
+                        content={
+                          !exc.can_edit_all && !exc.can_change_end_date
+                            ? "Esta exceção não pode ser editada"
+                            : exc.can_edit_all
+                            ? "Editar exceção"
+                            : "Alterar data de fim"
+                        }
+                      >
                         <button
                           type="button"
+                          disabled={!exc.can_edit_all && !exc.can_change_end_date}
                           onClick={() => openEditExceptionModal(exc)}
-                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-border hover:bg-muted text-foreground transition-colors"
+                          className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
+                            !exc.can_edit_all && !exc.can_change_end_date
+                              ? "opacity-40 cursor-not-allowed text-muted-foreground border-border bg-muted/20"
+                              : "border-border hover:bg-muted text-foreground cursor-pointer"
+                          }`}
                         >
                           <Pencil size={12} />
                           {exc.can_edit_all ? "Editar" : "Alterar Data de Fim"}
                         </button>
-                      )}
+                      </ActionTooltip>
 
-                      {exc.can_delete && (
+                      <ActionTooltip
+                        content={
+                          exc.can_delete === false
+                            ? exc.cannot_delete_reason || "Esta exceção não pode ser eliminada"
+                            : "Eliminar exceção"
+                        }
+                      >
                         <button
                           type="button"
+                          disabled={exc.can_delete === false}
                           onClick={() => setDeleteExceptionTarget(exc)}
-                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-red-500/20 text-red-600 hover:bg-red-500/10 transition-colors"
+                          className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
+                            exc.can_delete === false
+                              ? "opacity-40 cursor-not-allowed text-muted-foreground border-border bg-muted/20"
+                              : "border-red-500/20 text-red-600 hover:bg-red-500/10 cursor-pointer"
+                          }`}
                         >
                           <Trash2 size={12} />
                           Eliminar
                         </button>
-                      )}
+                      </ActionTooltip>
                     </div>
                   )}
                 </Card>

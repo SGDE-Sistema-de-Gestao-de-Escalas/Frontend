@@ -29,6 +29,7 @@ import TimePicker from "../common/TimePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import CustomSelect from "../common/CustomSelect";
 import AssistantSelect, { isAssistantActive } from "../common/AssistantSelect";
+import ActionTooltip from "../common/ActionTooltip";
 import {
   useAbsencesList,
   useCreateAbsence,
@@ -743,40 +744,47 @@ export default function AbsenceManagement() {
 
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {renderStatusBadge(selectedAbsence.status)}
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEdit(selectedAbsence)}
-                    disabled={isMutating || selectedAbsence.can_edit === false}
-                    className={`p-1.5 rounded-lg border border-border transition-colors ${
-                      selectedAbsence.can_edit === false
-                        ? "opacity-40 cursor-not-allowed text-muted-foreground bg-muted/20"
-                        : "hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
-                    }`}
-                    title={
+                  <ActionTooltip
+                    content={
                       selectedAbsence.can_edit === false
                         ? selectedAbsence.cannot_edit_reason || "Esta ausência não pode ser editada"
                         : "Editar ausência"
                     }
                   >
-                    <Pencil size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteConfirmTarget(selectedAbsence)}
-                    disabled={isMutating || selectedAbsence.can_delete === false}
-                    className={`p-1.5 rounded-lg border border-border transition-colors ${
-                      selectedAbsence.can_delete === false
-                        ? "opacity-40 cursor-not-allowed text-muted-foreground bg-muted/20"
-                        : "hover:border-destructive/30 hover:bg-destructive/10 text-muted-foreground hover:text-destructive cursor-pointer"
-                    }`}
-                    title={
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(selectedAbsence)}
+                      disabled={isMutating || selectedAbsence.can_edit === false}
+                      className={`p-1.5 rounded-lg border border-border transition-colors ${
+                        selectedAbsence.can_edit === false
+                          ? "opacity-40 cursor-not-allowed text-muted-foreground bg-muted/20"
+                          : "hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                      }`}
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  </ActionTooltip>
+
+                  <ActionTooltip
+                    content={
                       selectedAbsence.can_delete === false
                         ? selectedAbsence.cannot_delete_reason || "Esta ausência não pode ser eliminada"
                         : "Eliminar ausência"
                     }
                   >
-                    <Trash2 size={13} />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmTarget(selectedAbsence)}
+                      disabled={isMutating || selectedAbsence.can_delete === false}
+                      className={`p-1.5 rounded-lg border border-border transition-colors ${
+                        selectedAbsence.can_delete === false
+                          ? "opacity-40 cursor-not-allowed text-muted-foreground bg-muted/20"
+                          : "hover:border-destructive/30 hover:bg-destructive/10 text-muted-foreground hover:text-destructive cursor-pointer"
+                      }`}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </ActionTooltip>
                 </div>
               </div>
 

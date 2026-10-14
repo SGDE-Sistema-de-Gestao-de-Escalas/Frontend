@@ -17,6 +17,7 @@ import Modal from "../common/Modal";
 import ConfirmationModal from "../common/ConfirmationModal";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
+import ActionTooltip from "../common/ActionTooltip";
 import { notify } from "../common/FeedbackNotification";
 import {
   BLOCK_STYLES,
@@ -626,51 +627,32 @@ export default function AssistantScheduleManager({
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
-                  {(h.can_edit !== false || h.can_change_end_date) && (
+                  <ActionTooltip
+                    content={
+                      h.cannot_edit_reason ||
+                      (h.can_edit === false && h.can_change_end_date
+                        ? "Apenas a data de fim pode ser ajustada para este horário."
+                        : h.can_edit === false
+                        ? "Não é possível editar este horário."
+                        : "Editar horário")
+                    }
+                  >
                     <button
                       type="button"
+                      disabled={h.can_edit === false && !h.can_change_end_date}
                       onClick={() => handleOpenEditSchedule(h)}
-                      className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      title={
-                        h.cannot_edit_reason ||
-                        (h.can_edit === false && h.can_change_end_date
-                          ? "Apenas a data de fim pode ser ajustada para este horário."
-                          : "Editar horário")
-                      }
+                      className={`p-1.5 rounded-md transition-colors ${
+                        h.can_edit === false && !h.can_change_end_date
+                          ? "opacity-30 cursor-not-allowed text-muted-foreground"
+                          : "hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                      }`}
                     >
                       <Pencil size={13} />
                     </button>
-                  )}
+                  </ActionTooltip>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (h.can_delete === false) {
-                        notify.error(
-                          h.cannot_delete_reason ||
-                            "Não é possível eliminar este horário."
-                        );
-                        return;
-                      }
-                      if (isActiveSchedule) {
-                        notify.error(
-                          "Não é possível eliminar o horário em vigor. O assistente tem de ter sempre um horário ativo."
-                        );
-                        return;
-                      }
-                      if (schedules.length <= 1) {
-                        notify.error("O assistente tem de ter pelo menos um horário.");
-                        return;
-                      }
-                      setScheduleToDelete(h);
-                    }}
-                    disabled={h.can_delete === false || isActiveSchedule || schedules.length <= 1}
-                    className={`p-1.5 rounded-md transition-colors ${
-                      h.can_delete === false || isActiveSchedule || schedules.length <= 1
-                        ? "opacity-30 cursor-not-allowed text-muted-foreground"
-                        : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                    }`}
-                    title={
+                  <ActionTooltip
+                    content={
                       h.cannot_delete_reason ||
                       (isActiveSchedule
                         ? "Não é possível eliminar o horário em vigor."
@@ -679,8 +661,38 @@ export default function AssistantScheduleManager({
                         : "Eliminar horário")
                     }
                   >
-                    <Trash2 size={13} />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (h.can_delete === false) {
+                          notify.error(
+                            h.cannot_delete_reason ||
+                              "Não é possível eliminar este horário."
+                          );
+                          return;
+                        }
+                        if (isActiveSchedule) {
+                          notify.error(
+                            "Não é possível eliminar o horário em vigor. O assistente tem de ter sempre um horário ativo."
+                          );
+                          return;
+                        }
+                        if (schedules.length <= 1) {
+                          notify.error("O assistente tem de ter pelo menos um horário.");
+                          return;
+                        }
+                        setScheduleToDelete(h);
+                      }}
+                      disabled={h.can_delete === false || isActiveSchedule || schedules.length <= 1}
+                      className={`p-1.5 rounded-md transition-colors ${
+                        h.can_delete === false || isActiveSchedule || schedules.length <= 1
+                          ? "opacity-30 cursor-not-allowed text-muted-foreground"
+                          : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive cursor-pointer"
+                      }`}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </ActionTooltip>
                 </div>
               </div>
 
