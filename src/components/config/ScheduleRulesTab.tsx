@@ -25,6 +25,7 @@ import DatePicker, { formatToIsoDate } from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import { ActionTooltip } from "../common/ActionTooltip";
 import CustomSelect from "../common/CustomSelect";
+import SearchableSelect from "../common/SearchableSelect";
 import {
   useScheduleRulesList,
   useCreateScheduleRule,
@@ -546,13 +547,20 @@ export default function ScheduleRulesTab() {
                 <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                   Tipo de Atividade *
                 </label>
-                <CustomSelect
+                <SearchableSelect
                   value={formActivityId}
-                  onChange={(e: any) => setFormActivityId(typeof e === "string" ? e : e.target.value)}
+                  onChange={(val) => {
+                    setFormActivityId(val);
+                    setFormError(null);
+                  }}
                   options={activityTypes.map((a) => ({
                     value: a.id,
                     label: a.name,
+                    color: a.color,
                   }))}
+                  placeholder="Selecionar tipo de atividade..."
+                  searchPlaceholder="Pesquisar tipo de atividade..."
+                  emptyMessage="Nenhuma atividade encontrada."
                 />
               </div>
 
