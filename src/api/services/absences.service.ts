@@ -29,6 +29,10 @@ export interface BackendAbsenceResource {
   document_path?: string | null;
   status: "pending" | "justified" | "unjustified" | "justificada" | "injustificada" | "aguarda_documento";
   notes?: string | null;
+  can_edit?: boolean;
+  cannot_edit_reason?: string | null;
+  can_delete?: boolean;
+  cannot_delete_reason?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -145,8 +149,33 @@ export function normalizeAbsenceResource(item: any): BackendAbsenceResource {
     total_days: days || 1,
     justification: item.justification || item.absence_type?.name || item.absence_type_name || null,
     document_path: item.document_path || item.documentPath || null,
-    status: item.status || "pending",
+    status: (() => {
+      const rawStatus = String(item.status || item.state || item.estado || "").toLowerCase().trim();
+      if (
+        rawStatus === "justified" ||
+        rawStatus === "justificada" ||
+        rawStatus === "justificado" ||
+        rawStatus === "aprovada" ||
+        rawStatus === "aprovado"
+      ) {
+        return "justified";
+      }
+      if (
+        rawStatus === "unjustified" ||
+        rawStatus === "injustificada" ||
+        rawStatus === "injustificado" ||
+        rawStatus === "rejeitada" ||
+        rawStatus === "rejeitado"
+      ) {
+        return "unjustified";
+      }
+      return "pending";
+    })(),
     notes: item.notes || item.note || null,
+    can_edit: item.can_edit !== undefined ? Boolean(item.can_edit) : true,
+    cannot_edit_reason: item.cannot_edit_reason || null,
+    can_delete: item.can_delete !== undefined ? Boolean(item.can_delete) : true,
+    cannot_delete_reason: item.cannot_delete_reason || null,
     created_at: item.created_at || item.submitted || new Date().toISOString().split("T")[0],
   };
 }
@@ -225,17 +254,68 @@ export const absencesService = {
         meta.last_page || resData?.last_page || Math.max(1, Math.ceil(total / resPerPage))
       );
 
-      // Contadores fornecidos pelo backend em meta.counts ou resData.counts
-      const bCounts = meta.counts || resData?.counts;
+      const normalizedList = rawList.map(normalizeAbsenceResource);
+
+      // Calcular contagem de cada estado a partir dos registos carregados
+      let listPending = 0;
+      let listJustified = 0;
+      let listUnjustified = 0;
+
+      normalizedList.forEach((item) => {
+        if (item.status === "pending") listPending++;
+        else if (item.status === "justified") listJustified++;
+        else if (item.status === "unjustified") listUnjustified++;
+      });
+
+      // Contadores fornecidos pelo backend (suportando múltiplas convenções: counts, contadores, status_counts, statusCounts)
+      const bCounts =
+        meta.counts ||
+        resData?.counts ||
+        meta.contadores ||
+        resData?.contadores ||
+        meta.status_counts ||
+        resData?.status_counts ||
+        meta.statusCounts ||
+        resData?.statusCounts;
+
       const counts: AbsenceCounts = {
-        all: bCounts?.all ?? total,
-        pending: bCounts?.pending ?? 0,
-        justified: bCounts?.justified ?? 0,
-        unjustified: bCounts?.unjustified ?? 0,
+        all:
+          bCounts?.all ??
+          bCounts?.total ??
+          bCounts?.todas ??
+          (params?.status && params.status !== "all" ? undefined : total) ??
+          total,
+        pending:
+          bCounts?.pending ??
+          bCounts?.pendentes ??
+          bCounts?.pendente ??
+          (params?.status === "pending"
+            ? total
+            : !params?.status || params.status === "all"
+            ? listPending
+            : 0),
+        justified:
+          bCounts?.justified ??
+          bCounts?.justificadas ??
+          bCounts?.justificada ??
+          (params?.status === "justified"
+            ? total
+            : !params?.status || params.status === "all"
+            ? listJustified
+            : 0),
+        unjustified:
+          bCounts?.unjustified ??
+          bCounts?.injustificadas ??
+          bCounts?.injustificada ??
+          (params?.status === "unjustified"
+            ? total
+            : !params?.status || params.status === "all"
+            ? listUnjustified
+            : 0),
       };
 
       return {
-        data: rawList.map(normalizeAbsenceResource),
+        data: normalizedList,
         total,
         current_page: currentPage,
         last_page: lastPage,

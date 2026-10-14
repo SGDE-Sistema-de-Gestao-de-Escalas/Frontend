@@ -79,12 +79,39 @@ export default function AbsenceManagement() {
   const totalPages = Math.max(1, absencesResult?.last_page ?? 1);
   const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
 
-  // Contadores agregados devolvidos pelo backend para as tabs
-  const statusCounts = absencesResult?.counts ?? {
-    all: totalItems,
-    pending: 0,
-    justified: 0,
-    unjustified: 0,
+  // Contadores agregados devolvidos pelo backend com persistência entre tabs
+  const [persistedCounts, setPersistedCounts] = useState<{
+    all: number;
+    pending: number;
+    justified: number;
+    unjustified: number;
+  }>({ all: 0, pending: 0, justified: 0, unjustified: 0 });
+
+  useEffect(() => {
+    if (absencesResult?.counts) {
+      setPersistedCounts((prev) => ({
+        all: absencesResult.counts.all || prev.all || totalItems,
+        pending:
+          statusFilter === "all" || statusFilter === "pending"
+            ? absencesResult.counts.pending
+            : prev.pending,
+        justified:
+          statusFilter === "all" || statusFilter === "justified"
+            ? absencesResult.counts.justified
+            : prev.justified,
+        unjustified:
+          statusFilter === "all" || statusFilter === "unjustified"
+            ? absencesResult.counts.unjustified
+            : prev.unjustified,
+      }));
+    }
+  }, [absencesResult?.counts, statusFilter, totalItems]);
+
+  const statusCounts = {
+    all: absencesResult?.counts?.all || persistedCounts.all || totalItems,
+    pending: absencesResult?.counts?.pending ?? persistedCounts.pending,
+    justified: absencesResult?.counts?.justified ?? persistedCounts.justified,
+    unjustified: absencesResult?.counts?.unjustified ?? persistedCounts.unjustified,
   };
 
   // Os itens da página atual vêm diretamente do backend (já filtrados e paginados)
@@ -719,18 +746,34 @@ export default function AbsenceManagement() {
                   <button
                     type="button"
                     onClick={() => handleOpenEdit(selectedAbsence)}
-                    disabled={isMutating}
-                    className="p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                    title="Editar ausência"
+                    disabled={isMutating || selectedAbsence.can_edit === false}
+                    className={`p-1.5 rounded-lg border border-border transition-colors ${
+                      selectedAbsence.can_edit === false
+                        ? "opacity-40 cursor-not-allowed text-muted-foreground bg-muted/20"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                    }`}
+                    title={
+                      selectedAbsence.can_edit === false
+                        ? selectedAbsence.cannot_edit_reason || "Esta ausência não pode ser editada"
+                        : "Editar ausência"
+                    }
                   >
                     <Pencil size={13} />
                   </button>
                   <button
                     type="button"
                     onClick={() => setDeleteConfirmTarget(selectedAbsence)}
-                    disabled={isMutating}
-                    className="p-1.5 rounded-lg border border-border hover:border-destructive/30 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-                    title="Eliminar ausência"
+                    disabled={isMutating || selectedAbsence.can_delete === false}
+                    className={`p-1.5 rounded-lg border border-border transition-colors ${
+                      selectedAbsence.can_delete === false
+                        ? "opacity-40 cursor-not-allowed text-muted-foreground bg-muted/20"
+                        : "hover:border-destructive/30 hover:bg-destructive/10 text-muted-foreground hover:text-destructive cursor-pointer"
+                    }`}
+                    title={
+                      selectedAbsence.can_delete === false
+                        ? selectedAbsence.cannot_delete_reason || "Esta ausência não pode ser eliminada"
+                        : "Eliminar ausência"
+                    }
                   >
                     <Trash2 size={13} />
                   </button>
