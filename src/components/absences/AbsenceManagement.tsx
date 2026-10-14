@@ -156,17 +156,46 @@ export default function AbsenceManagement() {
     endDate?: string;
   }>({});
 
-  // Sincronizar o item selecionado quando os dados do backend mudarem
+  // Deteção responsiva do breakpoint desktop (lg: >= 1024px)
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth >= 1024 : true
+  );
+
   useEffect(() => {
-    if (paginatedAbsences.length > 0) {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const handleChange = (e: MediaQueryListEvent | MediaQueryList) => {
+      setIsDesktop(e.matches);
+    };
+    setIsDesktop(mediaQuery.matches);
+    mediaQuery.addEventListener("change", handleChange as any);
+    return () => mediaQuery.removeEventListener("change", handleChange as any);
+  }, []);
+
+  // Sincronizar o item selecionado:
+  // - No Desktop (>= 1024px): seleciona por defeito o 1º item se nada estiver selecionado ou se o item atual deixar de existir.
+  // - No Mobile (< 1024px): NUNCA forçamos a seleção para permitir que o utilizador navegue na listagem e use o botão "Voltar".
+  useEffect(() => {
+    if (paginatedAbsences.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+
+    if (isDesktop) {
       const exists = paginatedAbsences.some((a) => String(a.id) === String(selectedId));
       if (!exists) {
         setSelectedId(paginatedAbsences[0].id);
       }
     } else {
-      setSelectedId(null);
+      // No mobile, apenas verificamos se o item selecionado AINDA existe (caso tenha sido eliminado)
+      if (selectedId !== null) {
+        const exists = paginatedAbsences.some((a) => String(a.id) === String(selectedId));
+        if (!exists) {
+          setSelectedId(null);
+        }
+      }
     }
-  }, [paginatedAbsences, selectedId]);
+  }, [paginatedAbsences, selectedId, isDesktop]);
 
   // Obter o item selecionado
   const selectedAbsence = useMemo(() => {
@@ -543,11 +572,12 @@ export default function AbsenceManagement() {
               })}
             </div>
             {isFetchingAbsences && !isLoadingAbsences && (
-              <Loader2
-                size={14}
-                className="animate-spin text-primary shrink-0 mr-1.5"
-                title="A atualizar dados..."
-              />
+              <span title="A atualizar dados..." className="inline-flex items-center shrink-0 mr-1.5">
+                <Loader2
+                  size={14}
+                  className="animate-spin text-primary"
+                />
+              </span>
             )}
           </div>
 
