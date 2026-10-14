@@ -6,6 +6,8 @@ export interface AbsenceAssistantInfo {
   id: string | number;
   name: string;
   initials?: string;
+  is_active?: boolean;
+  active?: boolean;
 }
 
 export interface BackendAbsenceResource {
@@ -18,6 +20,8 @@ export interface BackendAbsenceResource {
   absence_type?: { id: string | number; name: string };
   valid_from: string;
   valid_until: string;
+  start_date?: string;
+  end_date?: string;
   start_time?: string;
   end_time?: string;
   total_days: number;
@@ -34,6 +38,8 @@ export interface CreateAbsencePayload {
   absence_type_id: string | number;
   valid_from: string;
   valid_until: string;
+  start_date?: string;
+  end_date?: string;
   start_time?: string;
   end_time?: string;
   justification?: string | null;
@@ -47,6 +53,8 @@ export interface UpdateAbsencePayload {
   absence_type_id?: string | number;
   valid_from?: string;
   valid_until?: string;
+  start_date?: string;
+  end_date?: string;
   start_time?: string;
   end_time?: string;
   justification?: string | null;
@@ -60,6 +68,8 @@ export interface AbsenceFilterParams {
   status?: string;
   start_date?: string;
   end_date?: string;
+  valid_from?: string;
+  valid_until?: string;
   page?: number;
   per_page?: number;
 }
@@ -72,7 +82,59 @@ export interface PaginatedAbsencesResponse {
   per_page?: number;
 }
 
-// Armazenamento em memória para suporte mock enquanto a rota da API não estiver implementada
+// Normalizador de registo vindo do backend para garantir compatibilidade com qualquer convenção (snake_case, start_date/valid_from)
+export function normalizeAbsenceResource(item: any): BackendAbsenceResource {
+  const validFrom = item.valid_from || item.start_date || item.start || "";
+  const validUntil = item.valid_until || item.end_date || item.end || validFrom;
+
+  let days = Number(item.total_days || item.days || 0);
+  if (!days && validFrom && validUntil) {
+    days = Math.max(
+      1,
+      Math.round(
+        (new Date(validUntil).getTime() - new Date(validFrom).getTime()) / 86400000
+      ) + 1
+    );
+  }
+
+  return {
+    ...item,
+    id: String(item.id),
+    assistant_id: String(item.assistant_id || item.assistant?.id || ""),
+    absence_type_id: String(item.absence_type_id || item.absence_type?.id || ""),
+    assistant_name: item.assistant_name || item.assistant?.name,
+    assistant: item.assistant
+      ? {
+          id: item.assistant.id,
+          name: item.assistant.name,
+          initials: item.assistant.initials,
+          is_active: item.assistant.is_active ?? item.assistant.active,
+          active: item.assistant.active ?? item.assistant.is_active,
+        }
+      : undefined,
+    absence_type_name: item.absence_type_name || item.absence_type?.name || item.justification,
+    absence_type: item.absence_type
+      ? {
+          id: item.absence_type.id,
+          name: item.absence_type.name,
+        }
+      : undefined,
+    valid_from: validFrom,
+    valid_until: validUntil,
+    start_date: validFrom,
+    end_date: validUntil,
+    start_time: item.start_time || item.startTime || "08:00",
+    end_time: item.end_time || item.endTime || "17:00",
+    total_days: days || 1,
+    justification: item.justification || item.absence_type?.name || item.absence_type_name || null,
+    document_path: item.document_path || item.documentPath || null,
+    status: item.status || "pending",
+    notes: item.notes || item.note || null,
+    created_at: item.created_at || item.submitted || new Date().toISOString().split("T")[0],
+  };
+}
+
+// Armazenamento em memória para suporte fallback caso o endpoint ainda esteja a ser iniciado
 let localAbsencesMock: BackendAbsenceResource[] = initialMockAbsences.map((a) => ({
   id: String(a.id),
   assistant_id: String(a.id),
@@ -82,6 +144,7 @@ let localAbsencesMock: BackendAbsenceResource[] = initialMockAbsences.map((a) =>
     id: a.id,
     name: a.assistant,
     initials: a.initials,
+    active: true,
   },
   absence_type_name: a.reason,
   absence_type: {
@@ -90,12 +153,14 @@ let localAbsencesMock: BackendAbsenceResource[] = initialMockAbsences.map((a) =>
   },
   valid_from: a.start.includes("-") ? a.start : "2026-01-27",
   valid_until: a.end.includes("-") ? a.end : "2026-01-31",
+  start_date: a.start.includes("-") ? a.start : "2026-01-27",
+  end_date: a.end.includes("-") ? a.end : "2026-01-31",
   start_time: a.startTime || "08:00",
   end_time: a.endTime || "17:00",
   total_days: a.days || 1,
   justification: a.reason,
   document_path: a.documentPath || null,
-  status: a.status || "pending",
+  status: (a.status as any) || "pending",
   notes: a.note || null,
   created_at: a.submitted || "2026-01-27",
 }));
@@ -108,20 +173,29 @@ export const absencesService = {
   async getAll(params?: AbsenceFilterParams): Promise<BackendAbsenceResource[]> {
     try {
       const response = await apiClient.get<any>("/absences", {
-        params,
-        // @ts-ignore
-        skipGlobalErrorHandler: true,
+        params: {
+          ...params,
+          // Compatibilidade de filtros: envia tanto start_date como valid_from
+          ...(params?.start_date ? { valid_from: params.start_date } : {}),
+          ...(params?.end_date ? { valid_until: params.end_date } : {}),
+        },
       });
 
+      let rawList: any[] = [];
       if (Array.isArray(response.data?.data)) {
-        return response.data.data;
+        rawList = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        rawList = response.data;
       }
-      if (Array.isArray(response.data)) {
-        return response.data;
+
+      return rawList.map(normalizeAbsenceResource);
+    } catch (err: any) {
+      // Se for erro de validação ou erro de servidor diferente de 404/offline, relança
+      if (err?.response && err.response.status !== 404) {
+        throw err;
       }
-      return [];
-    } catch {
-      // Fallback gracioso para os dados mock caso a rota do Laravel ainda não esteja ativa
+
+      // Fallback para mock caso a rota responda 404 ou não responda
       let result = [...localAbsencesMock];
 
       if (params?.assistant_id && params.assistant_id !== "all") {
@@ -167,8 +241,12 @@ export const absencesService = {
   async getById(id: string | number): Promise<BackendAbsenceResource> {
     try {
       const response = await apiClient.get<any>(`/absences/${id}`);
-      return response.data?.data ?? response.data;
-    } catch {
+      const raw = response.data?.data ?? response.data;
+      return normalizeAbsenceResource(raw);
+    } catch (err: any) {
+      if (err?.response && err.response.status !== 404) {
+        throw err;
+      }
       const item = localAbsencesMock.find((a) => String(a.id) === String(id));
       if (item) return item;
       throw new Error("Ausência não encontrada");
@@ -180,13 +258,25 @@ export const absencesService = {
    * POST /api/absences
    */
   async create(payload: CreateAbsencePayload): Promise<BackendAbsenceResource> {
+    const formattedPayload = {
+      ...payload,
+      start_date: payload.valid_from,
+      end_date: payload.valid_until,
+    };
+
     try {
-      const response = await apiClient.post<any>("/absences", payload);
-      return response.data?.data ?? response.data;
-    } catch (error) {
-      // Se a rota falhar (404/500/offline), atualiza localmente para mock
+      const response = await apiClient.post<any>("/absences", formattedPayload);
+      const raw = response.data?.data ?? response.data;
+      return normalizeAbsenceResource(raw);
+    } catch (error: any) {
+      // Se o backend respondeu com erro 422 (validação), 400 ou 403, propaga o erro para o utilizador
+      if (error?.response && error.response.status !== 404) {
+        throw error;
+      }
+
+      // Se a rota falhar (404 / endpoint ainda não registado), atualiza localmente para mock
       const newId = String(Date.now());
-      const newAbsence: BackendAbsenceResource = {
+      const newAbsence: BackendAbsenceResource = normalizeAbsenceResource({
         id: newId,
         assistant_id: payload.assistant_id,
         absence_type_id: payload.absence_type_id,
@@ -194,19 +284,12 @@ export const absencesService = {
         valid_until: payload.valid_until,
         start_time: payload.start_time || "08:00",
         end_time: payload.end_time || "17:00",
-        total_days: Math.max(
-          1,
-          Math.round(
-            (new Date(payload.valid_until).getTime() - new Date(payload.valid_from).getTime()) /
-              86400000
-          ) + 1
-        ),
         justification: payload.justification || null,
         document_path: payload.document_path || null,
-        status: (payload.status as any) || "pending",
+        status: payload.status || "pending",
         notes: payload.notes || null,
         created_at: new Date().toISOString().split("T")[0],
-      };
+      });
       localAbsencesMock = [newAbsence, ...localAbsencesMock];
       return newAbsence;
     }
@@ -217,17 +300,27 @@ export const absencesService = {
    * PUT /api/absences/{id}
    */
   async update(id: string | number, payload: UpdateAbsencePayload): Promise<BackendAbsenceResource> {
+    const formattedPayload = {
+      ...payload,
+      start_date: payload.valid_from,
+      end_date: payload.valid_until,
+    };
+
     try {
-      const response = await apiClient.put<any>(`/absences/${id}`, payload);
-      return response.data?.data ?? response.data;
-    } catch (error) {
+      const response = await apiClient.put<any>(`/absences/${id}`, formattedPayload);
+      const raw = response.data?.data ?? response.data;
+      return normalizeAbsenceResource(raw);
+    } catch (error: any) {
+      if (error?.response && error.response.status !== 404) {
+        throw error;
+      }
       localAbsencesMock = localAbsencesMock.map((a) => {
         if (String(a.id) === String(id)) {
-          return {
+          return normalizeAbsenceResource({
             ...a,
             ...payload,
-            status: (payload.status as any) || a.status,
-          };
+            status: payload.status || a.status,
+          });
         }
         return a;
       });
@@ -239,7 +332,7 @@ export const absencesService = {
 
   /**
    * Alterar estado da ausência (Justificar / Injustificar)
-   * PATCH /api/absences/{id}/status
+   * Tenta primeiro PATCH /api/absences/{id}/status e depois PUT /api/absences/{id}
    */
   async updateStatus(
     id: string | number,
@@ -247,12 +340,29 @@ export const absencesService = {
     notes?: string
   ): Promise<BackendAbsenceResource> {
     try {
-      const response = await apiClient.patch<any>(`/absences/${id}/status`, {
-        status,
-        notes,
-      });
-      return response.data?.data ?? response.data;
-    } catch {
+      try {
+        const response = await apiClient.patch<any>(`/absences/${id}/status`, {
+          status,
+          notes,
+        });
+        const raw = response.data?.data ?? response.data;
+        return normalizeAbsenceResource(raw);
+      } catch (patchErr: any) {
+        // Se a rota PATCH não estiver disponível (404/405), tenta PUT padrão REST
+        if (patchErr?.response?.status === 404 || patchErr?.response?.status === 405) {
+          const putResponse = await apiClient.put<any>(`/absences/${id}`, {
+            status,
+            ...(notes !== undefined ? { notes } : {}),
+          });
+          const raw = putResponse.data?.data ?? putResponse.data;
+          return normalizeAbsenceResource(raw);
+        }
+        throw patchErr;
+      }
+    } catch (err: any) {
+      if (err?.response && err.response.status !== 404) {
+        throw err;
+      }
       localAbsencesMock = localAbsencesMock.map((a) => {
         if (String(a.id) === String(id)) {
           return {
@@ -277,12 +387,28 @@ export const absencesService = {
     try {
       const response = await apiClient.delete<any>(`/absences/${id}`);
       return response.data;
-    } catch {
+    } catch (err: any) {
+      if (err?.response && err.response.status !== 404) {
+        throw err;
+      }
       localAbsencesMock = localAbsencesMock.filter((a) => String(a.id) !== String(id));
       return { message: "Ausência eliminada com sucesso." };
     }
   },
+
+  /**
+   * Upload de comprovativo/documento de justificação
+   * POST /api/absences/upload
+   */
+  async uploadDocument(file: File): Promise<{ document_path: string; url?: string }> {
+    const formData = new FormData();
+    formData.append("document", file);
+    formData.append("file", file);
+    const response = await apiClient.post<any>("/absences/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data?.data ?? response.data;
+  },
 };
 
 export default absencesService;
-

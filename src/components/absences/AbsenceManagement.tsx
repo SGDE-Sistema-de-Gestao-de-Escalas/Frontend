@@ -28,6 +28,7 @@ import DatePicker, { formatToIsoDate } from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import CustomSelect from "../common/CustomSelect";
+import AssistantSelect, { isAssistantActive } from "../common/AssistantSelect";
 import {
   useAbsencesList,
   useCreateAbsence,
@@ -38,12 +39,15 @@ import {
 import { useAssistantsList } from "../../hooks/api/useAssistants";
 import { useAbsenceTypesList } from "../../hooks/api/useAbsenceTypes";
 import type { BackendAbsenceResource } from "../../api/services/absences.service";
-import type { EntityId } from "../../types";
+import type { EntityId, Assistant } from "../../types";
 import { notify } from "../common/FeedbackNotification";
 
 export default function AbsenceManagement() {
-  // Dados remotos via TanStack Query
-  const { data: assistants = [], isLoading: isLoadingAssistants } = useAssistantsList();
+  // Dados remotos via TanStack Query (com status "all" para trazer ativos e inativos)
+  const { data: assistants = [], isLoading: isLoadingAssistants } = useAssistantsList({
+    status: "all",
+    per_page: 200,
+  });
   const { data: absenceTypes = [], isLoading: isLoadingAbsenceTypes } = useAbsenceTypesList();
 
   // Filtros
@@ -222,7 +226,8 @@ export default function AbsenceManagement() {
   // Abertura do modal para registar nova ausência
   function handleOpenAdd() {
     setEditingAbsence(null);
-    setFormAssistantId(assistants[0] ? String(assistants[0].id) : "");
+    const firstActive = assistants.find((a) => isAssistantActive(a));
+    setFormAssistantId(firstActive ? String(firstActive.id) : (assistants[0] ? String(assistants[0].id) : ""));
     setFormAbsenceTypeId(absenceTypes[0] ? String(absenceTypes[0].id) : "");
     setFormStartDate(todayStr);
     setFormStartTime("08:00");
@@ -405,6 +410,17 @@ export default function AbsenceManagement() {
     return found?.name || "Ausência";
   }
 
+  // Helper para verificar se o assistente está inativo
+  function isAssistantInactive(absence: BackendAbsenceResource): boolean {
+    if (absence.assistant?.active !== undefined) return !absence.assistant.active;
+    if (absence.assistant?.is_active !== undefined) return !absence.assistant.is_active;
+    const found = assistants.find(
+      (a) => String(a.id) === String(absence.assistant_id || absence.assistant?.id)
+    );
+    if (found) return !isAssistantActive(found);
+    return false;
+  }
+
   return (
     <div className="space-y-4">
       {/* ── CABEÇALHO DA PÁGINA ────────────────────────────────────────── */}
@@ -433,19 +449,12 @@ export default function AbsenceManagement() {
             <label className="text-[11px] font-medium text-muted-foreground block mb-1">
               Assistente
             </label>
-            <CustomSelect
+            <AssistantSelect
               value={assistantFilter}
-              onChange={(e: any) => {
-                const val = typeof e === "string" ? e : e?.target?.value || "all";
-                setAssistantFilter(val);
-              }}
-              options={[
-                { value: "all", label: "Todos os Assistentes" },
-                ...assistants.map((a) => ({
-                  value: String(a.id),
-                  label: a.name,
-                })),
-              ]}
+              onChange={(val) => setAssistantFilter(val)}
+              assistants={assistants}
+              includeAllOption
+              allOptionLabel="Todos os Assistentes"
               size="sm"
               placeholder="Filtrar por assistente..."
             />
@@ -583,6 +592,7 @@ export default function AbsenceManagement() {
                 const assistantName = getAssistantName(absence);
                 const initials = getAssistantInitials(absence);
                 const typeName = getAbsenceTypeName(absence);
+                const inactive = isAssistantInactive(absence);
 
                 return (
                   <button
@@ -596,13 +606,24 @@ export default function AbsenceManagement() {
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2 mb-1">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-6 h-6 rounded-full bg-primary/15 text-primary flex items-center justify-center flex-shrink-0 font-bold font-mono text-[9px]">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div
+                          className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 font-bold font-mono text-[9px] ${
+                            inactive
+                              ? "bg-muted text-muted-foreground opacity-80"
+                              : "bg-primary/15 text-primary"
+                          }`}
+                        >
                           {initials}
                         </div>
                         <span className="text-xs font-semibold text-foreground truncate">
                           {assistantName}
                         </span>
+                        {inactive && (
+                          <span className="text-[9px] px-1 py-0.2 rounded font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
+                            Inativo
+                          </span>
+                        )}
                       </div>
                       <div className="flex-shrink-0">
                         {renderStatusBadge(absence.status)}
@@ -711,13 +732,26 @@ export default function AbsenceManagement() {
                   >
                     <ChevronLeft size={16} />
                   </button>
-                  <div className="w-10 h-10 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold font-mono text-xs flex-shrink-0">
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center font-bold font-mono text-xs flex-shrink-0 ${
+                      isAssistantInactive(selectedAbsence)
+                        ? "bg-muted text-muted-foreground opacity-80"
+                        : "bg-primary/15 text-primary"
+                    }`}
+                  >
                     {getAssistantInitials(selectedAbsence)}
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-semibold text-foreground text-sm truncate">
-                      {getAssistantName(selectedAbsence)}
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-foreground text-sm truncate">
+                        {getAssistantName(selectedAbsence)}
+                      </h3>
+                      {isAssistantInactive(selectedAbsence) && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
+                          Inativo
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {getAbsenceTypeName(selectedAbsence)} · {selectedAbsence.total_days} dia(s)
                     </p>
@@ -894,21 +928,17 @@ export default function AbsenceManagement() {
               <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                 Assistente *
               </label>
-              <CustomSelect
+              <AssistantSelect
                 value={formAssistantId}
                 hasError={!!formErrors.assistant}
-                onChange={(e: any) => {
-                  const val = typeof e === "string" ? e : e?.target?.value || "";
+                onChange={(val) => {
                   setFormAssistantId(val);
                   if (formErrors.assistant) {
                     setFormErrors((p) => ({ ...p, assistant: undefined }));
                   }
                 }}
+                assistants={assistants}
                 placeholder="Selecionar assistente..."
-                options={assistants.map((a) => ({
-                  value: String(a.id),
-                  label: a.name,
-                }))}
               />
               {formErrors.assistant && (
                 <p className="text-[11px] text-destructive mt-1 font-medium">

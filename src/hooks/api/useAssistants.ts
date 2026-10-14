@@ -19,8 +19,10 @@ export function useAssistantsList(filters?: AssistantFilters) {
   return useQuery({
     queryKey: schoolScopedKey("assistants", selectedSchoolId, "list", filters ?? {}),
     queryFn: async (): Promise<Assistant[]> => {
-      const result = await assistantsService.getAll(filters);
-      return Array.isArray(result?.data) ? result.data : [];
+      const result: any = await assistantsService.getAll(filters);
+      if (Array.isArray(result?.data)) return result.data;
+      if (Array.isArray(result)) return result;
+      return [];
     },
     enabled: !!selectedSchoolId,
   });
