@@ -74,12 +74,29 @@ export interface AbsenceFilterParams {
   per_page?: number;
 }
 
+export interface AbsenceCounts {
+  all: number;
+  pending: number;
+  justified: number;
+  unjustified: number;
+}
+
+export interface PaginatedAbsencesResult {
+  data: BackendAbsenceResource[];
+  total: number;
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  counts: AbsenceCounts;
+}
+
 export interface PaginatedAbsencesResponse {
   data: BackendAbsenceResource[];
   total?: number;
   current_page?: number;
   last_page?: number;
   per_page?: number;
+  counts?: AbsenceCounts;
 }
 
 // Normalizador de registo vindo do backend para garantir compatibilidade com qualquer convenção (snake_case, start_date/valid_from)
@@ -167,28 +184,64 @@ let localAbsencesMock: BackendAbsenceResource[] = initialMockAbsences.map((a) =>
 
 export const absencesService = {
   /**
-   * Obter lista de ausências da escola ativa com filtros opcionais
+   * Obter lista paginada e filtrada de ausências da escola ativa (Backend Server-Side)
    * GET /api/absences
    */
-  async getAll(params?: AbsenceFilterParams): Promise<BackendAbsenceResource[]> {
+  async getAll(params?: AbsenceFilterParams): Promise<PaginatedAbsencesResult> {
+    const page = Number(params?.page || 1);
+    const perPage = Number(params?.per_page || 8);
+
     try {
       const response = await apiClient.get<any>("/absences", {
         params: {
           ...params,
+          page,
+          per_page: perPage,
           // Compatibilidade de filtros: envia tanto start_date como valid_from
           ...(params?.start_date ? { valid_from: params.start_date } : {}),
           ...(params?.end_date ? { valid_until: params.end_date } : {}),
         },
       });
 
+      const resData = response.data;
       let rawList: any[] = [];
-      if (Array.isArray(response.data?.data)) {
-        rawList = response.data.data;
-      } else if (Array.isArray(response.data)) {
-        rawList = response.data;
+      if (Array.isArray(resData?.data)) {
+        rawList = resData.data;
+      } else if (Array.isArray(resData)) {
+        rawList = resData;
       }
 
-      return rawList.map(normalizeAbsenceResource);
+      const meta = resData?.meta || resData || {};
+      const total =
+        typeof meta.total === "number"
+          ? meta.total
+          : typeof resData?.total === "number"
+          ? resData.total
+          : rawList.length;
+
+      const currentPage = Number(meta.current_page || resData?.current_page || page);
+      const resPerPage = Number(meta.per_page || resData?.per_page || perPage);
+      const lastPage = Number(
+        meta.last_page || resData?.last_page || Math.max(1, Math.ceil(total / resPerPage))
+      );
+
+      // Contadores fornecidos pelo backend em meta.counts ou resData.counts
+      const bCounts = meta.counts || resData?.counts;
+      const counts: AbsenceCounts = {
+        all: bCounts?.all ?? total,
+        pending: bCounts?.pending ?? 0,
+        justified: bCounts?.justified ?? 0,
+        unjustified: bCounts?.unjustified ?? 0,
+      };
+
+      return {
+        data: rawList.map(normalizeAbsenceResource),
+        total,
+        current_page: currentPage,
+        last_page: lastPage,
+        per_page: resPerPage,
+        counts,
+      };
     } catch (err: any) {
       // Se for erro de validação ou erro de servidor diferente de 404/offline, relança
       if (err?.response && err.response.status !== 404) {
@@ -196,10 +249,23 @@ export const absencesService = {
       }
 
       // Fallback para mock caso a rota responda 404 ou não responda
-      let result = [...localAbsencesMock];
+      const counts: AbsenceCounts = {
+        all: localAbsencesMock.length,
+        pending: localAbsencesMock.filter(
+          (a) => a.status === "pending" || a.status === "aguarda_documento"
+        ).length,
+        justified: localAbsencesMock.filter(
+          (a) => a.status === "justified" || a.status === "justificada"
+        ).length,
+        unjustified: localAbsencesMock.filter(
+          (a) => a.status === "unjustified" || a.status === "injustificada"
+        ).length,
+      };
+
+      let filtered = [...localAbsencesMock];
 
       if (params?.assistant_id && params.assistant_id !== "all") {
-        result = result.filter(
+        filtered = filtered.filter(
           (a) =>
             String(a.assistant_id) === String(params.assistant_id) ||
             a.assistant?.name?.toLowerCase().includes(String(params.assistant_id).toLowerCase()) ||
@@ -208,7 +274,7 @@ export const absencesService = {
       }
 
       if (params?.status && params.status !== "all") {
-        result = result.filter((a) => {
+        filtered = filtered.filter((a) => {
           if (params.status === "pending") {
             return a.status === "pending" || a.status === "aguarda_documento";
           }
@@ -223,14 +289,25 @@ export const absencesService = {
       }
 
       if (params?.start_date) {
-        result = result.filter((a) => a.valid_until >= params.start_date!);
+        filtered = filtered.filter((a) => a.valid_until >= params.start_date!);
       }
 
       if (params?.end_date) {
-        result = result.filter((a) => a.valid_from <= params.end_date!);
+        filtered = filtered.filter((a) => a.valid_from <= params.end_date!);
       }
 
-      return result;
+      const total = filtered.length;
+      const lastPage = Math.max(1, Math.ceil(total / perPage));
+      const paged = filtered.slice((page - 1) * perPage, page * perPage);
+
+      return {
+        data: paged.map(normalizeAbsenceResource),
+        total,
+        current_page: page,
+        last_page: lastPage,
+        per_page: perPage,
+        counts,
+      };
     }
   },
 

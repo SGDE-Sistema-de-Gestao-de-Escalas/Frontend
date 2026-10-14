@@ -5,6 +5,7 @@ import absencesService, {
   CreateAbsencePayload,
   UpdateAbsencePayload,
   AbsenceFilterParams,
+  PaginatedAbsencesResult,
 } from "../../api/services/absences.service";
 import { useSchool } from "../../context/SchoolContext";
 import { schoolScopedKey } from "../../lib/queryClient";
@@ -12,14 +13,14 @@ import { schoolScopedKey } from "../../lib/queryClient";
 export const ABSENCES_QUERY_KEY = ["absences"];
 
 /**
- * Hook para obter a lista de ausências com filtros
+ * Hook para obter a lista paginada e filtrada de ausências
  */
 export function useAbsencesList(filters?: AbsenceFilterParams) {
   const { selectedSchoolId } = useSchool();
 
   return useQuery({
     queryKey: schoolScopedKey("absences", selectedSchoolId, filters || {}),
-    queryFn: async (): Promise<BackendAbsenceResource[]> => {
+    queryFn: async (): Promise<PaginatedAbsencesResult> => {
       return await absencesService.getAll(filters);
     },
     enabled: !!selectedSchoolId,

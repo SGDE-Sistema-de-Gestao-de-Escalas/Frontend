@@ -60,16 +60,35 @@ export default function AbsenceManagement() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(8);
 
-  // Queries e Mutações
+  // Query remota de ausências com filtros e paginação executados no Backend
   const {
-    data: rawAbsences = [],
+    data: absencesResult,
     isLoading: isLoadingAbsences,
+    isFetching: isFetchingAbsences,
   } = useAbsencesList({
     assistant_id: assistantFilter !== "all" ? assistantFilter : undefined,
     status: statusFilter !== "all" ? statusFilter : undefined,
     start_date: startDateFilter || undefined,
     end_date: endDateFilter || undefined,
+    page: currentPage,
+    per_page: pageSize,
   });
+
+  const absences = absencesResult?.data ?? [];
+  const totalItems = absencesResult?.total ?? 0;
+  const totalPages = Math.max(1, absencesResult?.last_page ?? 1);
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+
+  // Contadores agregados devolvidos pelo backend para as tabs
+  const statusCounts = absencesResult?.counts ?? {
+    all: totalItems,
+    pending: 0,
+    justified: 0,
+    unjustified: 0,
+  };
+
+  // Os itens da página atual vêm diretamente do backend (já filtrados e paginados)
+  const paginatedAbsences = absences;
 
   const createMutation = useCreateAbsence();
   const updateMutation = useUpdateAbsence();
@@ -109,105 +128,23 @@ export default function AbsenceManagement() {
     endDate?: string;
   }>({});
 
-  // Filtragem reativa no cliente (garante consistência mesmo com dados mock / fallback)
-  const filteredAbsences = useMemo(() => {
-    return rawAbsences.filter((item) => {
-      // Filtro por Estado
-      if (statusFilter !== "all") {
-        if (statusFilter === "pending") {
-          const isPending =
-            item.status === "pending" || item.status === "aguarda_documento";
-          if (!isPending) return false;
-        } else if (statusFilter === "justified") {
-          const isJustified =
-            item.status === "justified" || item.status === "justificada";
-          if (!isJustified) return false;
-        } else if (statusFilter === "unjustified") {
-          const isUnjustified =
-            item.status === "unjustified" || item.status === "injustificada";
-          if (!isUnjustified) return false;
-        }
-      }
-
-      // Filtro por Assistente
-      if (assistantFilter !== "all") {
-        const itemAssistantId = String(item.assistant_id || item.assistant?.id || "");
-        if (itemAssistantId !== String(assistantFilter)) {
-          return false;
-        }
-      }
-
-      // Filtro por Data Inicial
-      if (startDateFilter) {
-        const itemEnd = item.valid_until || item.valid_from;
-        if (itemEnd < startDateFilter) return false;
-      }
-
-      // Filtro por Data Final
-      if (endDateFilter) {
-        const itemStart = item.valid_from || item.valid_until;
-        if (itemStart > endDateFilter) return false;
-      }
-
-      return true;
-    });
-  }, [rawAbsences, statusFilter, assistantFilter, startDateFilter, endDateFilter]);
-
-  // Contadores dinâmicos para as tabs de estado
-  const statusCounts = useMemo(() => {
-    let pending = 0;
-    let justified = 0;
-    let unjustified = 0;
-
-    rawAbsences.forEach((a) => {
-      if (a.status === "pending" || a.status === "aguarda_documento") {
-        pending++;
-      } else if (a.status === "justified" || a.status === "justificada") {
-        justified++;
-      } else if (a.status === "unjustified" || a.status === "injustificada") {
-        unjustified++;
-      }
-    });
-
-    return {
-      all: rawAbsences.length,
-      pending,
-      justified,
-      unjustified,
-    };
-  }, [rawAbsences]);
-
-  // Paginação sobre os dados filtrados
-  const totalPages = Math.max(1, Math.ceil(filteredAbsences.length / pageSize));
-  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
-
-  const paginatedAbsences = useMemo(() => {
-    const startIndex = (safeCurrentPage - 1) * pageSize;
-    return filteredAbsences.slice(startIndex, startIndex + pageSize);
-  }, [filteredAbsences, safeCurrentPage, pageSize]);
-
-  // Sincronizar o item selecionado
+  // Sincronizar o item selecionado quando os dados do backend mudarem
   useEffect(() => {
-    if (filteredAbsences.length > 0) {
-      const exists = filteredAbsences.some((a) => String(a.id) === String(selectedId));
+    if (paginatedAbsences.length > 0) {
+      const exists = paginatedAbsences.some((a) => String(a.id) === String(selectedId));
       if (!exists) {
-        setSelectedId(filteredAbsences[0].id);
+        setSelectedId(paginatedAbsences[0].id);
       }
     } else {
       setSelectedId(null);
     }
-  }, [filteredAbsences, selectedId]);
-
-  // Reset de página ao alterar filtros
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [statusFilter, assistantFilter, startDateFilter, endDateFilter]);
+  }, [paginatedAbsences, selectedId]);
 
   // Obter o item selecionado
   const selectedAbsence = useMemo(() => {
     if (!selectedId) return null;
-    return rawAbsences.find((a) => String(a.id) === String(selectedId)) || null;
-  }, [rawAbsences, selectedId]);
+    return paginatedAbsences.find((a) => String(a.id) === String(selectedId)) || null;
+  }, [paginatedAbsences, selectedId]);
 
   const hasActiveFilters =
     statusFilter !== "all" ||
@@ -451,7 +388,10 @@ export default function AbsenceManagement() {
             </label>
             <AssistantSelect
               value={assistantFilter}
-              onChange={(val) => setAssistantFilter(val)}
+              onChange={(val) => {
+                setAssistantFilter(val);
+                setCurrentPage(1);
+              }}
               assistants={assistants}
               includeAllOption
               allOptionLabel="Todos os Assistentes"
@@ -469,6 +409,7 @@ export default function AbsenceManagement() {
               value={startDateFilter}
               onChange={(val) => {
                 setStartDateFilter(val);
+                setCurrentPage(1);
                 if (val && endDateFilter && endDateFilter < val) {
                   setEndDateFilter(val);
                 }
@@ -486,7 +427,10 @@ export default function AbsenceManagement() {
             <DatePicker
               value={endDateFilter}
               minDate={startDateFilter || undefined}
-              onChange={setEndDateFilter}
+              onChange={(val) => {
+                setEndDateFilter(val);
+                setCurrentPage(1);
+              }}
               placeholder="Até..."
               className="w-full"
             />
@@ -521,50 +465,62 @@ export default function AbsenceManagement() {
           }`}
         >
           {/* Tabs de Filtro de Estado */}
-          <div className="p-2 border-b border-border bg-muted/20 flex items-center gap-1 overflow-x-auto">
-            {[
-              { id: "all" as const, label: "Todas", count: statusCounts.all },
-              {
-                id: "pending" as const,
-                label: "Pendentes",
-                count: statusCounts.pending,
-              },
-              {
-                id: "justified" as const,
-                label: "Justificadas",
-                count: statusCounts.justified,
-              },
-              {
-                id: "unjustified" as const,
-                label: "Injustificadas",
-                count: statusCounts.unjustified,
-              },
-            ].map((f) => {
-              const isActive = statusFilter === f.id;
-              return (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setStatusFilter(f.id)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                    isActive
-                      ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                  }`}
-                >
-                  <span>{f.label}</span>
-                  <span
-                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+          <div className="p-2 border-b border-border bg-muted/20 flex items-center justify-between gap-1 overflow-x-auto">
+            <div className="flex items-center gap-1">
+              {[
+                { id: "all" as const, label: "Todas", count: statusCounts.all },
+                {
+                  id: "pending" as const,
+                  label: "Pendentes",
+                  count: statusCounts.pending,
+                },
+                {
+                  id: "justified" as const,
+                  label: "Justificadas",
+                  count: statusCounts.justified,
+                },
+                {
+                  id: "unjustified" as const,
+                  label: "Injustificadas",
+                  count: statusCounts.unjustified,
+                },
+              ].map((f) => {
+                const isActive = statusFilter === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter(f.id);
+                      setCurrentPage(1);
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                       isActive
-                        ? "bg-primary-foreground/20 text-primary-foreground"
-                        : "bg-muted text-muted-foreground"
+                        ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                     }`}
                   >
-                    {f.count}
-                  </span>
-                </button>
-              );
-            })}
+                    <span>{f.label}</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                        isActive
+                          ? "bg-primary-foreground/20 text-primary-foreground"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {f.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {isFetchingAbsences && !isLoadingAbsences && (
+              <Loader2
+                size={14}
+                className="animate-spin text-primary shrink-0 mr-1.5"
+                title="A atualizar dados..."
+              />
+            )}
           </div>
 
           {/* Lista de Registos */}
@@ -574,7 +530,7 @@ export default function AbsenceManagement() {
                 <Loader2 size={20} className="animate-spin text-primary" />
                 <span className="text-xs">A carregar ausências...</span>
               </div>
-            ) : filteredAbsences.length === 0 ? (
+            ) : paginatedAbsences.length === 0 ? (
               <div className="flex flex-col items-center justify-center p-12 text-muted-foreground gap-2 text-center">
                 <Inbox size={26} className="text-muted-foreground/30 mb-1" />
                 <p className="text-xs font-medium text-foreground">
@@ -656,17 +612,17 @@ export default function AbsenceManagement() {
             )}
           </div>
 
-          {/* Rodapé da Coluna Esquerda com Paginação */}
-          {filteredAbsences.length > 0 && (
+          {/* Rodapé da Coluna Esquerda com Paginação (Server-Side) */}
+          {totalItems > 0 && (
             <div className="p-2.5 border-t border-border bg-card flex items-center justify-between gap-2 text-xs text-muted-foreground">
               <span className="text-[11px]">
                 <strong className="font-medium text-foreground">
                   {(safeCurrentPage - 1) * pageSize + 1}–
-                  {Math.min(safeCurrentPage * pageSize, filteredAbsences.length)}
+                  {Math.min(safeCurrentPage * pageSize, totalItems)}
                 </strong>{" "}
                 de{" "}
                 <strong className="font-medium text-foreground">
-                  {filteredAbsences.length}
+                  {totalItems}
                 </strong>
               </span>
 
@@ -675,8 +631,8 @@ export default function AbsenceManagement() {
                   <button
                     type="button"
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={safeCurrentPage <= 1}
-                    className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    disabled={safeCurrentPage <= 1 || isFetchingAbsences}
+                    className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     title="Página anterior"
                   >
                     <ChevronLeft size={13} />
@@ -689,8 +645,8 @@ export default function AbsenceManagement() {
                   <button
                     type="button"
                     onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={safeCurrentPage >= totalPages}
-                    className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    disabled={safeCurrentPage >= totalPages || isFetchingAbsences}
+                    className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     title="Página seguinte"
                   >
                     <ChevronRight size={13} />
