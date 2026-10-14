@@ -1,92 +1,264 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
-  AlertTriangle,
+  Calendar,
   Check,
-  CheckCircle,
   ChevronLeft,
+  ChevronRight,
+  Filter,
   Inbox,
+  Loader2,
   Paperclip,
   Pencil,
   Plus,
+  RotateCcw,
   Trash2,
+  User,
   X,
 } from "lucide-react";
-import { absences as initialAbsences, assistants as ASSISTANTS, absenceTypes as ABSENCE_TYPES_MOCK } from "../../api/mockData";
-import type { Absence, EntityId } from "../../types";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
-import DatePicker from "../common/DatePicker";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../ui/dialog";
+import DatePicker, { formatToIsoDate } from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import CustomSelect from "../common/CustomSelect";
+import {
+  useAbsencesList,
+  useCreateAbsence,
+  useUpdateAbsence,
+  useUpdateAbsenceStatus,
+  useDeleteAbsence,
+} from "../../hooks/api/useAbsences";
+import { useAssistantsList } from "../../hooks/api/useAssistants";
+import { useAbsenceTypesList } from "../../hooks/api/useAbsenceTypes";
+import type { BackendAbsenceResource } from "../../api/services/absences.service";
+import type { EntityId } from "../../types";
+import { notify } from "../common/FeedbackNotification";
 
 export default function AbsenceManagement() {
-  const [absencesList, setAbsencesList] = useState<Absence[]>(initialAbsences);
-  const [selectedId, setSelectedId] = useState<EntityId | null>(1);
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "justified" | "unjustified">("pending");
-  const [showForm, setShowForm] = useState(false);
-  const [editId, setEditId] = useState<EntityId | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<EntityId | null>(null);
-  const [documentationRequestedIds, setDocumentationRequestedIds] = useState<EntityId[]>([]);
+  // Dados remotos via TanStack Query
+  const { data: assistants = [], isLoading: isLoadingAssistants } = useAssistantsList();
+  const { data: absenceTypes = [], isLoading: isLoadingAbsenceTypes } = useAbsenceTypesList();
 
-  const [formAssistant, setFormAssistant] = useState("");
-  const [formStartDate, setFormStartDate] = useState("");
-  const [formStartTime, setFormStartTime] = useState("08:00");
-  const [formEndDate, setFormEndDate] = useState("");
-  const [formEndTime, setFormEndTime] = useState("17:00");
-  const [formReason, setFormReason] = useState(ABSENCE_TYPES_MOCK[0]?.name ?? "Doença");
-  const [formNote, setFormNote] = useState("");
-  const [formStatus, setFormStatus] = useState<"" | "justified" | "unjustified">("");
-  const [formDocumentName, setFormDocumentName] = useState("");
+  // Filtros
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "justified" | "unjustified">("all");
+  const [assistantFilter, setAssistantFilter] = useState<string>("all");
+  const [startDateFilter, setStartDateFilter] = useState<string>("");
+  const [endDateFilter, setEndDateFilter] = useState<string>("");
+
+  // Paginação
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(8);
+
+  // Queries e Mutações
+  const {
+    data: rawAbsences = [],
+    isLoading: isLoadingAbsences,
+  } = useAbsencesList({
+    assistant_id: assistantFilter !== "all" ? assistantFilter : undefined,
+    status: statusFilter !== "all" ? statusFilter : undefined,
+    start_date: startDateFilter || undefined,
+    end_date: endDateFilter || undefined,
+  });
+
+  const createMutation = useCreateAbsence();
+  const updateMutation = useUpdateAbsence();
+  const updateStatusMutation = useUpdateAbsenceStatus();
+  const deleteMutation = useDeleteAbsence();
+
+  const isMutating =
+    createMutation.isPending ||
+    updateMutation.isPending ||
+    updateStatusMutation.isPending ||
+    deleteMutation.isPending;
+
+  // Estado do item selecionado no Master-Detail
+  const [selectedId, setSelectedId] = useState<string | number | null>(null);
+
+  // Estado dos modais
+  const [showForm, setShowForm] = useState(false);
+  const [editingAbsence, setEditingAbsence] = useState<BackendAbsenceResource | null>(null);
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<BackendAbsenceResource | null>(null);
+  const [documentationRequestedIds, setDocumentationRequestedIds] = useState<(string | number)[]>([]);
+
+  // Campos do formulário
+  const todayStr = new Date().toISOString().split("T")[0];
+  const [formAssistantId, setFormAssistantId] = useState<string>("");
+  const [formAbsenceTypeId, setFormAbsenceTypeId] = useState<string>("");
+  const [formStartDate, setFormStartDate] = useState<string>(todayStr);
+  const [formStartTime, setFormStartTime] = useState<string>("08:00");
+  const [formEndDate, setFormEndDate] = useState<string>(todayStr);
+  const [formEndTime, setFormEndTime] = useState<string>("17:00");
+  const [formNote, setFormNote] = useState<string>("");
+  const [formStatus, setFormStatus] = useState<string>("pending");
+  const [formDocumentName, setFormDocumentName] = useState<string>("");
   const [formErrors, setFormErrors] = useState<{
     assistant?: string;
+    absenceType?: string;
     startDate?: string;
     endDate?: string;
   }>({});
 
-  const filteredAbsences = absencesList.filter(
-    (a) => statusFilter === "all" || a.status === statusFilter
-  );
-  const selectedAbsence = absencesList.find((a) => a.id === selectedId);
+  // Filtragem reativa no cliente (garante consistência mesmo com dados mock / fallback)
+  const filteredAbsences = useMemo(() => {
+    return rawAbsences.filter((item) => {
+      // Filtro por Estado
+      if (statusFilter !== "all") {
+        if (statusFilter === "pending") {
+          const isPending =
+            item.status === "pending" || item.status === "aguarda_documento";
+          if (!isPending) return false;
+        } else if (statusFilter === "justified") {
+          const isJustified =
+            item.status === "justified" || item.status === "justificada";
+          if (!isJustified) return false;
+        } else if (statusFilter === "unjustified") {
+          const isUnjustified =
+            item.status === "unjustified" || item.status === "injustificada";
+          if (!isUnjustified) return false;
+        }
+      }
 
+      // Filtro por Assistente
+      if (assistantFilter !== "all") {
+        const itemAssistantId = String(item.assistant_id || item.assistant?.id || "");
+        if (itemAssistantId !== String(assistantFilter)) {
+          return false;
+        }
+      }
+
+      // Filtro por Data Inicial
+      if (startDateFilter) {
+        const itemEnd = item.valid_until || item.valid_from;
+        if (itemEnd < startDateFilter) return false;
+      }
+
+      // Filtro por Data Final
+      if (endDateFilter) {
+        const itemStart = item.valid_from || item.valid_until;
+        if (itemStart > endDateFilter) return false;
+      }
+
+      return true;
+    });
+  }, [rawAbsences, statusFilter, assistantFilter, startDateFilter, endDateFilter]);
+
+  // Contadores dinâmicos para as tabs de estado
+  const statusCounts = useMemo(() => {
+    let pending = 0;
+    let justified = 0;
+    let unjustified = 0;
+
+    rawAbsences.forEach((a) => {
+      if (a.status === "pending" || a.status === "aguarda_documento") {
+        pending++;
+      } else if (a.status === "justified" || a.status === "justificada") {
+        justified++;
+      } else if (a.status === "unjustified" || a.status === "injustificada") {
+        unjustified++;
+      }
+    });
+
+    return {
+      all: rawAbsences.length,
+      pending,
+      justified,
+      unjustified,
+    };
+  }, [rawAbsences]);
+
+  // Paginação sobre os dados filtrados
+  const totalPages = Math.max(1, Math.ceil(filteredAbsences.length / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+
+  const paginatedAbsences = useMemo(() => {
+    const startIndex = (safeCurrentPage - 1) * pageSize;
+    return filteredAbsences.slice(startIndex, startIndex + pageSize);
+  }, [filteredAbsences, safeCurrentPage, pageSize]);
+
+  // Sincronizar o item selecionado
+  useEffect(() => {
+    if (filteredAbsences.length > 0) {
+      const exists = filteredAbsences.some((a) => String(a.id) === String(selectedId));
+      if (!exists) {
+        setSelectedId(filteredAbsences[0].id);
+      }
+    } else {
+      setSelectedId(null);
+    }
+  }, [filteredAbsences, selectedId]);
+
+  // Reset de página ao alterar filtros
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, assistantFilter, startDateFilter, endDateFilter]);
+
+  // Obter o item selecionado
+  const selectedAbsence = useMemo(() => {
+    if (!selectedId) return null;
+    return rawAbsences.find((a) => String(a.id) === String(selectedId)) || null;
+  }, [rawAbsences, selectedId]);
+
+  const hasActiveFilters =
+    statusFilter !== "all" ||
+    assistantFilter !== "all" ||
+    startDateFilter !== "" ||
+    endDateFilter !== "";
+
+  function handleResetFilters() {
+    setStatusFilter("all");
+    setAssistantFilter("all");
+    setStartDateFilter("");
+    setEndDateFilter("");
+    setCurrentPage(1);
+  }
+
+  // Abertura do modal para registar nova ausência
   function handleOpenAdd() {
-    setEditId(null);
-    setFormAssistant("");
-    setFormStartDate("");
+    setEditingAbsence(null);
+    setFormAssistantId(assistants[0] ? String(assistants[0].id) : "");
+    setFormAbsenceTypeId(absenceTypes[0] ? String(absenceTypes[0].id) : "");
+    setFormStartDate(todayStr);
     setFormStartTime("08:00");
-    setFormEndDate("");
+    setFormEndDate(todayStr);
     setFormEndTime("17:00");
-    setFormReason(ABSENCE_TYPES_MOCK[0]?.name ?? "Doença");
     setFormNote("");
-    setFormStatus("");
+    setFormStatus("pending");
     setFormDocumentName("");
     setFormErrors({});
     setShowForm(true);
   }
 
-  function handleOpenEdit(absence: Absence) {
-    setEditId(absence.id);
-    setFormAssistant(absence.assistant);
-    setFormStartDate(absence.start);
-    setFormStartTime(absence.startTime ?? "08:00");
-    setFormEndDate(absence.end);
-    setFormEndTime(absence.endTime ?? "17:00");
-    setFormReason(absence.reason);
-    setFormNote(absence.note);
-    setFormStatus(
-      absence.status === "pending"
-        ? ""
-        : (absence.status as "justified" | "unjustified")
-    );
-    setFormDocumentName(absence.documentPath ?? "");
+  // Abertura do modal para editar ausência existente
+  function handleOpenEdit(absence: BackendAbsenceResource) {
+    setEditingAbsence(absence);
+    setFormAssistantId(String(absence.assistant_id || absence.assistant?.id || ""));
+    setFormAbsenceTypeId(String(absence.absence_type_id || absence.absence_type?.id || ""));
+    setFormStartDate(formatToIsoDate(absence.valid_from) || todayStr);
+    setFormStartTime(absence.start_time || "08:00");
+    setFormEndDate(formatToIsoDate(absence.valid_until) || todayStr);
+    setFormEndTime(absence.end_time || "17:00");
+    setFormNote(absence.notes || "");
+    setFormStatus(absence.status || "pending");
+    setFormDocumentName(absence.document_path || "");
     setFormErrors({});
     setShowForm(true);
   }
 
-  function handleSave() {
-    const errors: { assistant?: string; startDate?: string; endDate?: string } = {};
-    if (!formAssistant) {
+  // Gravação do formulário (Criar / Editar)
+  async function handleSaveForm() {
+    const errors: typeof formErrors = {};
+    if (!formAssistantId) {
       errors.assistant = "Selecione o assistente.";
+    }
+    if (!formAbsenceTypeId) {
+      errors.absenceType = "Selecione o tipo de falta.";
     }
     if (!formStartDate) {
       errors.startDate = "A data de início é obrigatória.";
@@ -103,87 +275,92 @@ export default function AbsenceManagement() {
     }
 
     setFormErrors({});
-    const assistant = ASSISTANTS.find((a) => a.name === formAssistant);
-    const status = formStatus !== "" ? formStatus : "pending";
-    if (editId !== null) {
-      setAbsencesList((prev) =>
-        prev.map((a) =>
-          a.id === editId
-            ? {
-                ...a,
-                assistant: formAssistant,
-                initials: assistant?.initials ?? a.initials,
-                start: formStartDate,
-                end: formEndDate,
-                startTime: formStartTime,
-                endTime: formEndTime,
-                reason: formReason,
-                note: formNote,
-                status,
-                documentPath: formDocumentName || null,
-              }
-            : a
-        )
-      );
-      if (selectedId === editId) setSelectedId(editId);
-    } else {
-      const newId =
-        typeof crypto !== "undefined" && crypto.randomUUID
-          ? crypto.randomUUID()
-          : String(Date.now());
-      setAbsencesList((prev) => [
-        ...prev,
-        {
-          id: newId,
-          assistant: formAssistant,
-          initials: assistant?.initials ?? "??",
-          start: formStartDate,
-          end: formEndDate,
-          startTime: formStartTime,
-          endTime: formEndTime,
-          days: 1,
-          reason: formReason,
-          status,
-          submitted: "27 Jan 2026",
-          note: formNote,
-          documentPath: formDocumentName || null,
-          conflict: false,
-          conflictDetail: "",
-        },
-      ]);
-      setSelectedId(newId);
+
+    const payload = {
+      assistant_id: formAssistantId,
+      absence_type_id: formAbsenceTypeId,
+      valid_from: formStartDate,
+      valid_until: formEndDate,
+      start_time: formStartTime,
+      end_time: formEndTime,
+      notes: formNote.trim() || null,
+      document_path: formDocumentName.trim() || null,
+      status: formStatus,
+    };
+
+    try {
+      if (editingAbsence) {
+        await updateMutation.mutateAsync({
+          id: editingAbsence.id,
+          data: payload,
+        });
+      } else {
+        const res = await createMutation.mutateAsync(payload);
+        if (res?.id) {
+          setSelectedId(res.id);
+        }
+      }
+      setShowForm(false);
+    } catch {
+      // Tratado no hook de mutação
     }
-    setShowForm(false);
   }
 
-  function handleDelete(id: EntityId) {
-    setAbsencesList((prev) => prev.filter((a) => a.id !== id));
-    if (selectedId === id) setSelectedId(null);
-    setDeleteConfirmId(null);
+  // Alteração de estado (Justificar / Injustificar)
+  async function handleUpdateStatus(
+    id: string | number,
+    newStatus: "justified" | "unjustified" | "pending"
+  ) {
+    try {
+      await updateStatusMutation.mutateAsync({
+        id,
+        status: newStatus,
+      });
+    } catch {
+      // Notificado via hook
+    }
   }
 
-  function handleJustify(id: EntityId, justificationStatus: "justified" | "unjustified") {
-    setAbsencesList((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: justificationStatus } : a))
+  // Eliminar ausência
+  async function handleDeleteConfirm() {
+    if (!deleteConfirmTarget) return;
+    try {
+      await deleteMutation.mutateAsync(deleteConfirmTarget.id);
+      if (selectedId === deleteConfirmTarget.id) {
+        setSelectedId(null);
+      }
+      setDeleteConfirmTarget(null);
+    } catch {
+      // Notificado via hook
+    }
+  }
+
+  // Solicitar documentação
+  function handleRequestDocumentation(absenceId: string | number) {
+    setDocumentationRequestedIds((prev) => [...prev, absenceId]);
+    notify.info(
+      "O pedido de documentação foi enviado com sucesso ao assistente.",
+      "Pedido Enviado"
     );
   }
 
+  // Renderizar o badge de estado
   const renderStatusBadge = (status: string) => {
-    if (status === "justified") {
+    if (status === "justified" || status === "justificada") {
       return (
         <Badge
           variant="outline"
-          className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+          className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[11px] font-medium"
         >
           Justificada
         </Badge>
       );
     }
-    if (status === "unjustified") {
+    if (status === "unjustified" || status === "injustificada") {
       return (
         <Badge
           variant="outline"
-          className="bg-destructive/10 text-destructive border-destructive/20"
+          className="bg-destructive/10 text-destructive border-destructive/20 text-[11px] font-medium"
         >
           Injustificada
         </Badge>
@@ -192,542 +369,467 @@ export default function AbsenceManagement() {
     return (
       <Badge
         variant="outline"
-        className="bg-amber-500/10 text-amber-600 border-amber-500/20"
+        className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[11px] font-medium"
       >
         Pendente
       </Badge>
     );
   };
 
+  // Helper para obter nome do assistente
+  function getAssistantName(absence: BackendAbsenceResource): string {
+    if (absence.assistant?.name) return absence.assistant.name;
+    if (absence.assistant_name) return absence.assistant_name;
+    const found = assistants.find((a) => String(a.id) === String(absence.assistant_id));
+    if (found?.name) return found.name;
+    return "Assistente";
+  }
+
+  // Helper para obter iniciais
+  function getAssistantInitials(absence: BackendAbsenceResource): string {
+    if (absence.assistant?.initials) return absence.assistant.initials;
+    const name = getAssistantName(absence);
+    const parts = name.split(" ").filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase() || "AS";
+  }
+
+  // Helper para obter tipo de falta
+  function getAbsenceTypeName(absence: BackendAbsenceResource): string {
+    if (absence.absence_type?.name) return absence.absence_type.name;
+    if (absence.absence_type_name) return absence.absence_type_name;
+    if (absence.justification) return absence.justification;
+    const found = absenceTypes.find((t) => String(t.id) === String(absence.absence_type_id));
+    return found?.name || "Ausência";
+  }
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-4">
+      {/* ── CABEÇALHO DA PÁGINA ────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-xl font-semibold text-foreground">Ausências</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Gestão e justificação de faltas da equipa
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Gestão e justificação de faltas da equipa escolar
           </p>
         </div>
         <button
+          type="button"
           onClick={handleOpenAdd}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs sm:text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs"
         >
-          <Plus size={14} />
+          <Plus size={15} />
           Nova Ausência
         </button>
       </div>
 
-      {/* Create / Edit modal */}
-      {showForm && (
-        <>
-          <div
-            className="fixed inset-0 z-40 bg-black/30"
-            onClick={() => setShowForm(false)}
-          />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
-              <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
-                <h3 className="font-semibold text-foreground">
-                  {editId !== null ? "Editar Ausência" : "Registar Ausência"}
-                </h3>
-                <button
-                  onClick={() => setShowForm(false)}
-                  className="p-1.5 rounded hover:bg-muted"
-                >
-                  <X size={15} className="text-muted-foreground" />
-                </button>
-              </div>
-              <div className="p-5 space-y-4 overflow-y-auto">
-                {/* Assistant */}
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5">
-                    Assistente *
-                  </label>
-                  <CustomSelect
-                    value={formAssistant}
-                    hasError={!!formErrors.assistant}
-                    onChange={(e: any) => {
-                      const val = typeof e === "string" ? e : e.target.value;
-                      setFormAssistant(val);
-                      if (formErrors.assistant) {
-                        setFormErrors((p) => ({ ...p, assistant: undefined }));
-                      }
-                    }}
-                    placeholder="Selecionar assistente..."
-                    options={ASSISTANTS.map((a) => ({
-                      value: a.name,
-                      label: a.name,
-                    }))}
-                  />
-                  {formErrors.assistant && (
-                    <p className="text-[11px] text-destructive mt-1 font-medium">
-                      {formErrors.assistant}
-                    </p>
-                  )}
-                </div>
-                {/* Dates & Times */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                      Data de Início *
-                    </label>
-                    <DatePicker
-                      value={formStartDate}
-                      hasError={!!formErrors.startDate}
-                      onChange={(v) => {
-                        setFormStartDate(v);
-                        if (formErrors.startDate) {
-                          setFormErrors((p) => ({ ...p, startDate: undefined }));
-                        }
-                        if (v && formEndDate && formEndDate < v) {
-                          setFormEndDate(v);
-                        }
-                      }}
-                      className="w-full"
-                    />
-                    {formErrors.startDate && (
-                      <p className="text-[11px] text-destructive mt-1 font-medium">
-                        {formErrors.startDate}
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                      Hora Inicial *
-                    </label>
-                    <TimePicker
-                      value={formStartTime}
-                      onChange={setFormStartTime}
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                      Data de Fim *
-                    </label>
-                    <DatePicker
-                      value={formEndDate}
-                      hasError={!!formErrors.endDate}
-                      minDate={formStartDate || undefined}
-                      onChange={(v) => {
-                        setFormEndDate(v);
-                        if (formErrors.endDate) {
-                          setFormErrors((p) => ({ ...p, endDate: undefined }));
-                        }
-                      }}
-                      className="w-full"
-                    />
-                    {formErrors.endDate && (
-                      <p className="text-[11px] text-destructive mt-1 font-medium">
-                        {formErrors.endDate}
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                      Hora Final *
-                    </label>
-                    <TimePicker
-                      value={formEndTime}
-                      onChange={setFormEndTime}
-                      className="w-full"
-                    />
-                  </div>
-                </div>
-                {/* Reason */}
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5">
-                    Tipo de Falta
-                  </label>
-                  <CustomSelect
-                    value={formReason}
-                    onChange={(e: any) => setFormReason(typeof e === "string" ? e : e.target.value)}
-                    placeholder="Selecionar tipo de falta..."
-                    options={ABSENCE_TYPES_MOCK.map((t) => ({
-                      value: t.name,
-                      label: t.name,
-                    }))}
-                  />
-                </div>
-                {/* Notes */}
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5">
-                    Notas
-                  </label>
-                  <textarea
-                    value={formNote}
-                    onChange={(e) => setFormNote(e.target.value)}
-                    rows={2}
-                    placeholder="Observações sobre a ausência..."
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring resize-none"
-                  />
-                </div>
-                {/* Optional separator */}
-                <div className="border-t border-border pt-3">
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Informação opcional — pode ser preenchida agora ou mais tarde
-                  </p>
-                  {/* Document */}
-                  <div className="mb-3">
-                    <label className="text-xs text-muted-foreground block mb-1.5">
-                      Documento de Justificação
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-input-background text-xs text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
-                        <Paperclip size={13} />
-                        {formDocumentName ? formDocumentName : "Anexar ficheiro..."}
-                        <input
-                          type="file"
-                          className="hidden"
-                          onChange={(e) =>
-                            setFormDocumentName(e.target.files?.[0]?.name ?? "")
-                          }
-                          accept=".pdf,.jpg,.jpeg,.png"
-                        />
-                      </label>
-                      {formDocumentName && (
-                        <button
-                          onClick={() => setFormDocumentName("")}
-                          className="p-1 rounded hover:bg-muted"
-                        >
-                          <X size={12} className="text-muted-foreground" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {/* Status */}
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1.5">
-                      Classificar Falta
-                    </label>
-                    <div className="flex gap-2">
-                      {[
-                        {
-                          value: "" as const,
-                          label: "Deixar Pendente",
-                          cls: "border-border text-muted-foreground",
-                        },
-                        {
-                          value: "justified" as const,
-                          label: "Justificada",
-                          cls: "border-[#0E7C59]/40 text-[#0E7C59]",
-                        },
-                        {
-                          value: "unjustified" as const,
-                          label: "Injustificada",
-                          cls: "border-[#C8291A]/40 text-[#C8291A]",
-                        },
-                      ].map((opt) => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => setFormStatus(opt.value)}
-                          className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                            formStatus === opt.value
-                              ? opt.value === "justified"
-                                ? "bg-[#0E7C59] text-white border-[#0E7C59]"
-                                : opt.value === "unjustified"
-                                ? "bg-[#C8291A] text-white border-[#C8291A]"
-                                : "bg-muted text-foreground border-border"
-                              : `bg-transparent ${opt.cls} hover:bg-muted/40`
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="px-5 py-4 border-t border-border flex gap-3 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  className="flex-1 py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
-                >
-                  {editId !== null ? "Guardar Alterações" : "Registar"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowForm(false)}
-                  className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
+      {/* ── BARRA DE FILTROS SUPERIOR (ASSISTENTE E DATAS) ─────────────── */}
+      <Card className="p-3.5 border-border bg-card">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          {/* Filtro por Assistente */}
+          <div className="flex-1 min-w-[200px]">
+            <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+              Assistente
+            </label>
+            <CustomSelect
+              value={assistantFilter}
+              onChange={(e: any) => {
+                const val = typeof e === "string" ? e : e?.target?.value || "all";
+                setAssistantFilter(val);
+              }}
+              options={[
+                { value: "all", label: "Todos os Assistentes" },
+                ...assistants.map((a) => ({
+                  value: String(a.id),
+                  label: a.name,
+                })),
+              ]}
+              size="sm"
+              placeholder="Filtrar por assistente..."
+            />
           </div>
-        </>
-      )}
 
-      {/* Delete confirmation modal */}
-      <ConfirmationModal
-        open={deleteConfirmId !== null}
-        onClose={() => setDeleteConfirmId(null)}
-        onConfirm={() => {
-          if (deleteConfirmId !== null) {
-            handleDelete(deleteConfirmId);
-            setDeleteConfirmId(null);
-          }
-        }}
-        title="Eliminar Ausência"
-        description={
-          deleteConfirmId !== null ? (() => {
-            const target = absencesList.find((x) => x.id === deleteConfirmId);
-            return (
-              <>
-                A ausência de{" "}
-                <strong className="text-foreground">
-                  {target?.assistant}
-                </strong>{" "}
-                ({target?.start} – {target?.end}) será permanentemente eliminada.
-              </>
-            );
-          })() : ""
-        }
-        confirmLabel="Eliminar Ausência"
-        cancelLabel="Cancelar"
-        variant="danger"
-      />
+          {/* Filtro Data Inicial */}
+          <div className="w-full sm:w-44">
+            <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+              Data de Início
+            </label>
+            <DatePicker
+              value={startDateFilter}
+              onChange={(val) => {
+                setStartDateFilter(val);
+                if (val && endDateFilter && endDateFilter < val) {
+                  setEndDateFilter(val);
+                }
+              }}
+              placeholder="Desde..."
+              className="w-full"
+            />
+          </div>
 
+          {/* Filtro Data Final */}
+          <div className="w-full sm:w-44">
+            <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+              Data de Fim
+            </label>
+            <DatePicker
+              value={endDateFilter}
+              minDate={startDateFilter || undefined}
+              onChange={setEndDateFilter}
+              placeholder="Até..."
+              className="w-full"
+            />
+          </div>
+
+          {/* Botão Limpar Filtros */}
+          {hasActiveFilters && (
+            <div className="sm:self-end pt-1 sm:pt-0">
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors w-full sm:w-auto justify-center"
+                title="Limpar todos os filtros"
+              >
+                <RotateCcw size={12} />
+                <span>Limpar</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* ── GRELHA MASTER-DETAIL (2 COLUNAS) ───────────────────────────── */}
       <div
-        className="grid grid-cols-1 lg:grid-cols-5 gap-4"
-        style={{ minHeight: 520 }}
+        className="grid grid-cols-1 lg:grid-cols-12 gap-4"
+        style={{ minHeight: 560 }}
       >
-        {/* List */}
+        {/* COLUNA ESQUERDA: LISTA DE AUSÊNCIAS COM ABAS E PAGINAÇÃO */}
         <div
-          className={`lg:col-span-2 flex flex-col border border-border rounded-lg overflow-hidden bg-card ${
+          className={`lg:col-span-5 flex flex-col border border-border rounded-xl overflow-hidden bg-card shadow-xs ${
             selectedId ? "hidden lg:flex" : "flex"
           }`}
         >
-          <div className="px-3 py-2 border-b border-border bg-muted/20 flex items-center gap-1 flex-wrap">
-            {(
-              [
-                { id: "pending", label: "Pendentes" },
-                { id: "justified", label: "Justificadas" },
-                { id: "unjustified", label: "Injustificadas" },
-                { id: "all", label: "Todas" },
-              ] as const
-            ).map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setStatusFilter(f.id)}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  statusFilter === f.id
-                    ? "bg-accent text-white"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {f.label}
-                {f.id === "pending" && (
-                  <span className="ml-1 bg-[#D97706] text-white rounded-full px-1 text-[9px]">
-                    {absencesList.filter((a) => a.status === "pending").length}
+          {/* Tabs de Filtro de Estado */}
+          <div className="p-2 border-b border-border bg-muted/20 flex items-center gap-1 overflow-x-auto">
+            {[
+              { id: "all" as const, label: "Todas", count: statusCounts.all },
+              {
+                id: "pending" as const,
+                label: "Pendentes",
+                count: statusCounts.pending,
+              },
+              {
+                id: "justified" as const,
+                label: "Justificadas",
+                count: statusCounts.justified,
+              },
+              {
+                id: "unjustified" as const,
+                label: "Injustificadas",
+                count: statusCounts.unjustified,
+              },
+            ].map((f) => {
+              const isActive = statusFilter === f.id;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setStatusFilter(f.id)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                    isActive
+                      ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  }`}
+                >
+                  <span>{f.label}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                      isActive
+                        ? "bg-primary-foreground/20 text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {f.count}
                   </span>
-                )}
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
-          <div className="flex-1 overflow-y-auto">
-            {filteredAbsences.length === 0 && (
-              <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-                Sem ausências
+
+          {/* Lista de Registos */}
+          <div className="flex-1 overflow-y-auto divide-y divide-border/50">
+            {isLoadingAbsences ? (
+              <div className="flex flex-col items-center justify-center p-12 text-muted-foreground gap-2">
+                <Loader2 size={20} className="animate-spin text-primary" />
+                <span className="text-xs">A carregar ausências...</span>
               </div>
-            )}
-            {filteredAbsences.map((absence) => (
-              <button
-                key={absence.id}
-                type="button"
-                onClick={() => setSelectedId(absence.id)}
-                className={`w-full text-left px-3 py-3 border-b border-border/50 transition-colors hover:bg-muted/30 ${
-                  selectedId === absence.id
-                    ? "bg-accent/5 border-l-2 border-l-accent"
-                    : ""
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <span className="text-[8px] font-bold text-primary font-mono">
-                      {absence.initials}
-                    </span>
-                  </div>
-                  <span className="text-xs font-semibold text-foreground flex-1">
-                    {absence.assistant}
-                  </span>
-                  {absence.conflict && (
-                    <AlertTriangle
-                      size={12}
-                      className="text-[#C8291A] flex-shrink-0"
-                    />
-                  )}
-                </div>
-                <p className="text-[11px] text-muted-foreground font-mono">
-                  {absence.start} – {absence.end} · {absence.days}d ·{" "}
-                  {absence.reason}
+            ) : filteredAbsences.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-12 text-muted-foreground gap-2 text-center">
+                <Inbox size={26} className="text-muted-foreground/30 mb-1" />
+                <p className="text-xs font-medium text-foreground">
+                  Nenhuma ausência encontrada
                 </p>
-                <div className="mt-1.5">{renderStatusBadge(absence.status)}</div>
-              </button>
-            ))}
+                <p className="text-[11px] text-muted-foreground">
+                  {hasActiveFilters
+                    ? "Tente ajustar os filtros aplicados acima."
+                    : "Não existem ausências registadas nesta escola."}
+                </p>
+              </div>
+            ) : (
+              paginatedAbsences.map((absence) => {
+                const isSelected = String(selectedId) === String(absence.id);
+                const assistantName = getAssistantName(absence);
+                const initials = getAssistantInitials(absence);
+                const typeName = getAbsenceTypeName(absence);
+
+                return (
+                  <button
+                    key={absence.id}
+                    type="button"
+                    onClick={() => setSelectedId(absence.id)}
+                    className={`w-full text-left p-3 transition-colors hover:bg-muted/30 focus:outline-none ${
+                      isSelected
+                        ? "bg-primary/10 border-l-3 border-l-primary"
+                        : ""
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-6 h-6 rounded-full bg-primary/15 text-primary flex items-center justify-center flex-shrink-0 font-bold font-mono text-[9px]">
+                          {initials}
+                        </div>
+                        <span className="text-xs font-semibold text-foreground truncate">
+                          {assistantName}
+                        </span>
+                      </div>
+                      <div className="flex-shrink-0">
+                        {renderStatusBadge(absence.status)}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono mt-1">
+                      <span>
+                        {absence.valid_from} – {absence.valid_until}
+                      </span>
+                      <span className="font-sans text-[10px] bg-muted/60 px-1.5 py-0.5 rounded text-muted-foreground">
+                        {absence.total_days} dia(s)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1">
+                      <span className="truncate">{typeName}</span>
+                      {absence.document_path && (
+                        <span
+                          className="flex items-center gap-1 text-[10px] text-primary"
+                          title="Contém documento anexo"
+                        >
+                          <Paperclip size={11} />
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })
+            )}
           </div>
+
+          {/* Rodapé da Coluna Esquerda com Paginação */}
+          {filteredAbsences.length > 0 && (
+            <div className="p-2.5 border-t border-border bg-card flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span className="text-[11px]">
+                <strong className="font-medium text-foreground">
+                  {(safeCurrentPage - 1) * pageSize + 1}–
+                  {Math.min(safeCurrentPage * pageSize, filteredAbsences.length)}
+                </strong>{" "}
+                de{" "}
+                <strong className="font-medium text-foreground">
+                  {filteredAbsences.length}
+                </strong>
+              </span>
+
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={safeCurrentPage <= 1}
+                    className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    title="Página anterior"
+                  >
+                    <ChevronLeft size={13} />
+                  </button>
+
+                  <span className="px-2 font-mono text-[11px]">
+                    {safeCurrentPage} / {totalPages}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={safeCurrentPage >= totalPages}
+                    className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    title="Página seguinte"
+                  >
+                    <ChevronRight size={13} />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Detail */}
+        {/* COLUNA DIREITA: PAINEL DE DETALHE DA AUSÊNCIA */}
         <div
-          className={`lg:col-span-3 ${selectedId ? "block" : "hidden lg:block"}`}
+          className={`lg:col-span-7 ${
+            selectedId ? "block" : "hidden lg:block"
+          }`}
         >
           {!selectedAbsence ? (
-            <Card className="h-full flex items-center justify-center">
-              <div className="text-center">
-                <Inbox
-                  size={28}
-                  className="text-muted-foreground/25 mx-auto mb-2"
-                />
-                <p className="text-sm text-muted-foreground">
-                  Selecione uma ausência
+            <Card className="h-full min-h-[400px] flex items-center justify-center p-8 border-border bg-card">
+              <div className="text-center text-muted-foreground space-y-2">
+                <Inbox size={32} className="text-muted-foreground/30 mx-auto" />
+                <p className="text-sm font-medium text-foreground">
+                  Nenhuma ausência selecionada
+                </p>
+                <p className="text-xs text-muted-foreground max-w-xs">
+                  Selecione um registo da lista à esquerda para consultar todos os detalhes e proceder à justificação.
                 </p>
               </div>
             </Card>
           ) : (
-            <Card className="h-full flex flex-col overflow-hidden">
-              <div className="px-5 py-4 border-b border-border flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(null)}
-                  className="lg:hidden p-1 rounded hover:bg-muted mr-1"
-                >
-                  <ChevronLeft size={16} className="text-muted-foreground" />
-                </button>
-                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-bold text-primary font-mono">
-                    {selectedAbsence.initials}
-                  </span>
+            <Card className="h-full flex flex-col border-border bg-card shadow-xs overflow-hidden">
+              {/* Header do Detalhe */}
+              <div className="p-4 sm:p-5 border-b border-border bg-muted/10 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(null)}
+                    className="lg:hidden p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground"
+                    title="Voltar à lista"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <div className="w-10 h-10 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold font-mono text-xs flex-shrink-0">
+                    {getAssistantInitials(selectedAbsence)}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-foreground text-sm truncate">
+                      {getAssistantName(selectedAbsence)}
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {getAbsenceTypeName(selectedAbsence)} · {selectedAbsence.total_days} dia(s)
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-foreground text-sm">
-                    {selectedAbsence.assistant}
-                  </h3>
-                  <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                    {selectedAbsence.start} – {selectedAbsence.end}
-                    {selectedAbsence.startTime
-                      ? ` (${selectedAbsence.startTime}–${selectedAbsence.endTime || "17:00"})`
-                      : ""}{" "}
-                    · {selectedAbsence.days} dias · {selectedAbsence.reason}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
+
+                <div className="flex items-center gap-2 flex-shrink-0">
                   {renderStatusBadge(selectedAbsence.status)}
                   <button
                     type="button"
                     onClick={() => handleOpenEdit(selectedAbsence)}
-                    className="p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    disabled={isMutating}
+                    className="p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
                     title="Editar ausência"
                   >
                     <Pencil size={13} />
                   </button>
                   <button
                     type="button"
-                    onClick={() => setDeleteConfirmId(selectedAbsence.id)}
-                    className="p-1.5 rounded-lg border border-border hover:border-destructive/30 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                    onClick={() => setDeleteConfirmTarget(selectedAbsence)}
+                    disabled={isMutating}
+                    className="p-1.5 rounded-lg border border-border hover:border-destructive/30 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
                     title="Eliminar ausência"
                   >
                     <Trash2 size={13} />
                   </button>
                 </div>
               </div>
+
+              {/* Corpo do Detalhe (Avisos de conflito removidos!) */}
               <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                {selectedAbsence.conflict ? (
-                  <div className="flex items-start gap-3 p-3.5 rounded-lg bg-[#FEF2F2] border border-[#C8291A]/20">
-                    <AlertTriangle
-                      size={15}
-                      className="text-[#C8291A] flex-shrink-0 mt-0.5"
-                    />
-                    <div>
-                      <p className="text-xs font-semibold text-[#7F1D1D] mb-0.5">
-                        Conflito com regras de cobertura
+                {/* Grelha de Informação Principal */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3 rounded-lg bg-muted/20 border border-border/40">
+                    <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider font-semibold">
+                      Período de Ausência
+                    </p>
+                    <p className="text-xs font-mono font-medium text-foreground">
+                      {selectedAbsence.valid_from} a {selectedAbsence.valid_until}
+                    </p>
+                    {selectedAbsence.start_time && selectedAbsence.end_time && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Horário: {selectedAbsence.start_time} – {selectedAbsence.end_time}
                       </p>
-                      <p className="text-xs text-[#C8291A]">
-                        {selectedAbsence.conflictDetail}
-                      </p>
-                    </div>
+                    )}
                   </div>
-                ) : selectedAbsence.status === "pending" ? (
-                  <div className="flex items-start gap-3 p-3.5 rounded-lg bg-[#F0FDF4] border border-[#0E7C59]/20">
-                    <CheckCircle
-                      size={15}
-                      className="text-[#0E7C59] flex-shrink-0 mt-0.5"
-                    />
-                    <p className="text-xs text-[#0E7C59]">
-                      Sem conflitos de cobertura detectados para este período.
+
+                  <div className="p-3 rounded-lg bg-muted/20 border border-border/40">
+                    <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider font-semibold">
+                      Duração Total
+                    </p>
+                    <p className="text-xs font-medium text-foreground">
+                      {selectedAbsence.total_days} dia(s) de falta
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Tipo: {getAbsenceTypeName(selectedAbsence)}
                     </p>
                   </div>
-                ) : null}
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    {
-                      label: "Período",
-                      value: `${selectedAbsence.start} – ${selectedAbsence.end}${
-                        selectedAbsence.startTime
-                          ? ` (${selectedAbsence.startTime} – ${selectedAbsence.endTime || "17:00"})`
-                          : ""
-                      }`,
-                    },
-                    { label: "Duração", value: `${selectedAbsence.days} dia(s)` },
-                    { label: "Motivo", value: selectedAbsence.reason },
-                    { label: "Submetido", value: selectedAbsence.submitted },
-                  ].map((f) => (
-                    <div key={f.label} className="bg-muted/20 rounded-lg p-3">
-                      <p className="text-[10px] text-muted-foreground mb-0.5">
-                        {f.label}
-                      </p>
-                      <p className="text-sm font-medium text-foreground">
-                        {f.value}
-                      </p>
-                    </div>
-                  ))}
                 </div>
-                {selectedAbsence.note && (
-                  <div className="bg-muted/20 rounded-lg p-3">
-                    <p className="text-[10px] text-muted-foreground mb-0.5">
+
+                {/* Observações / Notas */}
+                {selectedAbsence.notes && (
+                  <div className="p-3 rounded-lg bg-muted/20 border border-border/40 space-y-1">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
                       Observações
                     </p>
-                    <p className="text-sm text-foreground">{selectedAbsence.note}</p>
-                  </div>
-                )}
-                {selectedAbsence.documentPath && (
-                  <div className="flex items-center gap-2.5 p-3 rounded-lg border border-border bg-muted/10">
-                    <Paperclip
-                      size={13}
-                      className="text-muted-foreground flex-shrink-0"
-                    />
-                    <p className="text-xs text-foreground font-mono flex-1 truncate">
-                      {selectedAbsence.documentPath}
+                    <p className="text-xs text-foreground whitespace-pre-wrap">
+                      {selectedAbsence.notes}
                     </p>
-                    <button
-                      type="button"
-                      className="text-xs text-accent hover:underline"
-                    >
-                      Ver
-                    </button>
                   </div>
                 )}
-                <div className="border border-border rounded-lg p-3 space-y-2">
-                  <p className="text-xs font-semibold text-foreground">
-                    Pedir Documentação
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Envia um pedido ao assistente para submeter documentação
-                    comprovativa.
-                  </p>
-                  {documentationRequestedIds.includes(selectedAbsence.id) ? (
-                    <div className="flex items-center gap-1.5 text-xs text-[#0E7C59]">
-                      <CheckCircle size={12} />
-                      Pedido enviado
+
+                {/* Documento Comprovativo */}
+                {selectedAbsence.document_path ? (
+                  <div className="p-3 rounded-lg border border-border bg-muted/10 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Paperclip size={14} className="text-primary flex-shrink-0" />
+                      <span className="text-xs font-mono text-foreground truncate">
+                        {selectedAbsence.document_path}
+                      </span>
                     </div>
+                    <span className="text-[11px] text-primary font-medium cursor-pointer hover:underline flex-shrink-0">
+                      Ver anexo
+                    </span>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-lg border border-dashed border-border/60 bg-muted/5 flex items-center justify-between gap-3">
+                    <div className="text-xs text-muted-foreground">
+                      Nenhum documento comprovativo anexado até ao momento.
+                    </div>
+                  </div>
+                )}
+
+                {/* Pedir Documentação */}
+                <div className="p-3 rounded-lg border border-border/60 bg-muted/10 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-semibold text-foreground">
+                      Pedido de Comprovativo
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Solicitar ao assistente a submissão de atestado ou justificação oficial.
+                    </p>
+                  </div>
+                  {documentationRequestedIds.includes(selectedAbsence.id) ? (
+                    <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+                      <Check size={12} /> Pedido enviado
+                    </span>
                   ) : (
                     <button
                       type="button"
-                      onClick={() => setDocumentationRequestedIds((p) => [...p, selectedAbsence.id])}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => handleRequestDocumentation(selectedAbsence.id)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-xs font-medium text-foreground transition-colors shadow-xs"
                     >
                       <Paperclip size={12} />
                       Pedir documentação
@@ -735,30 +837,304 @@ export default function AbsenceManagement() {
                   )}
                 </div>
               </div>
-              {selectedAbsence.status === "pending" && (
-                <div className="px-5 py-4 border-t border-border flex gap-3">
+
+              {/* Rodapé do Detalhe com Ações de Justificação */}
+              <div className="p-4 border-t border-border bg-card flex items-center justify-end gap-2.5">
+                {selectedAbsence.status === "pending" ||
+                selectedAbsence.status === "aguarda_documento" ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={isMutating}
+                      onClick={() => handleUpdateStatus(selectedAbsence.id, "unjustified")}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-destructive/30 text-destructive text-xs font-medium hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                    >
+                      <X size={14} />
+                      Injustificar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isMutating}
+                      onClick={() => handleUpdateStatus(selectedAbsence.id, "justified")}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 transition-colors shadow-xs disabled:opacity-50"
+                    >
+                      <Check size={14} />
+                      Justificar Falta
+                    </button>
+                  </>
+                ) : (
                   <button
                     type="button"
-                    onClick={() => handleJustify(selectedAbsence.id, "justified")}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0E7C59] text-white text-sm font-medium hover:bg-[#0A6349] transition-colors"
+                    disabled={isMutating}
+                    onClick={() => handleUpdateStatus(selectedAbsence.id, "pending")}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted text-xs font-medium transition-colors disabled:opacity-50"
                   >
-                    <Check size={14} />
-                    Justificar
+                    <RotateCcw size={12} />
+                    Reverter para Pendente
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handleJustify(selectedAbsence.id, "unjustified")}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#C8291A]/30 text-[#C8291A] text-sm font-medium hover:bg-[#FEF2F2] transition-colors"
-                  >
-                    <X size={14} />
-                    Injustificar
-                  </button>
-                </div>
-              )}
+                )}
+              </div>
             </Card>
           )}
         </div>
       </div>
+
+      {/* ── MODAL DE CRIAR / EDITAR AUSÊNCIA ───────────────────────────── */}
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="w-full max-w-lg p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl max-h-[92vh] flex flex-col">
+          <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10 rounded-t-xl shrink-0">
+            <DialogTitle className="font-semibold text-foreground text-sm">
+              {editingAbsence ? "Editar Ausência" : "Registar Ausência"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="p-5 space-y-4 overflow-y-auto max-h-[calc(92vh-120px)]">
+            {/* Assistente */}
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                Assistente *
+              </label>
+              <CustomSelect
+                value={formAssistantId}
+                hasError={!!formErrors.assistant}
+                onChange={(e: any) => {
+                  const val = typeof e === "string" ? e : e?.target?.value || "";
+                  setFormAssistantId(val);
+                  if (formErrors.assistant) {
+                    setFormErrors((p) => ({ ...p, assistant: undefined }));
+                  }
+                }}
+                placeholder="Selecionar assistente..."
+                options={assistants.map((a) => ({
+                  value: String(a.id),
+                  label: a.name,
+                }))}
+              />
+              {formErrors.assistant && (
+                <p className="text-[11px] text-destructive mt-1 font-medium">
+                  {formErrors.assistant}
+                </p>
+              )}
+            </div>
+
+            {/* Tipo de Falta */}
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                Tipo de Falta *
+              </label>
+              <CustomSelect
+                value={formAbsenceTypeId}
+                hasError={!!formErrors.absenceType}
+                onChange={(e: any) => {
+                  const val = typeof e === "string" ? e : e?.target?.value || "";
+                  setFormAbsenceTypeId(val);
+                  if (formErrors.absenceType) {
+                    setFormErrors((p) => ({ ...p, absenceType: undefined }));
+                  }
+                }}
+                placeholder="Selecionar tipo de falta..."
+                options={absenceTypes.map((t) => ({
+                  value: String(t.id),
+                  label: t.name,
+                }))}
+              />
+              {formErrors.absenceType && (
+                <p className="text-[11px] text-destructive mt-1 font-medium">
+                  {formErrors.absenceType}
+                </p>
+              )}
+            </div>
+
+            {/* Datas e Horas */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                  Data de Início *
+                </label>
+                <DatePicker
+                  value={formStartDate}
+                  hasError={!!formErrors.startDate}
+                  onChange={(v) => {
+                    setFormStartDate(v);
+                    if (formErrors.startDate) {
+                      setFormErrors((p) => ({ ...p, startDate: undefined }));
+                    }
+                    if (v && formEndDate && formEndDate < v) {
+                      setFormEndDate(v);
+                    }
+                  }}
+                  className="w-full"
+                />
+                {formErrors.startDate && (
+                  <p className="text-[11px] text-destructive mt-1 font-medium">
+                    {formErrors.startDate}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                  Hora Inicial
+                </label>
+                <TimePicker
+                  value={formStartTime}
+                  onChange={setFormStartTime}
+                  className="w-full"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                  Data de Fim *
+                </label>
+                <DatePicker
+                  value={formEndDate}
+                  hasError={!!formErrors.endDate}
+                  minDate={formStartDate || undefined}
+                  onChange={(v) => {
+                    setFormEndDate(v);
+                    if (formErrors.endDate) {
+                      setFormErrors((p) => ({ ...p, endDate: undefined }));
+                    }
+                  }}
+                  className="w-full"
+                />
+                {formErrors.endDate && (
+                  <p className="text-[11px] text-destructive mt-1 font-medium">
+                    {formErrors.endDate}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                  Hora Final
+                </label>
+                <TimePicker
+                  value={formEndTime}
+                  onChange={setFormEndTime}
+                  className="w-full"
+                />
+              </div>
+            </div>
+
+            {/* Observações */}
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                Observações
+              </label>
+              <textarea
+                value={formNote}
+                onChange={(e) => setFormNote(e.target.value)}
+                rows={2}
+                placeholder="Observações sobre a ausência..."
+                className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+              />
+            </div>
+
+            {/* Documento comprovativo anexo */}
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                Documento de Justificação (Opcional)
+              </label>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-input-background text-xs text-muted-foreground hover:text-foreground cursor-pointer transition-colors flex-1 truncate">
+                  <Paperclip size={13} />
+                  <span className="truncate">
+                    {formDocumentName || "Anexar ficheiro..."}
+                  </span>
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) =>
+                      setFormDocumentName(e.target.files?.[0]?.name ?? "")
+                    }
+                    accept=".pdf,.jpg,.jpeg,.png"
+                  />
+                </label>
+                {formDocumentName && (
+                  <button
+                    type="button"
+                    onClick={() => setFormDocumentName("")}
+                    className="p-2 rounded-lg hover:bg-muted text-muted-foreground"
+                    title="Remover anexo"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Classificação Inicial da Falta */}
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                Classificação da Falta
+              </label>
+              <div className="flex gap-2">
+                {[
+                  { value: "pending", label: "Pendente" },
+                  { value: "justified", label: "Justificada" },
+                  { value: "unjustified", label: "Injustificada" },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setFormStatus(opt.value)}
+                    className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                      formStatus === opt.value
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                        : "border-border bg-muted/20 text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="px-5 py-3 border-t border-border bg-card shrink-0 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowForm(false)}
+              className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={isMutating}
+              onClick={handleSaveForm}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs disabled:opacity-50"
+            >
+              {isMutating && <Loader2 size={13} className="animate-spin" />}
+              <span>{editingAbsence ? "Guardar Alterações" : "Registar Ausência"}</span>
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── MODAL DE CONFIRMAÇÃO DE ELIMINAÇÃO ─────────────────────────── */}
+      <ConfirmationModal
+        open={deleteConfirmTarget !== null}
+        onClose={() => setDeleteConfirmTarget(null)}
+        onConfirm={handleDeleteConfirm}
+        title="Eliminar Ausência"
+        description={
+          deleteConfirmTarget ? (
+            <>
+              A ausência de{" "}
+              <strong className="text-foreground">
+                {getAssistantName(deleteConfirmTarget)}
+              </strong>{" "}
+              ({deleteConfirmTarget.valid_from} a {deleteConfirmTarget.valid_until}) será permanentemente eliminada.
+            </>
+          ) : ""
+        }
+        confirmLabel="Eliminar Ausência"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
     </div>
   );
 }

@@ -1,0 +1,126 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { notify } from "../../components/common/FeedbackNotification";
+import absencesService, {
+  BackendAbsenceResource,
+  CreateAbsencePayload,
+  UpdateAbsencePayload,
+  AbsenceFilterParams,
+} from "../../api/services/absences.service";
+import { useSchool } from "../../context/SchoolContext";
+import { schoolScopedKey } from "../../lib/queryClient";
+
+export const ABSENCES_QUERY_KEY = ["absences"];
+
+/**
+ * Hook para obter a lista de ausências com filtros
+ */
+export function useAbsencesList(filters?: AbsenceFilterParams) {
+  const { selectedSchoolId } = useSchool();
+
+  return useQuery({
+    queryKey: schoolScopedKey("absences", selectedSchoolId, filters || {}),
+    queryFn: async (): Promise<BackendAbsenceResource[]> => {
+      return await absencesService.getAll(filters);
+    },
+    enabled: !!selectedSchoolId,
+  });
+}
+
+/**
+ * Hook para criar uma nova ausência
+ */
+export function useCreateAbsence() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: CreateAbsencePayload) => absencesService.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ABSENCES_QUERY_KEY });
+      notify.success("A ausência foi registada com sucesso.", "Ausência Registada");
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.errors?.general?.[0] ||
+        error?.response?.data?.message ||
+        "Não foi possível registar a ausência.";
+      notify.error(message, "Erro ao Registar Ausência");
+    },
+  });
+}
+
+/**
+ * Hook para atualizar uma ausência
+ */
+export function useUpdateAbsence() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string | number; data: UpdateAbsencePayload }) =>
+      absencesService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ABSENCES_QUERY_KEY });
+      notify.success("A ausência foi atualizada com sucesso.", "Ausência Atualizada");
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || "Não foi possível atualizar a ausência.";
+      notify.error(message, "Erro ao Atualizar");
+    },
+  });
+}
+
+/**
+ * Hook para alterar o estado da ausência (justificar / injustificar)
+ */
+export function useUpdateAbsenceStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      status,
+      notes,
+    }: {
+      id: string | number;
+      status: "justified" | "unjustified" | "pending" | "justificada" | "injustificada";
+      notes?: string;
+    }) => absencesService.updateStatus(id, status, notes),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ABSENCES_QUERY_KEY });
+      const isJustified =
+        variables.status === "justified" || variables.status === "justificada";
+      notify.success(
+        isJustified
+          ? "A ausência foi marcada como justificada."
+          : "A ausência foi marcada como injustificada.",
+        isJustified ? "Ausência Justificada" : "Ausência Injustificada"
+      );
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || "Não foi possível atualizar o estado da ausência.";
+      notify.error(message, "Erro ao Alterar Estado");
+    },
+  });
+}
+
+/**
+ * Hook para eliminar uma ausência
+ */
+export function useDeleteAbsence() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string | number) => absencesService.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ABSENCES_QUERY_KEY });
+      notify.success("A ausência foi eliminada com sucesso.", "Ausência Eliminada");
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || "Não foi possível eliminar a ausência.";
+      notify.error(message, "Erro ao Eliminar");
+    },
+  });
+}
+
