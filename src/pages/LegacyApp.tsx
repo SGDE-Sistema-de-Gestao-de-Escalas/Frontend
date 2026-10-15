@@ -5982,9 +5982,6 @@ function AvatarMenu({
                   <Settings size={15} className="text-muted-foreground" /> Configurações da Plataforma
                 </button>
               )}
-              <button onClick={() => { onSwitchRole(); setOpen(false); }} className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors">
-                <Users size={15} className="text-muted-foreground" /> {role === "Administrador" ? "Ver como Assistente" : "Vista Admin"}
-              </button>
             </div>
             <div className="border-t border-border py-1.5">
               <button onClick={() => { onLogout(); setOpen(false); }} className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors">
