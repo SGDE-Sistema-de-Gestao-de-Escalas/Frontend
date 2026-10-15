@@ -6,7 +6,9 @@ import {
   CheckCircle,
   ChevronLeft,
   Clock,
+  Download,
   Edit2,
+  FileCheck,
   FileText,
   HeartHandshake,
   Info,
@@ -34,6 +36,8 @@ import ConfirmationModal from "../common/ConfirmationModal";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import ActionTooltip from "../common/ActionTooltip";
+import { notify } from "../common/FeedbackNotification";
+import assistantsService from "../../api/services/assistants.service";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
 import {
   useAssistant,
@@ -225,6 +229,23 @@ export default function AssistantProfile({
   const currentAvailableForTransfer = assistant
     ? (assistant.available_for_transfer ?? assistant.availableForTransfer ?? false)
     : availableForTransfer;
+
+  const [isDownloadingCriminalRecord, setIsDownloadingCriminalRecord] = useState(false);
+
+  async function handleDownloadCriminalRecord() {
+    if (!assistant?.id) return;
+    setIsDownloadingCriminalRecord(true);
+    try {
+      await assistantsService.openOrDownloadCriminalRecord(
+        assistant.id,
+        assistant.criminal_record_name || `registo_criminal_${assistant.id}.pdf`
+      );
+    } catch {
+      notify.error("Não foi possível transferir o documento do registo criminal.", "Erro no Download");
+    } finally {
+      setIsDownloadingCriminalRecord(false);
+    }
+  }
 
   function handleToggleTransfer(val: boolean) {
     setAvailableForTransfer(val);
@@ -932,6 +953,41 @@ export default function AssistantProfile({
                 <span className="font-mono text-xs font-medium text-foreground">
                   {formatDateDisplay(assistant?.criminal_record_expiry)}
                 </span>
+              </div>
+
+              <div className="pt-3 border-t border-border/40 text-xs">
+                <span className="text-muted-foreground block mb-1.5">Documento Anexado</span>
+                {assistant?.has_criminal_record ? (
+                  <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/20">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <FileCheck size={16} className="text-emerald-600 shrink-0" />
+                      <span
+                        className="font-medium text-foreground truncate text-xs"
+                        title={assistant.criminal_record_name || "Certificado de Registo Criminal"}
+                      >
+                        {assistant.criminal_record_name || "Certificado_Registo_Criminal.pdf"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleDownloadCriminalRecord}
+                      disabled={isDownloadingCriminalRecord}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-background hover:bg-muted text-foreground border border-border text-xs font-medium transition-colors shrink-0 disabled:opacity-50"
+                      title="Descarregar ficheiro"
+                    >
+                      {isDownloadingCriminalRecord ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <Download size={12} />
+                      )}
+                      <span>Ver</span>
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic">
+                    Nenhum documento anexado
+                  </span>
+                )}
               </div>
             </div>
           </Card>

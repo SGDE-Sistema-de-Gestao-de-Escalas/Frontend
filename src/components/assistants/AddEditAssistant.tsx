@@ -1,15 +1,22 @@
 import React, { useState } from "react";
 import {
   ChevronLeft,
+  Download,
+  FileCheck,
+  FileText,
   Loader2,
   Save,
+  Trash2,
+  Upload,
   User,
+  X,
 } from "lucide-react";
 import { Card } from "../ui/card";
 import { Switch } from "../ui/switch";
 import DatePicker from "../common/DatePicker";
 import { notify } from "../common/FeedbackNotification";
 import { useCreateAssistant, useUpdateAssistant } from "../../hooks/api/useAssistants";
+import assistantsService from "../../api/services/assistants.service";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
 import type { Assistant, CreateAssistantPayload, EntityId } from "../../types";
 
@@ -73,6 +80,9 @@ export default function AddEditAssistant({
   const [criminalRecordExpiry, setCriminalRecordExpiry] = useState<string>(
     clean(assistant?.criminal_record_expiry)
   );
+  const [criminalRecordFile, setCriminalRecordFile] = useState<File | null>(null);
+  const [removeExistingCriminalRecord, setRemoveExistingCriminalRecord] = useState<boolean>(false);
+  const [isDownloadingRecord, setIsDownloadingRecord] = useState<boolean>(false);
 
   // Address
   const [addressStreet, setAddressStreet] = useState<string>(clean(assistant?.address_street));
@@ -112,6 +122,9 @@ export default function AddEditAssistant({
     emergency_contact_name?: string;
     emergency_contact_phone?: string;
     emergency_contact_kinship?: string;
+    criminal_record?: string;
+    criminal_record_file?: string;
+    criminal_record_expiry?: string;
   }>({});
 
   const createMutation = useCreateAssistant();
@@ -125,6 +138,49 @@ export default function AddEditAssistant({
         delete next[field];
         return next;
       });
+    }
+  }
+
+  function handleFileSelected(file: File) {
+    clearError("criminal_record");
+    clearError("criminal_record_file");
+
+    const validMimes = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
+    const validExts = [".pdf", ".jpg", ".jpeg", ".png"];
+    const hasValidExt = validExts.some((ext) => file.name.toLowerCase().endsWith(ext));
+
+    if (!validMimes.includes(file.type) && !hasValidExt) {
+      setFormErrors((prev) => ({
+        ...prev,
+        criminal_record: "O registo criminal deve ser um ficheiro do tipo: pdf, jpg, jpeg ou png.",
+      }));
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setFormErrors((prev) => ({
+        ...prev,
+        criminal_record: "O registo criminal não pode exceder 5MB.",
+      }));
+      return;
+    }
+
+    setCriminalRecordFile(file);
+    setRemoveExistingCriminalRecord(false);
+  }
+
+  async function handleDownloadExistingRecord() {
+    if (!assistant?.id) return;
+    setIsDownloadingRecord(true);
+    try {
+      await assistantsService.openOrDownloadCriminalRecord(
+        assistant.id,
+        assistant.criminal_record_name || `registo_criminal_${assistant.id}.pdf`
+      );
+    } catch {
+      notify.error("Não foi possível transferir o documento do registo criminal.", "Erro no Download");
+    } finally {
+      setIsDownloadingRecord(false);
     }
   }
 
@@ -212,9 +268,14 @@ export default function AddEditAssistant({
       return;
     }
 
+    if (formErrors.criminal_record || formErrors.criminal_record_file) {
+      notify.error("Por favor, corrija os erros no ficheiro do registo criminal.", "Dados Inválidos");
+      return;
+    }
+
     setFormErrors({});
 
-    const payload: CreateAssistantPayload = {
+    const payload: CreateAssistantPayload & { remove_criminal_record?: boolean } = {
       first_name: firstName.trim(),
       last_name: lastName.trim(),
       internal_number: internalNumber.trim(),
@@ -224,7 +285,7 @@ export default function AddEditAssistant({
       social_security_number: cleanNss || undefined,
       birth_date: birthDate || undefined,
       admission_date: admissionDate || undefined,
-      criminal_record_expiry: criminalRecordExpiry || undefined,
+      criminal_record_expiry: hasCriminalRecord ? (criminalRecordExpiry || undefined) : undefined,
       address_street: addressStreet.trim() || undefined,
       address_zip_code: addressZipCode.trim() || undefined,
       address_city: addressCity.trim() || undefined,
@@ -233,6 +294,14 @@ export default function AddEditAssistant({
       emergency_contact_kinship: emergencyKinship.trim() || undefined,
       available_for_transfer: availableForTransfer,
     };
+
+    if (criminalRecordFile) {
+      payload.criminal_record = criminalRecordFile;
+    } else if (removeExistingCriminalRecord || !hasCriminalRecord) {
+      if (assistant?.has_criminal_record) {
+        payload.remove_criminal_record = true;
+      }
+    }
 
     try {
       if (isEdit && assistant?.id) {
@@ -709,20 +778,193 @@ export default function AddEditAssistant({
               </div>
               <Switch
                 checked={hasCriminalRecord}
-                onCheckedChange={setHasCriminalRecord}
+                onCheckedChange={(checked) => {
+                  setHasCriminalRecord(checked);
+                  if (!checked && assistant?.has_criminal_record) {
+                    setRemoveExistingCriminalRecord(true);
+                    setCriminalRecordFile(null);
+                  }
+                }}
               />
             </div>
 
             {hasCriminalRecord && (
-              <div className="pt-4 border-t border-border/40">
-                <label className="text-xs font-medium text-muted-foreground block mb-1.5">
-                  Data de Validade do Certificado
-                </label>
-                <DatePicker
-                  value={criminalRecordExpiry}
-                  onChange={setCriminalRecordExpiry}
-                  className="w-full"
-                />
+              <div className="pt-4 border-t border-border/40 space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground block mb-1.5">
+                    Data de Validade do Certificado
+                  </label>
+                  <DatePicker
+                    value={criminalRecordExpiry}
+                    onChange={(val) => {
+                      setCriminalRecordExpiry(val);
+                      clearError("criminal_record_expiry");
+                    }}
+                    className="w-full"
+                  />
+                  {formErrors.criminal_record_expiry && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {formErrors.criminal_record_expiry}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground block mb-1.5">
+                    Documento do Registo Criminal
+                  </label>
+
+                  {/* 1. Novo ficheiro selecionado localmente */}
+                  {criminalRecordFile ? (
+                    <div className="flex items-center justify-between p-3 rounded-lg border border-primary/30 bg-primary/5">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-2 rounded-md bg-primary/10 text-primary shrink-0">
+                          <FileText size={18} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-foreground truncate">
+                            {criminalRecordFile.name}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {(criminalRecordFile.size / 1024 / 1024).toFixed(2)} MB • Pronto a carregar
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCriminalRecordFile(null)}
+                        className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        title="Remover ficheiro selecionado"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ) : assistant?.has_criminal_record && !removeExistingCriminalRecord ? (
+                    /* 2. Ficheiro existente no servidor */
+                    <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/20">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-2 rounded-md bg-emerald-500/10 text-emerald-600 shrink-0">
+                          <FileCheck size={18} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-foreground truncate">
+                            {assistant.criminal_record_name || "Certificado_Registo_Criminal.pdf"}
+                          </p>
+                          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                            Documento ativo no servidor
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleDownloadExistingRecord}
+                          disabled={isDownloadingRecord}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                          title="Descarregar ficheiro"
+                        >
+                          {isDownloadingRecord ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : (
+                            <Download size={13} />
+                          )}
+                          <span>Ver</span>
+                        </button>
+                        <label
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
+                          title="Substituir por outro documento"
+                        >
+                          <Upload size={13} />
+                          <span>Substituir</span>
+                          <input
+                            type="file"
+                            accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) handleFileSelected(f);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setRemoveExistingCriminalRecord(true)}
+                          className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          title="Eliminar documento atual"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ) : removeExistingCriminalRecord ? (
+                    /* 3. Marcado para remoção */
+                    <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 flex items-center justify-between">
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        O documento existente será removido ao guardar.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setRemoveExistingCriminalRecord(false)}
+                          className="text-xs text-muted-foreground hover:text-foreground underline"
+                        >
+                          Desfazer
+                        </button>
+                        <label className="text-xs font-medium text-primary hover:underline cursor-pointer">
+                          Carregar outro
+                          <input
+                            type="file"
+                            accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) handleFileSelected(f);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ) : (
+                    /* 4. Dropzone para carregar novo ficheiro */
+                    <label
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const f = e.dataTransfer.files?.[0];
+                        if (f) handleFileSelected(f);
+                      }}
+                      className="flex flex-col items-center justify-center gap-1.5 p-4 rounded-lg border border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors bg-muted/10 hover:bg-muted/20 text-center"
+                    >
+                      <div className="p-2 rounded-full bg-muted text-muted-foreground">
+                        <Upload size={16} />
+                      </div>
+                      <p className="text-xs font-medium text-foreground">
+                        Clique para selecionar ou arraste o ficheiro
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Formatos suportados: PDF, JPG, PNG (máx. 5 MB)
+                      </p>
+                      <input
+                        type="file"
+                        accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleFileSelected(f);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  )}
+
+                  {(formErrors.criminal_record || formErrors.criminal_record_file) && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {formErrors.criminal_record || formErrors.criminal_record_file}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>

@@ -54,13 +54,16 @@ export function useCreateAssistant() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: CreateAssistantPayload) => assistantsService.create(data),
+    mutationFn: (data: CreateAssistantPayload | FormData) => assistantsService.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
       notify.success("O assistente foi registado com sucesso.", "Assistente Criado");
     },
     onError: (error: any) => {
-      const message = error?.response?.data?.message || "Não foi possível criar o assistente.";
+      const errs = error?.response?.data?.errors;
+      const fileErr = errs?.criminal_record?.[0] || errs?.criminal_record_file?.[0];
+      const message =
+        fileErr || error?.response?.data?.message || "Não foi possível criar o assistente.";
       notify.error(message, "Erro ao Criar");
     },
   });
@@ -70,7 +73,7 @@ export function useUpdateAssistant() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, data }: { id: number | string; data: UpdateAssistantPayload }) =>
+    mutationFn: ({ id, data }: { id: number | string; data: UpdateAssistantPayload | FormData }) =>
       assistantsService.update(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
@@ -80,7 +83,10 @@ export function useUpdateAssistant() {
       notify.success("Os dados do assistente foram guardados.", "Assistente Atualizado");
     },
     onError: (error: any) => {
-      const message = error?.response?.data?.message || "Não foi possível guardar as alterações.";
+      const errs = error?.response?.data?.errors;
+      const fileErr = errs?.criminal_record?.[0] || errs?.criminal_record_file?.[0];
+      const message =
+        fileErr || error?.response?.data?.message || "Não foi possível guardar as alterações.";
       notify.error(message, "Erro ao Atualizar");
     },
   });
