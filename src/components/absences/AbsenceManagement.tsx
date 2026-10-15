@@ -4,6 +4,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Clock,
   Filter,
   Inbox,
   Loader2,
@@ -14,6 +15,7 @@ import {
   Trash2,
   User,
   X,
+  XCircle,
 } from "lucide-react";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -137,6 +139,12 @@ export default function AbsenceManagement() {
   const [showForm, setShowForm] = useState(false);
   const [editingAbsence, setEditingAbsence] = useState<BackendAbsenceResource | null>(null);
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<BackendAbsenceResource | null>(null);
+  const [statusConfirmTarget, setStatusConfirmTarget] = useState<{
+    source: "detail" | "form";
+    id?: string | number;
+    newStatus: "justified" | "unjustified";
+    assistantName?: string;
+  } | null>(null);
   const [documentationRequestedIds, setDocumentationRequestedIds] = useState<(string | number)[]>([]);
 
   // Campos do formulário
@@ -251,31 +259,8 @@ export default function AbsenceManagement() {
     setShowForm(true);
   }
 
-  // Gravação do formulário (Criar / Editar)
-  async function handleSaveForm() {
-    const errors: typeof formErrors = {};
-    if (!formAssistantId) {
-      errors.assistant = "Selecione o assistente.";
-    }
-    if (!formAbsenceTypeId) {
-      errors.absenceType = "Selecione o tipo de falta.";
-    }
-    if (!formStartDate) {
-      errors.startDate = "A data de início é obrigatória.";
-    }
-    if (!formEndDate) {
-      errors.endDate = "A data de fim é obrigatória.";
-    } else if (formStartDate && formEndDate < formStartDate) {
-      errors.endDate = "A data de fim não pode ser anterior à data de início.";
-    }
-
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors);
-      return;
-    }
-
-    setFormErrors({});
-
+  // Gravação efetiva do formulário (Criar / Editar)
+  async function executeSaveForm() {
     const payload = {
       assistant_id: formAssistantId,
       absence_type_id: formAbsenceTypeId,
@@ -301,9 +286,49 @@ export default function AbsenceManagement() {
         }
       }
       setShowForm(false);
+      setStatusConfirmTarget(null);
     } catch {
       // Tratado no hook de mutação
     }
+  }
+
+  // Gravação do formulário com verificação de confirmação caso o estado seja diferente de pendente
+  async function handleSaveForm() {
+    const errors: typeof formErrors = {};
+    if (!formAssistantId) {
+      errors.assistant = "Selecione o assistente.";
+    }
+    if (!formAbsenceTypeId) {
+      errors.absenceType = "Selecione o tipo de falta.";
+    }
+    if (!formStartDate) {
+      errors.startDate = "A data de início é obrigatória.";
+    }
+    if (!formEndDate) {
+      errors.endDate = "A data de fim é obrigatória.";
+    } else if (formStartDate && formEndDate < formStartDate) {
+      errors.endDate = "A data de fim não pode ser anterior à data de início.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+
+    setFormErrors({});
+
+    // Se o estado for diferente de pendente, solicita confirmação antes de gravar
+    if (formStatus !== "pending") {
+      const ast = assistants.find((a) => String(a.id) === String(formAssistantId));
+      setStatusConfirmTarget({
+        source: "form",
+        newStatus: formStatus as "justified" | "unjustified",
+        assistantName: ast?.name || undefined,
+      });
+      return;
+    }
+
+    await executeSaveForm();
   }
 
   // Alteração de estado (Justificar / Injustificar)
@@ -316,8 +341,20 @@ export default function AbsenceManagement() {
         id,
         status: newStatus,
       });
+      setStatusConfirmTarget(null);
     } catch {
       // Notificado via hook
+    }
+  }
+
+  // Confirmação modal quer venha do detalhe ou do formulário
+  async function handleStatusConfirm() {
+    if (!statusConfirmTarget) return;
+
+    if (statusConfirmTarget.source === "form") {
+      await executeSaveForm();
+    } else if (statusConfirmTarget.source === "detail" && statusConfirmTarget.id) {
+      await handleUpdateStatus(statusConfirmTarget.id, statusConfirmTarget.newStatus);
     }
   }
 
@@ -918,7 +955,14 @@ export default function AbsenceManagement() {
                     <button
                       type="button"
                       disabled={isMutating}
-                      onClick={() => handleUpdateStatus(selectedAbsence.id, "unjustified")}
+                      onClick={() =>
+                        setStatusConfirmTarget({
+                          source: "detail",
+                          id: selectedAbsence.id,
+                          newStatus: "unjustified",
+                          assistantName: getAssistantName(selectedAbsence),
+                        })
+                      }
                       className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-destructive/30 text-destructive text-xs font-medium hover:bg-destructive/10 transition-colors disabled:opacity-50"
                     >
                       <X size={14} />
@@ -927,23 +971,30 @@ export default function AbsenceManagement() {
                     <button
                       type="button"
                       disabled={isMutating}
-                      onClick={() => handleUpdateStatus(selectedAbsence.id, "justified")}
+                      onClick={() =>
+                        setStatusConfirmTarget({
+                          source: "detail",
+                          id: selectedAbsence.id,
+                          newStatus: "justified",
+                          assistantName: getAssistantName(selectedAbsence),
+                        })
+                      }
                       className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 transition-colors shadow-xs disabled:opacity-50"
                     >
                       <Check size={14} />
                       Justificar Falta
                     </button>
                   </>
+                ) : selectedAbsence.status === "justified" || selectedAbsence.status === "justificada" ? (
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20">
+                    <Check size={14} />
+                    <span>Falta justificada</span>
+                  </div>
                 ) : (
-                  <button
-                    type="button"
-                    disabled={isMutating}
-                    onClick={() => handleUpdateStatus(selectedAbsence.id, "pending")}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted text-xs font-medium transition-colors disabled:opacity-50"
-                  >
-                    <RotateCcw size={12} />
-                    Reverter para Pendente
-                  </button>
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-destructive bg-destructive/10 px-3 py-1.5 rounded-lg border border-destructive/20">
+                    <X size={14} />
+                    <span>Falta injustificada</span>
+                  </div>
                 )}
               </div>
             </Card>
@@ -1134,7 +1185,7 @@ export default function AbsenceManagement() {
               </div>
             </div>
 
-            {/* Classificação Inicial da Falta */}
+            {/* Classificação da Falta */}
             <div>
               <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                 Classificação da Falta
@@ -1144,20 +1195,50 @@ export default function AbsenceManagement() {
                   { value: "pending", label: "Pendente" },
                   { value: "justified", label: "Justificada" },
                   { value: "unjustified", label: "Injustificada" },
-                ].map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setFormStatus(opt.value)}
-                    className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                      formStatus === opt.value
-                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                        : "border-border bg-muted/20 text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+                ]
+                  .filter(
+                    (opt) =>
+                      !(
+                        editingAbsence &&
+                        (editingAbsence.status === "justified" ||
+                          editingAbsence.status === "justificada" ||
+                          editingAbsence.status === "unjustified" ||
+                          editingAbsence.status === "injustificada") &&
+                        opt.value === "pending"
+                      )
+                  )
+                  .map((opt) => {
+                    const isSelected = formStatus === opt.value;
+                    let colorClasses = "";
+
+                    if (opt.value === "pending") {
+                      colorClasses = isSelected
+                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/50 ring-1 ring-amber-500/30 font-semibold shadow-xs"
+                        : "border-border/80 bg-card text-muted-foreground hover:bg-amber-500/10 hover:text-amber-600 hover:border-amber-500/30";
+                    } else if (opt.value === "justified") {
+                      colorClasses = isSelected
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/50 ring-1 ring-emerald-500/30 font-semibold shadow-xs"
+                        : "border-border/80 bg-card text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-600 hover:border-emerald-500/30";
+                    } else if (opt.value === "unjustified") {
+                      colorClasses = isSelected
+                        ? "bg-destructive/15 text-destructive border-destructive/50 ring-1 ring-destructive/30 font-semibold shadow-xs"
+                        : "border-border/80 bg-card text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30";
+                    }
+
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setFormStatus(opt.value)}
+                        className={`flex-1 py-2 px-3 rounded-lg border text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${colorClasses}`}
+                      >
+                        {opt.value === "pending" && <Clock size={13} />}
+                        {opt.value === "justified" && <Check size={13} />}
+                        {opt.value === "unjustified" && <X size={13} />}
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
               </div>
             </div>
           </div>
@@ -1203,6 +1284,53 @@ export default function AbsenceManagement() {
         confirmLabel="Eliminar Ausência"
         cancelLabel="Cancelar"
         variant="danger"
+      />
+
+      {/* ── MODAL DE CONFIRMAÇÃO DE ALTERAÇÃO DE ESTADO ────────────────── */}
+      <ConfirmationModal
+        open={statusConfirmTarget !== null}
+        onClose={() => setStatusConfirmTarget(null)}
+        onConfirm={handleStatusConfirm}
+        isLoading={isMutating}
+        title={
+          statusConfirmTarget?.newStatus === "justified"
+            ? "Justificar Ausência"
+            : "Injustificar Ausência"
+        }
+        description={
+          statusConfirmTarget ? (
+            <div>
+              <p>
+                Tem a certeza que pretende marcar a falta
+                {statusConfirmTarget.assistantName ? (
+                  <> de <strong className="text-foreground">{statusConfirmTarget.assistantName}</strong></>
+                ) : ""}{" "}
+                como{" "}
+                <strong className="text-foreground">
+                  {statusConfirmTarget.newStatus === "justified"
+                    ? "Justificada"
+                    : "Injustificada"}
+                </strong>
+                ?
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Após esta confirmação, não será possível revertê-la para o estado Pendente.
+              </p>
+            </div>
+          ) : ""
+        }
+        confirmLabel={
+          statusConfirmTarget?.newStatus === "justified"
+            ? "Sim, Justificar"
+            : "Sim, Injustificar"
+        }
+        cancelLabel="Cancelar"
+        variant={statusConfirmTarget?.newStatus === "justified" ? "success" : "danger"}
+        icon={
+          statusConfirmTarget?.newStatus === "unjustified" ? (
+            <XCircle size={22} className="text-destructive" />
+          ) : undefined
+        }
       />
     </div>
   );
