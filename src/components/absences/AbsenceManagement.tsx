@@ -28,6 +28,7 @@ import DatePicker, { formatToIsoDate } from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import CustomSelect from "../common/CustomSelect";
+import SearchableSelect from "../common/SearchableSelect";
 import AssistantSelect, { isAssistantActive } from "../common/AssistantSelect";
 import ActionTooltip from "../common/ActionTooltip";
 import {
@@ -989,20 +990,22 @@ export default function AbsenceManagement() {
               <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                 Tipo de Falta *
               </label>
-              <CustomSelect
+              <SearchableSelect
                 value={formAbsenceTypeId}
                 hasError={!!formErrors.absenceType}
-                onChange={(e: any) => {
-                  const val = typeof e === "string" ? e : e?.target?.value || "";
+                onChange={(val) => {
                   setFormAbsenceTypeId(val);
                   if (formErrors.absenceType) {
                     setFormErrors((p) => ({ ...p, absenceType: undefined }));
                   }
                 }}
                 placeholder="Selecionar tipo de falta..."
+                searchPlaceholder="Pesquisar tipo de falta..."
+                emptyMessage="Nenhum tipo de falta encontrado."
                 options={absenceTypes.map((t) => ({
                   value: String(t.id),
                   label: t.name,
+                  description: t.requires_document ? "Requer comprovativo" : undefined,
                 }))}
               />
               {formErrors.absenceType && (
