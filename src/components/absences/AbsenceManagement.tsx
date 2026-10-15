@@ -867,17 +867,36 @@ export default function AbsenceManagement() {
               <div className="flex-1 overflow-y-auto p-5 space-y-4">
                 {/* Grelha de Informação Principal */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="p-3 rounded-lg bg-muted/20 border border-border/40">
-                    <p className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider font-semibold">
-                      Período de Ausência
+                  <div className="p-3 rounded-lg bg-muted/20 border border-border/40 space-y-1.5">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
+                      Período da Ausência
                     </p>
-                    <p className="text-xs font-mono font-medium text-foreground">
-                      {selectedAbsence.valid_from} a {selectedAbsence.valid_until}
-                    </p>
-                    {selectedAbsence.start_time && selectedAbsence.end_time && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Horário: {selectedAbsence.start_time} – {selectedAbsence.end_time}
+                    {selectedAbsence.valid_from === selectedAbsence.valid_until ? (
+                      <p className="text-xs text-foreground font-medium">
+                        Dia <strong className="font-semibold text-foreground font-mono">{selectedAbsence.valid_from}</strong>
+                        {selectedAbsence.start_time && selectedAbsence.end_time
+                          ? ` das ${selectedAbsence.start_time} às ${selectedAbsence.end_time}`
+                          : selectedAbsence.start_time
+                          ? ` às ${selectedAbsence.start_time}`
+                          : ""}
                       </p>
+                    ) : (
+                      <div className="space-y-1 text-xs text-foreground">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-muted-foreground text-[11px] font-medium w-16">Começou:</span>
+                          <span className="font-medium">
+                            <strong className="font-semibold text-foreground font-mono">{selectedAbsence.valid_from}</strong>
+                            {selectedAbsence.start_time ? ` às ${selectedAbsence.start_time}` : ""}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-muted-foreground text-[11px] font-medium w-16">Terminou:</span>
+                          <span className="font-medium">
+                            <strong className="font-semibold text-foreground font-mono">{selectedAbsence.valid_until}</strong>
+                            {selectedAbsence.end_time ? ` às ${selectedAbsence.end_time}` : ""}
+                          </span>
+                        </div>
+                      </div>
                     )}
                   </div>
 
@@ -886,7 +905,7 @@ export default function AbsenceManagement() {
                       Duração Total
                     </p>
                     <p className="text-xs font-medium text-foreground">
-                      {selectedAbsence.total_days} dia(s) de falta
+                      {selectedAbsence.total_days} dia{selectedAbsence.total_days !== 1 ? "s" : ""} de falta
                     </p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
                       Tipo: {getAbsenceTypeName(selectedAbsence)}
