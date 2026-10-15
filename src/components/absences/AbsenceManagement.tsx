@@ -35,6 +35,7 @@ import AssistantSelect, { isAssistantActive } from "../common/AssistantSelect";
 import ActionTooltip from "../common/ActionTooltip";
 import {
   useAbsencesList,
+  useAbsenceCounts,
   useCreateAbsence,
   useUpdateAbsence,
   useUpdateAbsenceStatus,
@@ -60,9 +61,9 @@ export default function AbsenceManagement() {
   const [startDateFilter, setStartDateFilter] = useState<string>("");
   const [endDateFilter, setEndDateFilter] = useState<string>("");
 
-  // Paginação
+  // Paginação (padrão de pelo menos 10 registos por página)
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(8);
+  const [pageSize, setPageSize] = useState(10);
 
   // Query remota de ausências com filtros e paginação executados no Backend
   const {
@@ -83,39 +84,18 @@ export default function AbsenceManagement() {
   const totalPages = Math.max(1, absencesResult?.last_page ?? 1);
   const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
 
-  // Contadores agregados devolvidos pelo backend com persistência entre tabs
-  const [persistedCounts, setPersistedCounts] = useState<{
-    all: number;
-    pending: number;
-    justified: number;
-    unjustified: number;
-  }>({ all: 0, pending: 0, justified: 0, unjustified: 0 });
-
-  useEffect(() => {
-    if (absencesResult?.counts) {
-      setPersistedCounts((prev) => ({
-        all: absencesResult.counts.all || prev.all || totalItems,
-        pending:
-          statusFilter === "all" || statusFilter === "pending"
-            ? absencesResult.counts.pending
-            : prev.pending,
-        justified:
-          statusFilter === "all" || statusFilter === "justified"
-            ? absencesResult.counts.justified
-            : prev.justified,
-        unjustified:
-          statusFilter === "all" || statusFilter === "unjustified"
-            ? absencesResult.counts.unjustified
-            : prev.unjustified,
-      }));
-    }
-  }, [absencesResult?.counts, statusFilter, totalItems]);
+  // Contadores absolutos e independentes da página obtidos pelo hook dedicado
+  const { data: globalCounts } = useAbsenceCounts({
+    assistant_id: assistantFilter !== "all" ? assistantFilter : undefined,
+    start_date: startDateFilter || undefined,
+    end_date: endDateFilter || undefined,
+  });
 
   const statusCounts = {
-    all: absencesResult?.counts?.all || persistedCounts.all || totalItems,
-    pending: absencesResult?.counts?.pending ?? persistedCounts.pending,
-    justified: absencesResult?.counts?.justified ?? persistedCounts.justified,
-    unjustified: absencesResult?.counts?.unjustified ?? persistedCounts.unjustified,
+    all: globalCounts?.all ?? (statusFilter === "all" ? totalItems : absencesResult?.counts?.all ?? totalItems),
+    pending: globalCounts?.pending ?? (statusFilter === "pending" ? totalItems : absencesResult?.counts?.pending ?? 0),
+    justified: globalCounts?.justified ?? (statusFilter === "justified" ? totalItems : absencesResult?.counts?.justified ?? 0),
+    unjustified: globalCounts?.unjustified ?? (statusFilter === "unjustified" ? totalItems : absencesResult?.counts?.unjustified ?? 0),
   };
 
   // Os itens da página atual vêm diretamente do backend (já filtrados e paginados)
@@ -551,7 +531,7 @@ export default function AbsenceManagement() {
       {/* ── GRELHA MASTER-DETAIL (2 COLUNAS) ───────────────────────────── */}
       <div
         className="grid grid-cols-1 lg:grid-cols-12 gap-4"
-        style={{ minHeight: 560 }}
+        style={{ minHeight: 620 }}
       >
         {/* COLUNA ESQUERDA: LISTA DE AUSÊNCIAS COM ABAS E PAGINAÇÃO */}
         <div
@@ -651,14 +631,15 @@ export default function AbsenceManagement() {
                     key={absence.id}
                     type="button"
                     onClick={() => setSelectedId(absence.id)}
-                    className={`w-full text-left p-3 transition-colors hover:bg-muted/30 focus:outline-none ${
+                    className={`w-full text-left px-3.5 py-2.5 transition-all hover:bg-muted/40 focus:outline-none border-b border-border/40 last:border-b-0 ${
                       isSelected
                         ? "bg-primary/10 border-l-3 border-l-primary"
-                        : ""
+                        : "hover:border-l-3 hover:border-l-muted-foreground/30"
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <div className="flex items-center gap-1.5 min-w-0">
+                    {/* Linha 1: Avatar, Nome, Inativo e Badge de Estado */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
                         <div
                           className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 font-bold font-mono text-[9px] ${
                             inactive
@@ -682,25 +663,33 @@ export default function AbsenceManagement() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono mt-1">
-                      <span>
-                        {absence.valid_from} – {absence.valid_until}
-                      </span>
-                      <span className="font-sans text-[10px] bg-muted/60 px-1.5 py-0.5 rounded text-muted-foreground">
-                        {absence.total_days} dia(s)
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1">
-                      <span className="truncate">{typeName}</span>
-                      {absence.document_path && (
-                        <span
-                          className="flex items-center gap-1 text-[10px] text-primary"
-                          title="Contém documento anexo"
-                        >
-                          <Paperclip size={11} />
+                    {/* Linha 2: Tipo de Falta · Período, Anexo e Duração */}
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1.5 gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0 truncate">
+                        <span className="font-medium text-foreground/80 truncate">
+                          {typeName}
                         </span>
-                      )}
+                        <span className="text-muted-foreground/40">·</span>
+                        <span className="font-mono text-[11px] text-muted-foreground truncate">
+                          {absence.valid_from === absence.valid_until
+                            ? absence.valid_from
+                            : `${absence.valid_from} a ${absence.valid_until}`}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {absence.document_path && (
+                          <span
+                            className="flex items-center text-[10px] text-primary"
+                            title="Contém documento anexo"
+                          >
+                            <Paperclip size={11} />
+                          </span>
+                        )}
+                        <span className="font-sans text-[10px] bg-muted/60 px-1.5 py-0.5 rounded text-muted-foreground font-medium">
+                          {absence.total_days} dia{absence.total_days !== 1 ? "s" : ""}
+                        </span>
+                      </div>
                     </div>
                   </button>
                 );
@@ -711,16 +700,34 @@ export default function AbsenceManagement() {
           {/* Rodapé da Coluna Esquerda com Paginação (Server-Side) */}
           {totalItems > 0 && (
             <div className="p-2.5 border-t border-border bg-card flex items-center justify-between gap-2 text-xs text-muted-foreground">
-              <span className="text-[11px]">
-                <strong className="font-medium text-foreground">
-                  {(safeCurrentPage - 1) * pageSize + 1}–
-                  {Math.min(safeCurrentPage * pageSize, totalItems)}
-                </strong>{" "}
-                de{" "}
-                <strong className="font-medium text-foreground">
-                  {totalItems}
-                </strong>
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px]">
+                  <strong className="font-medium text-foreground">
+                    {(safeCurrentPage - 1) * pageSize + 1}–
+                    {Math.min(safeCurrentPage * pageSize, totalItems)}
+                  </strong>{" "}
+                  de{" "}
+                  <strong className="font-medium text-foreground">
+                    {totalItems}
+                  </strong>
+                </span>
+
+                <span className="text-muted-foreground/30 hidden sm:inline">|</span>
+
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-muted/40 hover:bg-muted text-[11px] font-medium text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded border border-border/50 cursor-pointer focus:outline-none hidden sm:inline-block transition-colors"
+                  title="Registos por página"
+                >
+                  <option value={10}>10 / pág</option>
+                  <option value={15}>15 / pág</option>
+                  <option value={20}>20 / pág</option>
+                </select>
+              </div>
 
               {totalPages > 1 && (
                 <div className="flex items-center gap-1">

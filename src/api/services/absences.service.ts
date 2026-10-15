@@ -218,7 +218,7 @@ export const absencesService = {
    */
   async getAll(params?: AbsenceFilterParams): Promise<PaginatedAbsencesResult> {
     const page = Number(params?.page || 1);
-    const perPage = Number(params?.per_page || 8);
+    const perPage = Number(params?.per_page || 10);
 
     try {
       const response = await apiClient.get<any>("/absences", {
@@ -256,17 +256,6 @@ export const absencesService = {
 
       const normalizedList = rawList.map(normalizeAbsenceResource);
 
-      // Calcular contagem de cada estado a partir dos registos carregados
-      let listPending = 0;
-      let listJustified = 0;
-      let listUnjustified = 0;
-
-      normalizedList.forEach((item) => {
-        if (item.status === "pending") listPending++;
-        else if (item.status === "justified") listJustified++;
-        else if (item.status === "unjustified") listUnjustified++;
-      });
-
       // Contadores fornecidos pelo backend (suportando múltiplas convenções: counts, contadores, status_counts, statusCounts)
       const bCounts =
         meta.counts ||
@@ -289,29 +278,17 @@ export const absencesService = {
           bCounts?.pending ??
           bCounts?.pendentes ??
           bCounts?.pendente ??
-          (params?.status === "pending"
-            ? total
-            : !params?.status || params.status === "all"
-            ? listPending
-            : 0),
+          (params?.status === "pending" ? total : 0),
         justified:
           bCounts?.justified ??
           bCounts?.justificadas ??
           bCounts?.justificada ??
-          (params?.status === "justified"
-            ? total
-            : !params?.status || params.status === "all"
-            ? listJustified
-            : 0),
+          (params?.status === "justified" ? total : 0),
         unjustified:
           bCounts?.unjustified ??
           bCounts?.injustificadas ??
           bCounts?.injustificada ??
-          (params?.status === "unjustified"
-            ? total
-            : !params?.status || params.status === "all"
-            ? listUnjustified
-            : 0),
+          (params?.status === "unjustified" ? total : 0),
       };
 
       return {
@@ -387,6 +364,95 @@ export const absencesService = {
         last_page: lastPage,
         per_page: perPage,
         counts,
+      };
+    }
+  },
+
+  /**
+   * Obter contagens absolutas por estado (Todas, Pendentes, Justificadas, Injustificadas)
+   * Garante totais fidedignos e independentes da página visualizada
+   */
+  async getCounts(filters?: Omit<AbsenceFilterParams, "page" | "per_page" | "status">): Promise<AbsenceCounts> {
+    const baseParams: any = {
+      ...(filters?.assistant_id && filters.assistant_id !== "all" ? { assistant_id: filters.assistant_id } : {}),
+      ...(filters?.start_date ? { start_date: filters.start_date, valid_from: filters.start_date } : {}),
+      ...(filters?.end_date ? { end_date: filters.end_date, valid_until: filters.end_date } : {}),
+      per_page: 1,
+      page: 1,
+    };
+
+    try {
+      const allRes = await apiClient.get<any>("/absences", { params: baseParams });
+      const allData = allRes?.data;
+      const allMeta = allData?.meta || allData;
+
+      const bCounts =
+        allMeta?.counts ||
+        allData?.counts ||
+        allMeta?.status_counts ||
+        allData?.status_counts ||
+        allMeta?.contadores ||
+        allData?.contadores ||
+        allMeta?.statusCounts ||
+        allData?.statusCounts;
+
+      const getTotal = (res: any) => {
+        if (!res?.data) return 0;
+        const d = res.data;
+        const m = d?.meta || d;
+        if (typeof m?.total === "number") return m.total;
+        if (typeof d?.total === "number") return d.total;
+        if (Array.isArray(d?.data)) return d.data.length;
+        if (Array.isArray(d)) return d.length;
+        return 0;
+      };
+
+      const totalAll = getTotal(allRes);
+
+      if (bCounts && typeof bCounts.pending === "number") {
+        return {
+          all: bCounts.all ?? bCounts.total ?? totalAll,
+          pending: bCounts.pending,
+          justified: bCounts.justified ?? 0,
+          unjustified: bCounts.unjustified ?? 0,
+        };
+      }
+
+      // Se o backend não envia bCounts completos na resposta padrão, obtemos os totais de cada estado em paralelo
+      const [pendingRes, justifiedRes, unjustifiedRes] = await Promise.all([
+        apiClient.get<any>("/absences", { params: { ...baseParams, status: "pending" } }).catch(() => null),
+        apiClient.get<any>("/absences", { params: { ...baseParams, status: "justified" } }).catch(() => null),
+        apiClient.get<any>("/absences", { params: { ...baseParams, status: "unjustified" } }).catch(() => null),
+      ]);
+
+      return {
+        all: totalAll,
+        pending: getTotal(pendingRes),
+        justified: getTotal(justifiedRes),
+        unjustified: getTotal(unjustifiedRes),
+      };
+    } catch {
+      // Fallback para contagem em mock
+      let filtered = [...localAbsencesMock];
+      if (filters?.assistant_id && filters.assistant_id !== "all") {
+        filtered = filtered.filter(
+          (a) =>
+            String(a.assistant_id) === String(filters.assistant_id) ||
+            String(a.assistant?.id) === String(filters.assistant_id)
+        );
+      }
+      if (filters?.start_date) {
+        filtered = filtered.filter((a) => a.valid_until >= filters.start_date!);
+      }
+      if (filters?.end_date) {
+        filtered = filtered.filter((a) => a.valid_from <= filters.end_date!);
+      }
+
+      return {
+        all: filtered.length,
+        pending: filtered.filter((a) => a.status === "pending" || a.status === "aguarda_documento").length,
+        justified: filtered.filter((a) => a.status === "justified" || a.status === "justificada").length,
+        unjustified: filtered.filter((a) => a.status === "unjustified" || a.status === "injustificada").length,
       };
     }
   },

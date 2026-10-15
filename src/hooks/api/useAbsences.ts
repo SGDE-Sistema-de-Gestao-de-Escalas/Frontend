@@ -6,6 +6,7 @@ import absencesService, {
   UpdateAbsencePayload,
   AbsenceFilterParams,
   PaginatedAbsencesResult,
+  AbsenceCounts,
 } from "../../api/services/absences.service";
 import { useSchool } from "../../context/SchoolContext";
 import { schoolScopedKey } from "../../lib/queryClient";
@@ -24,6 +25,28 @@ export function useAbsencesList(filters?: AbsenceFilterParams) {
       return await absencesService.getAll(filters);
     },
     enabled: !!selectedSchoolId,
+  });
+}
+
+/**
+ * Hook para obter contadores globais por estado (Todas, Pendentes, Justificadas, Injustificadas)
+ * Independentes da página atual
+ */
+export function useAbsenceCounts(filters?: Omit<AbsenceFilterParams, "page" | "per_page" | "status">) {
+  const { selectedSchoolId } = useSchool();
+
+  return useQuery({
+    queryKey: schoolScopedKey("absences", selectedSchoolId, {
+      ...(filters?.assistant_id ? { assistant_id: filters.assistant_id } : {}),
+      ...(filters?.start_date ? { start_date: filters.start_date } : {}),
+      ...(filters?.end_date ? { end_date: filters.end_date } : {}),
+      _type: "counts",
+    }),
+    queryFn: async (): Promise<AbsenceCounts> => {
+      return await absencesService.getCounts(filters);
+    },
+    enabled: !!selectedSchoolId,
+    staleTime: 30000,
   });
 }
 
