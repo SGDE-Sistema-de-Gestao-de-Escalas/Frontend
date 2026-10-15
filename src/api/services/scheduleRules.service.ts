@@ -15,10 +15,8 @@ export interface BackendScheduleRuleResource {
   period_end: string;
   min: number;
   type: "mandatory" | "optional";
-  valid_from?: string;
+  valid_from: string;
   valid_until?: string | null;
-  start?: string;
-  end?: string | null;
   days_of_week: number[];
   assistant_ids: string[];
   assistants: ScheduleRuleAssistantApi[];
@@ -32,8 +30,6 @@ export interface CreateScheduleRulePayload {
   type: "mandatory" | "optional";
   valid_from: string;
   valid_until?: string | null;
-  start?: string;
-  end?: string | null;
   days_of_week: number[];
   assistant_ids: string[];
 }
@@ -46,8 +42,6 @@ export interface UpdateScheduleRulePayload {
   type?: "mandatory" | "optional";
   valid_from?: string;
   valid_until?: string | null;
-  start?: string;
-  end?: string | null;
   days_of_week?: number[];
   assistant_ids?: string[];
 }

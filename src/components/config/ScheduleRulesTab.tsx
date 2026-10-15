@@ -119,8 +119,8 @@ export default function ScheduleRulesTab() {
     setFormPeriodEnd(rule.period_end);
     setFormMinStaff(String(rule.min));
     setFormRuleType(rule.type);
-    const rawStart = rule.valid_from || rule.start || todayStr;
-    const rawEnd = rule.valid_until || rule.end || "";
+    const rawStart = rule.valid_from || todayStr;
+    const rawEnd = rule.valid_until || "";
     setFormValidityStart(formatToIsoDate(rawStart) || rawStart);
     setFormValidityEnd(formatToIsoDate(rawEnd) || rawEnd);
     const sortedAssistants = [...(rule.assistants || [])].sort(
@@ -252,8 +252,6 @@ export default function ScheduleRulesTab() {
       type: formRuleType,
       valid_from: formValidityStart,
       valid_until: formValidityEnd || null,
-      start: formValidityStart,
-      end: formValidityEnd || null,
       days_of_week: selectedDaysOfWeek,
       assistant_ids: finalAssistantIds,
     };
@@ -352,8 +350,8 @@ export default function ScheduleRulesTab() {
                     (a, b) => a.priority - b.priority
                   );
 
-                  const startDate = rule.valid_from ?? rule.start;
-                  const endDate = rule.valid_until ?? rule.end;
+                  const startDate = rule.valid_from;
+                  const endDate = rule.valid_until;
 
                   return (
                     <tr
