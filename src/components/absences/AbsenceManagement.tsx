@@ -1004,8 +1004,7 @@ export default function AbsenceManagement() {
                 emptyMessage="Nenhum tipo de falta encontrado."
                 options={absenceTypes.map((t) => ({
                   value: String(t.id),
-                  label: t.name,
-                  description: t.requires_document ? "Requer comprovativo" : undefined,
+                  label: t.name
                 }))}
               />
               {formErrors.absenceType && (

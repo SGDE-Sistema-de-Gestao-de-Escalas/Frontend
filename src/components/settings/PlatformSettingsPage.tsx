@@ -1728,7 +1728,7 @@ export default function PlatformSettingsPage() {
               sortOptions={[
                 { label: "Nome (A-Z)", value: "name-asc" },
                 { label: "Nome (Z-A)", value: "name-desc" },
-                { label: "Com Documento Primeiro", value: "doc-required" },
+                { label: "Permite Comprovativo Primeiro", value: "doc-required" },
               ]}
             />
           )}
@@ -1777,7 +1777,7 @@ export default function PlatformSettingsPage() {
                           Tipo de Falta
                         </th>
                         <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                          Documento Comprovativo
+                          Permite Comprovativo
                         </th>
                         <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                           Ações
@@ -1806,11 +1806,11 @@ export default function PlatformSettingsPage() {
                               {reqDoc ? (
                                 <Badge variant="secondary" className="gap-1 font-normal text-[11px] bg-primary/10 text-primary border border-primary/20">
                                   <Paperclip size={11} />
-                                  Obrigatório
+                                  Permite Comprovativo
                                 </Badge>
                               ) : (
                                 <span className="text-muted-foreground text-xs">
-                                  Não obrigatório
+                                  Não permite
                                 </span>
                               )}
                             </td>
@@ -1935,10 +1935,10 @@ export default function PlatformSettingsPage() {
                 <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/10">
                   <div>
                     <p className="text-sm font-medium text-foreground">
-                      Requer documento comprovativo
+                      Permite documento comprovativo
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Ativa o upload obrigatório no registo da falta
+                      Possibilita a submissão de anexo ou justificação na falta (opcional)
                     </p>
                   </div>
                   <Switch

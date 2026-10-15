@@ -6199,8 +6199,8 @@ function PlatformSettingsPage() {
                   <p className="text-sm font-medium text-foreground">{t.name}</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
                     {t.requires_document
-                      ? <span className="flex items-center gap-1"><Paperclip size={10} />Requer documento comprovativo</span>
-                      : "Sem documento obrigatório"}
+                      ? <span className="flex items-center gap-1"><Paperclip size={10} />Permite documento comprovativo</span>
+                      : "Sem comprovativo"}
                   </p>
                 </div>
                 {atDeleteConfirm === t.id ? (
@@ -6226,8 +6226,8 @@ function PlatformSettingsPage() {
                 </div>
                 <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/10">
                   <div>
-                    <p className="text-sm font-medium text-foreground">Requer documento comprovativo</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Ativa o upload obrigatório no registo da falta</p>
+                    <p className="text-sm font-medium text-foreground">Permite documento comprovativo</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Possibilita o anexo de comprovativo (opcional) no registo da falta</p>
                   </div>
                   <button
                     onClick={() => setAtRequiresDoc((v) => !v)}
