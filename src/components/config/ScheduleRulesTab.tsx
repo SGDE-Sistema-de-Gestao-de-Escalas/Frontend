@@ -963,9 +963,9 @@ export default function ScheduleRulesTab() {
                 {activityTypes.find((t) => t.id === deleteRuleTarget.activity_type_id)?.name ??
                   deleteRuleTarget.activity_type_id}
               </strong>{" "}
-              (Vigência: {deleteRuleTarget.valid_from ?? deleteRuleTarget.start}
-              {(deleteRuleTarget.valid_until ?? deleteRuleTarget.end)
-                ? ` a ${deleteRuleTarget.valid_until ?? deleteRuleTarget.end}`
+              (Vigência: {deleteRuleTarget.valid_from}
+              {deleteRuleTarget.valid_until
+                ? ` a ${deleteRuleTarget.valid_until}`
                 : " — Em aberto"})?
               Esta ação removerá esta restrição no cálculo de escalas do motor.
             </>
