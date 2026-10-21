@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Download,
   Filter,
   Inbox,
   Loader2,
@@ -40,10 +41,13 @@ import {
   useUpdateAbsence,
   useUpdateAbsenceStatus,
   useDeleteAbsence,
+  useUploadAbsenceDocument,
 } from "../../hooks/api/useAbsences";
 import { useAssistantsList } from "../../hooks/api/useAssistants";
 import { useAbsenceTypesList } from "../../hooks/api/useAbsenceTypes";
-import type { BackendAbsenceResource } from "../../api/services/absences.service";
+import absencesService, {
+  type BackendAbsenceResource,
+} from "../../api/services/absences.service";
 import type { EntityId, Assistant } from "../../types";
 import { notify } from "../common/FeedbackNotification";
 
@@ -105,12 +109,14 @@ export default function AbsenceManagement() {
   const updateMutation = useUpdateAbsence();
   const updateStatusMutation = useUpdateAbsenceStatus();
   const deleteMutation = useDeleteAbsence();
+  const uploadDocMutation = useUploadAbsenceDocument();
 
   const isMutating =
     createMutation.isPending ||
     updateMutation.isPending ||
     updateStatusMutation.isPending ||
-    deleteMutation.isPending;
+    deleteMutation.isPending ||
+    uploadDocMutation.isPending;
 
   // Estado do item selecionado no Master-Detail
   const [selectedId, setSelectedId] = useState<string | number | null>(null);
@@ -138,6 +144,8 @@ export default function AbsenceManagement() {
   const [formNote, setFormNote] = useState<string>("");
   const [formStatus, setFormStatus] = useState<string>("pending");
   const [formDocumentName, setFormDocumentName] = useState<string>("");
+  const [formDocumentFile, setFormDocumentFile] = useState<File | null>(null);
+  const [formRemoveDocument, setFormRemoveDocument] = useState<boolean>(false);
   const [formErrors, setFormErrors] = useState<{
     assistant?: string;
     absenceType?: string;
@@ -219,6 +227,8 @@ export default function AbsenceManagement() {
     setFormNote("");
     setFormStatus("pending");
     setFormDocumentName("");
+    setFormDocumentFile(null);
+    setFormRemoveDocument(false);
     setFormErrors({});
     setShowForm(true);
   }
@@ -234,7 +244,9 @@ export default function AbsenceManagement() {
     setFormEndTime(absence.end_time || "17:00");
     setFormNote(absence.notes || "");
     setFormStatus(absence.status || "pending");
-    setFormDocumentName(absence.document_path || "");
+    setFormDocumentName(absence.document_name || (absence.document_path ? absence.document_path.split("/").pop()! : ""));
+    setFormDocumentFile(null);
+    setFormRemoveDocument(false);
     setFormErrors({});
     setShowForm(true);
   }
@@ -250,6 +262,8 @@ export default function AbsenceManagement() {
       end_time: formEndTime,
       notes: formNote.trim() || null,
       document_path: formDocumentName.trim() || null,
+      document: formDocumentFile,
+      remove_document: formRemoveDocument,
       status: formStatus,
     };
 
@@ -930,19 +944,47 @@ export default function AbsenceManagement() {
                   <div className="p-3 rounded-lg border border-border bg-muted/10 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 min-w-0">
                       <Paperclip size={14} className="text-primary flex-shrink-0" />
-                      <span className="text-xs font-mono text-foreground truncate">
-                        {selectedAbsence.document_path}
+                      <span className="text-xs font-mono text-foreground truncate" title={selectedAbsence.document_name || selectedAbsence.document_path}>
+                        {selectedAbsence.document_name || selectedAbsence.document_path.split("/").pop()}
                       </span>
                     </div>
-                    <span className="text-[11px] text-primary font-medium cursor-pointer hover:underline flex-shrink-0">
-                      Ver anexo
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        absencesService.openOrDownloadDocument(
+                          selectedAbsence.id,
+                          selectedAbsence.document_name || selectedAbsence.document_path || undefined
+                        )
+                      }
+                      className="text-[11px] text-primary font-medium hover:underline flex items-center gap-1 flex-shrink-0"
+                    >
+                      <Download size={12} />
+                      <span>Ver / Descarregar</span>
+                    </button>
                   </div>
                 ) : (
-                  <div className="p-3 rounded-lg border border-dashed border-border/60 bg-muted/5 flex items-center justify-between gap-3">
+                  <div className="p-3 rounded-lg border border-dashed border-border/60 bg-muted/5 flex items-center justify-between gap-3 flex-wrap">
                     <div className="text-xs text-muted-foreground">
                       Nenhum documento comprovativo anexado até ao momento.
                     </div>
+                    <label className="text-[11px] text-primary font-medium hover:underline cursor-pointer flex items-center gap-1 flex-shrink-0">
+                      <Paperclip size={12} />
+                      <span>Anexar agora</span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            await uploadDocMutation.mutateAsync({
+                              id: selectedAbsence.id,
+                              file,
+                            });
+                          }
+                        }}
+                      />
+                    </label>
                   </div>
                 )}
 
@@ -1192,17 +1234,26 @@ export default function AbsenceManagement() {
                   <input
                     type="file"
                     className="hidden"
-                    onChange={(e) =>
-                      setFormDocumentName(e.target.files?.[0]?.name ?? "")
-                    }
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setFormDocumentFile(file);
+                        setFormDocumentName(file.name);
+                        setFormRemoveDocument(false);
+                      }
+                    }}
                     accept=".pdf,.jpg,.jpeg,.png"
                   />
                 </label>
                 {formDocumentName && (
                   <button
                     type="button"
-                    onClick={() => setFormDocumentName("")}
-                    className="p-2 rounded-lg hover:bg-muted text-muted-foreground"
+                    onClick={() => {
+                      setFormDocumentFile(null);
+                      setFormDocumentName("");
+                      setFormRemoveDocument(true);
+                    }}
+                    className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-destructive transition-colors"
                     title="Remover anexo"
                   >
                     <X size={13} />

@@ -129,6 +129,40 @@ export function useUpdateAbsenceStatus() {
 }
 
 /**
+ * Hook para anexar documento comprovativo e/ou notas à ausência
+ * Utilizado por administradores ou pelo próprio assistente quando a falta está pendente
+ */
+export function useUploadAbsenceDocument() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      file,
+      justification,
+      notes,
+    }: {
+      id: string | number;
+      file?: File | null;
+      justification?: string;
+      notes?: string;
+    }) => absencesService.uploadAbsenceDocument(id, file, justification, notes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ABSENCES_QUERY_KEY });
+      notify.success("Documento comprovativo anexado com sucesso.", "Comprovativo Anexado");
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.errors?.document?.[0] ||
+        error?.response?.data?.errors?.absence?.[0] ||
+        error?.response?.data?.message ||
+        "Não foi possível anexar o documento comprovativo.";
+      notify.error(message, "Erro ao Anexar Documento");
+    },
+  });
+}
+
+/**
  * Hook para eliminar uma ausência
  */
 export function useDeleteAbsence() {

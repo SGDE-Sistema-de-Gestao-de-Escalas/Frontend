@@ -26,7 +26,15 @@ export interface BackendAbsenceResource {
   end_time?: string;
   total_days: number;
   justification?: string | null;
+  document_name?: string | null;
   document_path?: string | null;
+  document_url?: string | null;
+  has_document?: boolean;
+  missing_document?: boolean;
+  requires_document?: boolean;
+  can_attach_document?: boolean;
+  can_justify?: boolean;
+  warning?: string | null;
   status: "pending" | "justified" | "unjustified" | "justificada" | "injustificada" | "aguarda_documento";
   notes?: string | null;
   can_edit?: boolean;
@@ -49,6 +57,7 @@ export interface CreateAbsencePayload {
   justification?: string | null;
   notes?: string | null;
   document_path?: string | null;
+  document?: File | null;
   status?: string;
 }
 
@@ -64,6 +73,8 @@ export interface UpdateAbsencePayload {
   justification?: string | null;
   notes?: string | null;
   document_path?: string | null;
+  document?: File | null;
+  remove_document?: boolean;
   status?: string;
 }
 
@@ -148,7 +159,15 @@ export function normalizeAbsenceResource(item: any): BackendAbsenceResource {
     end_time: item.end_time || item.endTime || "17:00",
     total_days: days || 1,
     justification: item.justification || item.absence_type?.name || item.absence_type_name || null,
+    document_name: item.document_name || item.documentName || (item.document_path ? String(item.document_path).split("/").pop() : null),
     document_path: item.document_path || item.documentPath || null,
+    document_url: item.document_url || item.documentUrl || null,
+    has_document: item.has_document !== undefined ? Boolean(item.has_document) : Boolean(item.document_path || item.documentPath),
+    missing_document: Boolean(item.missing_document || item.missingDocument),
+    requires_document: Boolean(item.requires_document || item.requiresDocument),
+    can_attach_document: item.can_attach_document !== undefined ? Boolean(item.can_attach_document) : true,
+    can_justify: item.can_justify !== undefined ? Boolean(item.can_justify) : true,
+    warning: item.warning || null,
     status: (() => {
       const rawStatus = String(item.status || item.state || item.estado || "").toLowerCase().trim();
       if (
@@ -478,17 +497,35 @@ export const absencesService = {
 
   /**
    * Criar registo de ausência
-   * POST /api/absences
+   * POST /api/absences (suporta envio direto de ficheiro comprovativo via multipart/form-data)
    */
   async create(payload: CreateAbsencePayload): Promise<BackendAbsenceResource> {
-    const formattedPayload = {
-      ...payload,
-      start_date: payload.valid_from,
-      end_date: payload.valid_until,
-    };
+    const hasFile = payload.document instanceof File;
+    let body: any;
+
+    if (hasFile) {
+      const formData = new FormData();
+      formData.append("assistant_id", String(payload.assistant_id));
+      formData.append("absence_type_id", String(payload.absence_type_id));
+      formData.append("valid_from", payload.valid_from);
+      formData.append("valid_until", payload.valid_until || payload.valid_from);
+      if (payload.start_time) formData.append("start_time", payload.start_time);
+      if (payload.end_time) formData.append("end_time", payload.end_time);
+      if (payload.justification) formData.append("justification", payload.justification);
+      if (payload.notes) formData.append("notes", payload.notes);
+      if (payload.status) formData.append("status", payload.status);
+      formData.append("document", payload.document as File);
+      body = formData;
+    } else {
+      body = {
+        ...payload,
+        start_date: payload.valid_from,
+        end_date: payload.valid_until,
+      };
+    }
 
     try {
-      const response = await apiClient.post<any>("/absences", formattedPayload);
+      const response = await apiClient.post<any>("/absences", body);
       const raw = response.data?.data ?? response.data;
       return normalizeAbsenceResource(raw);
     } catch (error: any) {
@@ -508,7 +545,8 @@ export const absencesService = {
         start_time: payload.start_time || "08:00",
         end_time: payload.end_time || "17:00",
         justification: payload.justification || null,
-        document_path: payload.document_path || null,
+        document_name: payload.document?.name || payload.document_path || null,
+        document_path: payload.document?.name || payload.document_path || null,
         status: payload.status || "pending",
         notes: payload.notes || null,
         created_at: new Date().toISOString().split("T")[0],
@@ -520,17 +558,38 @@ export const absencesService = {
 
   /**
    * Atualizar registo de ausência
-   * PUT /api/absences/{id}
+   * Suporta multipart/form-data com _method=PUT para upload/remoção de documento
    */
   async update(id: string | number, payload: UpdateAbsencePayload): Promise<BackendAbsenceResource> {
-    const formattedPayload = {
-      ...payload,
-      start_date: payload.valid_from,
-      end_date: payload.valid_until,
-    };
+    const hasFile = payload.document instanceof File;
 
     try {
-      const response = await apiClient.put<any>(`/absences/${id}`, formattedPayload);
+      let response: any;
+      if (hasFile || payload.remove_document) {
+        const formData = new FormData();
+        formData.append("_method", "PUT");
+        if (payload.assistant_id) formData.append("assistant_id", String(payload.assistant_id));
+        if (payload.absence_type_id) formData.append("absence_type_id", String(payload.absence_type_id));
+        if (payload.valid_from) formData.append("valid_from", payload.valid_from);
+        if (payload.valid_until !== undefined) formData.append("valid_until", payload.valid_until || payload.valid_from || "");
+        if (payload.start_time) formData.append("start_time", payload.start_time);
+        if (payload.end_time) formData.append("end_time", payload.end_time);
+        if (payload.justification !== undefined) formData.append("justification", payload.justification || "");
+        if (payload.notes !== undefined) formData.append("notes", payload.notes || "");
+        if (payload.status) formData.append("status", payload.status);
+        if (payload.remove_document) formData.append("remove_document", "1");
+        if (hasFile) formData.append("document", payload.document as File);
+
+        response = await apiClient.post<any>(`/absences/${id}`, formData);
+      } else {
+        const formattedPayload = {
+          ...payload,
+          start_date: payload.valid_from,
+          end_date: payload.valid_until,
+        };
+        response = await apiClient.put<any>(`/absences/${id}`, formattedPayload);
+      }
+
       const raw = response.data?.data ?? response.data;
       return normalizeAbsenceResource(raw);
     } catch (error: any) {
@@ -542,6 +601,8 @@ export const absencesService = {
           return normalizeAbsenceResource({
             ...a,
             ...payload,
+            document_name: payload.remove_document ? null : (payload.document?.name || a.document_name),
+            document_path: payload.remove_document ? null : (payload.document?.name || a.document_path),
             status: payload.status || a.status,
           });
         }
@@ -620,16 +681,102 @@ export const absencesService = {
   },
 
   /**
-   * Upload de comprovativo/documento de justificação
-   * POST /api/absences/upload
+   * Upload de comprovativo e submissão de justificação para uma ausência específica
+   * Rota do Backend: POST /api/absences/{id}/document
+   * Acessível tanto pelo Admin como pelo Assistente (se a falta estiver Pendente)
+   */
+  async uploadAbsenceDocument(
+    id: string | number,
+    file?: File | null,
+    justification?: string,
+    notes?: string
+  ): Promise<BackendAbsenceResource> {
+    const formData = new FormData();
+    if (file) {
+      formData.append("document", file);
+    }
+    if (justification !== undefined && justification !== null) {
+      formData.append("justification", justification);
+    }
+    if (notes !== undefined && notes !== null) {
+      formData.append("notes", notes);
+    }
+
+    try {
+      const response = await apiClient.post<any>(`/absences/${id}/document`, formData);
+      const raw = response.data?.data ?? response.data;
+      return normalizeAbsenceResource(raw);
+    } catch (err: any) {
+      if (err?.response && err.response.status !== 404) {
+        throw err;
+      }
+      // Fallback mock
+      localAbsencesMock = localAbsencesMock.map((a) => {
+        if (String(a.id) === String(id)) {
+          return normalizeAbsenceResource({
+            ...a,
+            document_name: file ? file.name : a.document_name,
+            document_path: file ? file.name : a.document_path,
+            has_document: file ? true : a.has_document,
+            missing_document: false,
+            justification: justification !== undefined ? justification : a.justification,
+            notes: notes !== undefined ? notes : a.notes,
+          });
+        }
+        return a;
+      });
+      const updated = localAbsencesMock.find((a) => String(a.id) === String(id));
+      if (updated) return updated;
+      throw err;
+    }
+  },
+
+  /**
+   * Descarrega o documento comprovativo de uma ausência como Blob
+   * GET /api/absences/{id}/document
+   */
+  async downloadDocument(id: string | number): Promise<{ blob: Blob; filename: string }> {
+    const response = await apiClient.get(`/absences/${id}/document`, {
+      responseType: "blob",
+    });
+
+    const disposition = response.headers?.["content-disposition"] || "";
+    let filename = `comprovativo_ausencia_${id}.pdf`;
+    if (disposition) {
+      const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      if (match && match[1]) {
+        filename = match[1].replace(/['"]/g, "").trim();
+      }
+    }
+
+    return { blob: response.data, filename };
+  },
+
+  /**
+   * Abre ou faz o download direto do comprovativo no browser
+   */
+  async openOrDownloadDocument(id: string | number, fallbackFilename?: string): Promise<void> {
+    const { blob, filename } = await this.downloadDocument(id);
+    const chosenName = fallbackFilename || filename || "comprovativo.pdf";
+    const blobUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = chosenName;
+    link.target = "_blank";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+  },
+
+  /**
+   * Upload genérico de documento de justificação (mantido para compatibilidade)
    */
   async uploadDocument(file: File): Promise<{ document_path: string; url?: string }> {
     const formData = new FormData();
     formData.append("document", file);
     formData.append("file", file);
-    const response = await apiClient.post<any>("/absences/upload", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+    const response = await apiClient.post<any>("/absences/upload", formData);
     return response.data?.data ?? response.data;
   },
 };
