@@ -3,7 +3,6 @@ import {
   Clock,
   Coffee,
   Eye,
-  Lock,
   ShoppingBag,
   Sparkles,
   Truck,
@@ -19,14 +18,14 @@ export interface BlockStyleConfig {
 }
 
 export const BLOCK_STYLES: Record<BlockState, BlockStyleConfig> = {
-  work: { bg: "bg-[#6366F1]", label: "Trabalho", icon: <Clock size={8} /> },
-  surveillance: { bg: "bg-[#A855F7]", label: "Vigilância", icon: <Eye size={8} /> },
-  lunch: { bg: "bg-[#F59E0B]", label: "Pausa Almoço", icon: <Coffee size={8} /> },
-  absent: { bg: "bg-[#EF4444]", label: "Ausente", icon: <UserX size={8} /> },
+  work: { bg: "bg-[#6366F1]", label: "Trabalho", icon: <Clock size={11} /> },
+  surveillance: { bg: "bg-[#A855F7]", label: "Vigilância", icon: <Eye size={11} /> },
+  lunch: { bg: "bg-[#F59E0B]", label: "Pausa Almoço", icon: <Coffee size={11} /> },
+  absent: { bg: "bg-[#EF4444]", label: "Ausente", icon: <UserX size={11} /> },
   off: { bg: "bg-transparent border border-border/40", label: "Inativo", icon: null },
-  cleaning: { bg: "bg-[#06B6D4]", label: "Limpeza", icon: <Sparkles size={8} /> },
-  collection: { bg: "bg-[#EC4899]", label: "Recolha", icon: <Truck size={8} />, locked: true },
-  delivery: { bg: "bg-[#10B981]", label: "Entrega", icon: <ShoppingBag size={8} />, locked: true },
+  cleaning: { bg: "bg-[#06B6D4]", label: "Limpeza", icon: <Sparkles size={11} /> },
+  collection: { bg: "bg-[#EC4899]", label: "Recolha", icon: <Truck size={11} />, locked: true },
+  delivery: { bg: "bg-[#10B981]", label: "Entrega", icon: <ShoppingBag size={11} />, locked: true },
 };
 
 export const HOUR_LABELS = Array.from(
@@ -55,20 +54,57 @@ export const PRESET_COLORS = [
   "#E11D48", "#7C3AED", "#0EA5E9", "#64748B", "#84CC16", "#1A56DB",
 ];
 
-export function slotsToBlocks(slots: BlockState[]) {
-  const blocks: { state: BlockState; start: number; count: number }[] = [];
+export interface MergedScheduleBlock {
+  state: BlockState;
+  start: number;
+  count: number;
+  hasPrevAdjacent: boolean;
+  hasNextAdjacent: boolean;
+}
+
+export function slotsToBlocks(slots: BlockState[]): MergedScheduleBlock[] {
+  const raw: { state: BlockState; start: number; count: number }[] = [];
   let cur: { state: BlockState; start: number; count: number } | null = null;
   for (let i = 0; i < slots.length; i++) {
     const s = slots[i];
     if (cur && cur.state === s) {
       cur.count++;
     } else {
-      if (cur) blocks.push(cur);
+      if (cur) raw.push(cur);
       cur = { state: s, start: i, count: 1 };
     }
   }
-  if (cur) blocks.push(cur);
-  return blocks;
+  if (cur) raw.push(cur);
+
+  return raw.map((b, idx) => {
+    const prev = idx > 0 ? raw[idx - 1] : null;
+    const next = idx < raw.length - 1 ? raw[idx + 1] : null;
+    const hasPrevAdjacent =
+      b.state !== "off" &&
+      prev !== null &&
+      prev.state !== "off" &&
+      prev.start + prev.count === b.start;
+    const hasNextAdjacent =
+      b.state !== "off" &&
+      next !== null &&
+      next.state !== "off" &&
+      b.start + b.count === next.start;
+
+    return {
+      ...b,
+      hasPrevAdjacent,
+      hasNextAdjacent,
+    };
+  });
+}
+
+export function formatDurationSlots(count: number): string {
+  const totalMins = count * 15;
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  if (h === 0) return `${m}min`;
+  if (m === 0) return `${h}h`;
+  return `${h}h${String(m).padStart(2, "0")}`;
 }
 
 export function groupSlotsFn(slots: BlockState[]) {

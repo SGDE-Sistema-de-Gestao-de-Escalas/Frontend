@@ -35,6 +35,7 @@ import {
 import { useActivityTypesList } from "../../hooks/api/useActivityTypes";
 import { useAssistantsList } from "../../hooks/api/useAssistants";
 import type { BackendScheduleRuleResource } from "../../api/services/scheduleRules.service";
+import { isFallbackActivityType } from "./ActivityTypesTab";
 
 const DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
@@ -79,6 +80,9 @@ export default function ScheduleRulesTab() {
 
   const isEditing = editingRuleId !== null;
   const selectedActivity = activityTypes.find((a) => a.id === formActivityId);
+  const ruleEligibleActivityTypes = activityTypes.filter(
+    (a) => a.active !== false && !isFallbackActivityType(a)
+  );
   function toggleDay(i: number) {
     setFormDays((p) => {
       const n = [...p];
@@ -89,7 +93,7 @@ export default function ScheduleRulesTab() {
 
   function openAdd() {
     setEditingRuleId(null);
-    setFormActivityId(activityTypes[0]?.id || "");
+    setFormActivityId(ruleEligibleActivityTypes[0]?.id || "");
     setFormDays([true, true, true, true, true, false, false]);
     setFormPeriodStart("07:30");
     setFormPeriodEnd("13:00");
@@ -551,14 +555,14 @@ export default function ScheduleRulesTab() {
                     setFormActivityId(val);
                     setFormError(null);
                   }}
-                  options={activityTypes.map((a) => ({
+                  options={ruleEligibleActivityTypes.map((a) => ({
                     value: a.id,
                     label: a.name,
                     color: a.color,
                   }))}
                   placeholder="Selecionar tipo de atividade..."
                   searchPlaceholder="Pesquisar tipo de atividade..."
-                  emptyMessage="Nenhuma atividade encontrada."
+                  emptyMessage="Nenhuma atividade elegível encontrada (a atividade base é atribuída automaticamente)."
                 />
               </div>
 

@@ -165,6 +165,10 @@ export default function DashboardSection({
       {viewMode === "day" && (
         <MatrixGrid
           matrix={matrix}
+          dayOffset={dayOffset}
+          onChangeDayOffset={(nextOffset) =>
+            setDayOffset(Math.max(-7, Math.min(35, nextOffset)))
+          }
           onSelectAssistant={onSelectAssistant}
           dateLabel={`${label.dayName}, ${label.dateStr} · blocos de 15 min`}
         />
@@ -202,4 +206,3 @@ export default function DashboardSection({
     </div>
   );
 }
-

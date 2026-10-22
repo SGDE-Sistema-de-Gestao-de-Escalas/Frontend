@@ -212,6 +212,7 @@ export interface ActivityType {
   color: string;
   builtIn?: boolean;
   is_system?: boolean;
+  is_fallback?: boolean;
   school_id?: string;
   active?: boolean;
   status_message?: string | null;
