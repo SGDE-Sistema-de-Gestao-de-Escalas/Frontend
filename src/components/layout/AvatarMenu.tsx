@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronDown, LogOut, Settings, User, Users } from "lucide-react";
+import { ChevronDown, LogOut, Settings, User } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import {
   DropdownMenu,
@@ -22,11 +22,10 @@ export default function AvatarMenu({
   onSwitchRole,
   onLogout,
 }: AvatarMenuProps) {
-  const { user, switchRole, logout } = useAuth();
+  const { user, logout } = useAuth();
 
   const handleAccount = onAccount;
   const handlePlatformSettings = onPlatformSettings;
-  const handleSwitchRole = onSwitchRole || switchRole;
   const handleLogout = onLogout || logout;
 
   return (
@@ -83,14 +82,6 @@ export default function AvatarMenu({
               Configurações da Plataforma
             </DropdownMenuItem>
           )}
-
-          <DropdownMenuItem
-            onClick={handleSwitchRole}
-            className="cursor-pointer px-4 py-2 text-sm text-foreground transition-colors"
-          >
-            <Users size={15} className="mr-2 text-muted-foreground" />
-            {user.role === "admin" ? "Ver como Assistente" : "Vista Admin"}
-          </DropdownMenuItem>
         </div>
 
         <DropdownMenuSeparator className="my-0 border-t border-border" />

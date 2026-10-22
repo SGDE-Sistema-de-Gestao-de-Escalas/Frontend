@@ -31,8 +31,9 @@ export default function Dashboard() {
           assistantId={selectedAssistantId}
           onClose={() => setSelectedAssistantId(null)}
           onViewProfile={() => {
+            const aid = selectedAssistantId;
             setSelectedAssistantId(null);
-            navigate("/profile");
+            navigate(aid ? `/profile/${aid}` : "/profile");
           }}
           onMarkAbsence={(name) => {
             setSelectedAssistantId(null);

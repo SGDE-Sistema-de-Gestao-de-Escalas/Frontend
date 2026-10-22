@@ -309,14 +309,14 @@ export const VIEW_END = 84; // slot 84 = 21:00 (exclusive)
 export const VIEW_SLOTS = VIEW_END - VIEW_START; // 60 slots = 15 hours
 export const HOUR_LABELS = Array.from({ length: 25 }, (_, i) => i.toString().padStart(2, "0") + "h");
 
-export function buildAssistantRow(assistantId: number | string): BlockState[] {
+export function buildPlannedAssistantRow(assistantId: number | string): BlockState[] {
   const row: BlockState[] = Array(96).fill("off");
   const fill = (from: number, to: number, state: BlockState) => {
     for (let i = from; i < to; i++) {
       row[i] = state;
     }
   };
-  switch (assistantId) {
+  switch (Number(assistantId)) {
     case 1:
       fill(28, 32, "surveillance");
       fill(32, 46, "work");
@@ -324,7 +324,10 @@ export function buildAssistantRow(assistantId: number | string): BlockState[] {
       fill(50, 60, "work");
       break;
     case 2:
-      row.fill("absent");
+      fill(32, 36, "surveillance");
+      fill(36, 48, "work");
+      fill(48, 52, "lunch");
+      fill(52, 64, "work");
       break;
     case 3:
       fill(40, 48, "work");
@@ -390,6 +393,71 @@ export function buildAssistantRow(assistantId: number | string): BlockState[] {
   return row;
 }
 
+export function getAssistantShiftBounds(assistantId: number | string): {
+  startSlot: number;
+  endSlot: number;
+  lunchStart: number | null;
+  lunchEnd: number | null;
+} {
+  const planned = buildPlannedAssistantRow(assistantId);
+  let startSlot = -1;
+  let endSlot = -1;
+  let lunchStart: number | null = null;
+  let lunchEnd: number | null = null;
+
+  for (let i = 0; i < planned.length; i++) {
+    if (planned[i] !== "off") {
+      if (startSlot === -1) startSlot = i;
+      endSlot = i + 1;
+    }
+    if (planned[i] === "lunch") {
+      if (lunchStart === null) lunchStart = i;
+      lunchEnd = i + 1;
+    }
+  }
+
+  return {
+    startSlot: startSlot === -1 ? 32 : startSlot,
+    endSlot: endSlot === -1 ? 64 : endSlot,
+    lunchStart,
+    lunchEnd,
+  };
+}
+
+export function isAssistantAbsentOnDay(
+  assistantId: number | string,
+  dayOffset = 0
+): { absent: boolean; reason?: string } {
+  const id = Number(assistantId);
+  const assistant = assistants.find((a) => a.id === id);
+  if (assistant?.exception === "Licença Parentalidade" || id === 2) {
+    return { absent: true, reason: "Licença Parentalidade" };
+  }
+  const dayOfWeek = ((dayOffset % 7) + 7) % 7;
+  const absentOn: Record<number, { days: number[]; reason: string }> = {
+    8: { days: [1], reason: "Doença" },
+    10: { days: [3, 4], reason: "Doença (Febre alta)" },
+    3: { days: [2], reason: "Consulta Médica" },
+  };
+  if (absentOn[id]?.days.includes(dayOfWeek)) {
+    return { absent: true, reason: absentOn[id].reason };
+  }
+  return { absent: false };
+}
+
+export function buildAssistantRow(assistantId: number | string): BlockState[] {
+  const id = Number(assistantId);
+  if (id === 2) {
+    const bounds = getAssistantShiftBounds(id);
+    const row: BlockState[] = Array(96).fill("off");
+    for (let i = bounds.startSlot; i < bounds.endSlot; i++) {
+      row[i] = "absent";
+    }
+    return row;
+  }
+  return buildPlannedAssistantRow(id);
+}
+
 export function generateMatrix(): Record<number, BlockState[]> {
   const matrix: Record<number, BlockState[]> = {};
   assistants.forEach((assistant) => {
@@ -400,26 +468,66 @@ export function generateMatrix(): Record<number, BlockState[]> {
 
 export const SCHEDULE_MATRIX = generateMatrix();
 
+export interface SchoolDayStatus {
+  isOpen: boolean;
+  reasonType?: "weekend" | "holiday" | "exception";
+  title?: string;
+  detail?: string;
+}
+
+export function getSchoolDayStatus(dayOffset: number): SchoolDayStatus {
+  const info = getDateInfo(dayOffset);
+  if (info.dow >= 5) {
+    return {
+      isOpen: false,
+      reasonType: "weekend",
+      title: `Estabelecimento Encerrado — ${info.dayName}`,
+      detail:
+        "O estabelecimento de ensino encontra-se encerrado ao fim de semana. Não existem turnos nem atividades agendadas.",
+    };
+  }
+  if (info.dateStr === "17 Fev" || info.dateStr === "03 Mar") {
+    return {
+      isOpen: false,
+      reasonType: "holiday",
+      title: "Estabelecimento Encerrado — Feriado de Carnaval",
+      detail:
+        "Feriado registado no calendário global. Todas as atividades letivas e escalas estão suspensas neste dia.",
+    };
+  }
+  if (info.dateStr === "06 Fev") {
+    return {
+      isOpen: false,
+      reasonType: "exception",
+      title: "Estabelecimento Encerrado — Exceção de Funcionamento",
+      detail:
+        "Encerramento excecional definido nas regras da escola (Manutenção e Desinfestação das Instalações).",
+    };
+  }
+  return { isOpen: true };
+}
+
 export function generateDayMatrix(
   dayOffset: number
 ): Record<number, BlockState[]> {
-  const dayOfWeek = ((dayOffset % 7) + 7) % 7;
-  const isWeekend = dayOfWeek >= 5;
+  const status = getSchoolDayStatus(dayOffset);
   const matrix: Record<number, BlockState[]> = {};
-  const absentOn: Record<number, number[]> = { 8: [1], 10: [3, 4], 3: [2] };
   assistants.forEach((assistant) => {
-    if (isWeekend) {
+    if (!status.isOpen) {
       matrix[assistant.id] = Array(96).fill("off") as BlockState[];
       return;
     }
-    if (
-      assistant.exception === "Licença Parentalidade" ||
-      absentOn[assistant.id]?.includes(dayOfWeek)
-    ) {
-      matrix[assistant.id] = Array(96).fill("absent") as BlockState[];
+    const absenceInfo = isAssistantAbsentOnDay(assistant.id, dayOffset);
+    if (absenceInfo.absent) {
+      const bounds = getAssistantShiftBounds(assistant.id);
+      const row: BlockState[] = Array(96).fill("off");
+      for (let i = bounds.startSlot; i < bounds.endSlot; i++) {
+        row[i] = "absent";
+      }
+      matrix[assistant.id] = row;
       return;
     }
-    matrix[assistant.id] = buildAssistantRow(assistant.id);
+    matrix[assistant.id] = buildPlannedAssistantRow(assistant.id);
   });
   return matrix;
 }
@@ -535,7 +643,7 @@ export const initialNotifications: Notification[] = [
 export const INITIAL_NOTIFICATIONS = initialNotifications;
 
 export const INITIAL_ACTIVITY_TYPES: ActivityType[] = [
-  { id: "work", label: "Trabalho Geral", color: "#6366F1", builtIn: true },
+  { id: "work", label: "Apoio Escola", name: "Apoio Escola", color: "#6366F1", builtIn: true, is_system: true, is_fallback: true, active: true, can_delete: false, cannot_delete_reason: "A atividade base de preenchimento automático não pode ser eliminada." },
   { id: "surveillance", label: "Vigilância", color: "#A855F7", builtIn: true },
   { id: "cleaning", label: "Limpeza", color: "#06B6D4", builtIn: true },
   { id: "lunch", label: "Pausa Almoço", color: "#F59E0B", builtIn: true },

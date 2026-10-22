@@ -12,6 +12,7 @@ import {
   schools as SCHOOLS,
 } from "../../api/mockData";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
+import { Checkbox } from "../ui/checkbox";
 import { BLOCK_STYLES } from "./blockStyles";
 import DatePicker from "../common/DatePicker";
 import CustomSelect from "../common/CustomSelect";
@@ -215,12 +216,12 @@ export default function RecalculateModal({
                 />
               </div>
 
-              <label className="flex items-center gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <Checkbox
                   checked={respectExceptions}
-                  onChange={(e) => setRespectExceptions(e.target.checked)}
-                  className="w-4 h-4 rounded border-border accent-primary"
+                  onCheckedChange={(checked) =>
+                    setRespectExceptions(checked === true)
+                  }
                 />
                 <span className="text-xs text-foreground font-medium">
                   Respeitar exceções individuais (licenças, carga reduzida)

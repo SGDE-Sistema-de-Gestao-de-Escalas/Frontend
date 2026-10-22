@@ -6,7 +6,9 @@ import {
   CheckCircle,
   ChevronLeft,
   Clock,
+  Download,
   Edit2,
+  FileCheck,
   FileText,
   HeartHandshake,
   Info,
@@ -33,6 +35,9 @@ import Modal from "../common/Modal";
 import ConfirmationModal from "../common/ConfirmationModal";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
+import ActionTooltip from "../common/ActionTooltip";
+import { notify } from "../common/FeedbackNotification";
+import assistantsService from "../../api/services/assistants.service";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
 import {
   useAssistant,
@@ -110,7 +115,7 @@ export default function AssistantProfile({
   assistantId,
   initialActive = true,
 }: AssistantProfileProps) {
-  const { data: assistant, isLoading } = useAssistant(assistantId);
+  const { data: assistant, isLoading, isError, error } = useAssistant(assistantId);
   const updateAssistantMutation = useUpdateAssistant();
   const deleteAssistantMutation = useDeleteAssistant();
   const toggleStatusMutation = useToggleAssistantStatus();
@@ -224,6 +229,23 @@ export default function AssistantProfile({
   const currentAvailableForTransfer = assistant
     ? (assistant.available_for_transfer ?? assistant.availableForTransfer ?? false)
     : availableForTransfer;
+
+  const [isDownloadingCriminalRecord, setIsDownloadingCriminalRecord] = useState(false);
+
+  async function handleDownloadCriminalRecord() {
+    if (!assistant?.id) return;
+    setIsDownloadingCriminalRecord(true);
+    try {
+      await assistantsService.openOrDownloadCriminalRecord(
+        assistant.id,
+        assistant.criminal_record_name || `registo_criminal_${assistant.id}.pdf`
+      );
+    } catch {
+      notify.error("Não foi possível transferir o documento do registo criminal.", "Erro no Download");
+    } finally {
+      setIsDownloadingCriminalRecord(false);
+    }
+  }
 
   function handleToggleTransfer(val: boolean) {
     setAvailableForTransfer(val);
@@ -474,6 +496,28 @@ export default function AssistantProfile({
     );
   }
 
+  if (assistantId && isError) {
+    const errorMsg =
+      (error as any)?.response?.data?.message ||
+      (error as any)?.message ||
+      "Ocorreu um erro ao carregar os dados do assistente a partir do servidor.";
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
+        <AlertTriangle size={28} className="text-destructive" />
+        <p className="text-sm font-semibold text-foreground">Assistente não encontrado</p>
+        <p className="text-xs text-muted-foreground max-w-md text-center">{errorMsg}</p>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="text-xs text-primary underline mt-2"
+          >
+            Voltar à lista de assistentes
+          </button>
+        )}
+      </div>
+    );
+  }
+
   if (assistantId && !assistant && !isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
@@ -584,15 +628,27 @@ export default function AssistantProfile({
                 Editar Perfil
               </button>
 
-              <button
-                type="button"
-                onClick={() => setShowDeleteModal(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-destructive/20 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-                title="Eliminar Assistente"
+              <ActionTooltip
+                content={
+                  assistant?.can_delete === false
+                    ? assistant?.cannot_delete_reason || "Não é possível eliminar este assistente."
+                    : "Eliminar assistente"
+                }
               >
-                <Trash2 size={13} />
-                Eliminar
-              </button>
+                <button
+                  type="button"
+                  disabled={assistant?.can_delete === false}
+                  onClick={() => setShowDeleteModal(true)}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                    assistant?.can_delete === false
+                      ? "opacity-40 cursor-not-allowed border-border text-muted-foreground bg-muted/20"
+                      : "border-destructive/20 text-destructive hover:bg-destructive/10 cursor-pointer"
+                  }`}
+                >
+                  <Trash2 size={13} />
+                  Eliminar
+                </button>
+              </ActionTooltip>
             </>
           )}
         </div>
@@ -898,6 +954,41 @@ export default function AssistantProfile({
                   {formatDateDisplay(assistant?.criminal_record_expiry)}
                 </span>
               </div>
+
+              <div className="pt-3 border-t border-border/40 text-xs">
+                <span className="text-muted-foreground block mb-1.5">Documento Anexado</span>
+                {assistant?.has_criminal_record ? (
+                  <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/20">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <FileCheck size={16} className="text-emerald-600 shrink-0" />
+                      <span
+                        className="font-medium text-foreground truncate text-xs"
+                        title={assistant.criminal_record_name || "Certificado de Registo Criminal"}
+                      >
+                        {assistant.criminal_record_name || "Certificado_Registo_Criminal.pdf"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleDownloadCriminalRecord}
+                      disabled={isDownloadingCriminalRecord}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-background hover:bg-muted text-foreground border border-border text-xs font-medium transition-colors shrink-0 disabled:opacity-50"
+                      title="Descarregar ficheiro"
+                    >
+                      {isDownloadingCriminalRecord ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <Download size={12} />
+                      )}
+                      <span>Ver</span>
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic">
+                    Nenhum documento anexado
+                  </span>
+                )}
+              </div>
             </div>
           </Card>
 
@@ -1002,38 +1093,50 @@ export default function AssistantProfile({
                           </div>
                           {!isDeletedOrAnonymized && (
                             <div className="flex items-center gap-1 shrink-0">
-                              {(row.canEdit !== false || row.canChangeEndDate) && (
+                              <ActionTooltip
+                                content={
+                                  row.canEdit === false && row.canChangeEndDate
+                                    ? "Apenas a data de fim pode ser ajustada para esta exceção em vigor."
+                                    : row.canEdit === false
+                                    ? "Não é possível editar esta exceção."
+                                    : "Editar exceção"
+                                }
+                              >
                                 <button
                                   type="button"
+                                  disabled={row.canEdit === false && !row.canChangeEndDate}
                                   onClick={() => openEditException(row)}
-                                  className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                                  title={
-                                    row.canEdit === false && row.canChangeEndDate
-                                      ? "Apenas a data de fim pode ser ajustada para esta exceção em vigor."
-                                      : "Editar exceção"
-                                  }
+                                  className={`p-1.5 rounded-lg transition-colors ${
+                                    row.canEdit === false && !row.canChangeEndDate
+                                      ? "opacity-30 cursor-not-allowed text-muted-foreground"
+                                      : "hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                                  }`}
                                 >
                                   <Pencil size={13} />
                                 </button>
-                              )}
-                              <button
-                                type="button"
-                                disabled={row.canDelete === false}
-                                onClick={() => setDeleteExceptionTarget(row)}
-                                className={`p-1.5 rounded-lg transition-colors ${
-                                  row.canDelete === false
-                                    ? "opacity-30 cursor-not-allowed text-muted-foreground"
-                                    : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                                }`}
-                                title={
+                              </ActionTooltip>
+
+                              <ActionTooltip
+                                content={
                                   row.cannotDeleteReason ||
                                   (row.canDelete === false
                                     ? "Não é possível eliminar esta exceção."
                                     : "Eliminar exceção")
                                 }
                               >
-                                <Trash2 size={13} />
-                              </button>
+                                <button
+                                  type="button"
+                                  disabled={row.canDelete === false}
+                                  onClick={() => setDeleteExceptionTarget(row)}
+                                  className={`p-1.5 rounded-lg transition-colors ${
+                                    row.canDelete === false
+                                      ? "opacity-30 cursor-not-allowed text-muted-foreground"
+                                      : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive cursor-pointer"
+                                  }`}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </ActionTooltip>
                             </div>
                           )}
                         </div>

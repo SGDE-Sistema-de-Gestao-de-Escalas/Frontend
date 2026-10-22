@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Edit2, Info, Plus, Trash2, Loader2, Power, AlertCircle, Layers } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { Edit2, Info, Plus, Trash2, Loader2, Power, AlertCircle, Layers, Sparkles, Lock } from "lucide-react";
 import { PRESET_COLORS } from "../dashboard/blockStyles";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -66,6 +66,23 @@ function ColorPicker({
   );
 }
 
+export function isFallbackActivityType(t?: {
+  id?: string | number;
+  name?: string;
+  label?: string;
+  is_fallback?: boolean;
+  is_system?: boolean;
+} | null): boolean {
+  if (!t) return false;
+  if (typeof t.is_fallback === "boolean") return t.is_fallback;
+  const rawName = (t.name || t.label || "").trim().toLowerCase();
+  if (String(t.id) === "work") return true;
+  if (t.is_system && (rawName === "apoio escola" || rawName === "trabalho geral" || rawName === "apoio geral")) {
+    return true;
+  }
+  return false;
+}
+
 export default function ActivityTypesTab() {
   const { data: types = [], isLoading, isError, refetch } = useActivityTypesList();
   const createMutation = useCreateActivityType();
@@ -74,14 +91,25 @@ export default function ActivityTypesTab() {
 
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingIsFallback, setEditingIsFallback] = useState(false);
   const [formName, setFormName] = useState("");
   const [formColor, setFormColor] = useState("#6366F1");
   const [formActive, setFormActive] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<BackendActivityTypeResource | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const sortedTypes = useMemo(() => {
+    return [...types].sort((a, b) => {
+      const aFallback = isFallbackActivityType(a) ? 1 : 0;
+      const bFallback = isFallbackActivityType(b) ? 1 : 0;
+      if (aFallback !== bFallback) return bFallback - aFallback;
+      return 0;
+    });
+  }, [types]);
+
   function openAdd() {
     setEditingId(null);
+    setEditingIsFallback(false);
     setFormName("");
     setFormColor("#6366F1");
     setFormActive(true);
@@ -90,10 +118,12 @@ export default function ActivityTypesTab() {
   }
 
   function openEdit(t: BackendActivityTypeResource) {
+    const fallback = isFallbackActivityType(t);
     setEditingId(t.id);
+    setEditingIsFallback(fallback);
     setFormName(t.name);
     setFormColor(t.color);
-    setFormActive(t.active ?? true);
+    setFormActive(fallback ? true : (t.active ?? true));
     setFormError(null);
     setShowDialog(true);
   }
@@ -111,7 +141,7 @@ export default function ActivityTypesTab() {
         data: {
           name: formName.trim(),
           color: formColor,
-          active: formActive,
+          active: editingIsFallback ? true : formActive,
         },
       });
     } else {
@@ -123,6 +153,7 @@ export default function ActivityTypesTab() {
     }
     setShowDialog(false);
     setEditingId(null);
+    setEditingIsFallback(false);
     setFormName("");
     setFormError(null);
   }
@@ -138,6 +169,7 @@ export default function ActivityTypesTab() {
   }
 
   async function handleToggleActive(t: BackendActivityTypeResource) {
+    if (isFallbackActivityType(t)) return;
     await updateMutation.mutateAsync({
       id: t.id,
       data: {
@@ -206,102 +238,140 @@ export default function ActivityTypesTab() {
       )}
 
       {/* Type list */}
-      {!isLoading && !isError && types.length > 0 && (
+      {!isLoading && !isError && sortedTypes.length > 0 && (
         <Card className="overflow-hidden border-border bg-card">
-          {types.map((t) => (
-            <div
-              key={t.id}
-              className={`border-b border-border/50 last:border-0 flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors group ${
-                !t.active ? "opacity-60 bg-muted/10" : ""
-              }`}
-            >
+          {sortedTypes.map((t) => {
+            const isFallback = isFallbackActivityType(t);
+            const canDelete = !isFallback && Boolean(t.can_delete);
+            return (
               <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ backgroundColor: t.color + "22" }}
+                key={t.id}
+                className={`border-b border-border/50 last:border-0 flex items-center gap-3 px-4 py-3.5 transition-colors group ${
+                  isFallback
+                    ? "bg-primary/5 border-l-4 border-l-primary hover:bg-primary/10"
+                    : !t.active
+                    ? "opacity-60 bg-muted/10 hover:bg-muted/20"
+                    : "hover:bg-muted/20"
+                }`}
               >
                 <div
-                  className="w-4 h-4 rounded-sm"
-                  style={{ backgroundColor: t.color }}
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {t.name}
-                  </p>
-                  {!t.active && (
-                    <Badge variant="secondary" className="text-[10px] py-0 px-1.5 bg-muted text-muted-foreground">
-                      Inativo
-                    </Badge>
+                  className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: t.color + "22" }}
+                >
+                  <div
+                    className="w-4 h-4 rounded-sm"
+                    style={{ backgroundColor: t.color }}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {t.name}
+                    </p>
+                    {isFallback && (
+                      <Badge className="text-[10px] py-0 px-2 bg-primary/15 text-primary border border-primary/30 font-semibold flex items-center gap-1">
+                        <Sparkles size={10} />
+                        Atividade Base (Preenchimento Automático)
+                      </Badge>
+                    )}
+                    {!isFallback && !t.active && (
+                      <Badge variant="secondary" className="text-[10px] py-0 px-1.5 bg-muted text-muted-foreground">
+                        Inativo
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      {t.color.toUpperCase()} ·{" "}
+                      {isFallback
+                        ? "Base do Motor (Sem Regras)"
+                        : t.is_system
+                        ? "Predefinido"
+                        : "Personalizado"}
+                    </span>
+                    {isFallback && (
+                      <span className="text-[11px] text-muted-foreground">
+                        — Preenche automaticamente os períodos livres do turno que não tenham outra regra ou pausa de almoço atribuída.
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  {/* Ativar/Desativar */}
+                  {isFallback ? (
+                    <ActionTooltip content="A atividade base de preenchimento automático está sempre ativa para garantir a cobertura contínua dos turnos.">
+                      <button
+                        type="button"
+                        disabled
+                        className="p-1.5 rounded text-emerald-600/40 cursor-not-allowed transition-colors"
+                        title="Sempre ativa"
+                      >
+                        <Power size={13} />
+                      </button>
+                    </ActionTooltip>
+                  ) : (
+                    <ActionTooltip content={t.active ? "Desativar tipo de atividade" : "Ativar tipo de atividade"}>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleActive(t)}
+                        disabled={updateMutation.isPending}
+                        className={`p-1.5 rounded hover:bg-muted transition-colors ${
+                          t.active ? "text-emerald-600 hover:text-emerald-700" : "text-muted-foreground hover:text-foreground"
+                        }`}
+                        title={t.active ? "Desativar tipo" : "Ativar tipo"}
+                      >
+                        <Power size={13} />
+                      </button>
+                    </ActionTooltip>
+                  )}
+
+                  {/* Editar */}
+                  <ActionTooltip content={isFallback ? "Personalizar nome e cor da atividade base" : "Editar tipo de atividade"}>
+                    <button
+                      type="button"
+                      onClick={() => openEdit(t)}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      title="Editar tipo"
+                    >
+                      <Edit2 size={13} />
+                    </button>
+                  </ActionTooltip>
+
+                  {/* Eliminar com tooltip informativo se can_delete === false */}
+                  {canDelete ? (
+                    <ActionTooltip content="Eliminar tipo de atividade">
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(t)}
+                        className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Eliminar tipo"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </ActionTooltip>
+                  ) : (
+                    <ActionTooltip
+                      content={
+                        isFallback
+                          ? "A atividade base de preenchimento automático é obrigatória no motor e não pode ser eliminada."
+                          : t.cannot_delete_reason ||
+                            "Esta atividade não pode ser eliminada (predefinida ou em uso em escalas)."
+                      }
+                    >
+                      <button
+                        type="button"
+                        disabled
+                        className="p-1.5 rounded text-muted-foreground/40 cursor-not-allowed transition-colors"
+                        title="Não pode ser eliminada"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </ActionTooltip>
                   )}
                 </div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[10px] font-mono text-muted-foreground">
-                    {t.color.toUpperCase()} ·{" "}
-                    {t.is_system ? "Predefinido" : "Personalizado"}
-                  </span>
-                </div>
               </div>
-              <div className="flex items-center gap-1">
-                {/* Ativar/Desativar */}
-                <ActionTooltip content={t.active ? "Desativar tipo de atividade" : "Ativar tipo de atividade"}>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleActive(t)}
-                    disabled={updateMutation.isPending}
-                    className={`p-1.5 rounded hover:bg-muted transition-colors ${
-                      t.active ? "text-emerald-600 hover:text-emerald-700" : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    title={t.active ? "Desativar tipo" : "Ativar tipo"}
-                  >
-                    <Power size={13} />
-                  </button>
-                </ActionTooltip>
-
-                {/* Editar */}
-                <ActionTooltip content="Editar tipo de atividade">
-                  <button
-                    type="button"
-                    onClick={() => openEdit(t)}
-                    className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                    title="Editar tipo"
-                  >
-                    <Edit2 size={13} />
-                  </button>
-                </ActionTooltip>
-
-                {/* Eliminar com tooltip informativo se can_delete === false */}
-                {t.can_delete ? (
-                  <ActionTooltip content="Eliminar tipo de atividade">
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget(t)}
-                      className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      title="Eliminar tipo"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </ActionTooltip>
-                ) : (
-                  <ActionTooltip
-                    content={
-                      t.cannot_delete_reason ||
-                      "Esta atividade não pode ser eliminada (predefinida ou em uso em escalas)."
-                    }
-                  >
-                    <button
-                      type="button"
-                      disabled
-                      className="p-1.5 rounded text-muted-foreground/40 cursor-not-allowed transition-colors"
-                      title="Não pode ser eliminada"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </ActionTooltip>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </Card>
       )}
 
@@ -367,23 +437,37 @@ export default function ActivityTypesTab() {
               <ColorPicker value={formColor} onChange={setFormColor} />
             </div>
 
-            <div className="flex items-center justify-between pt-2 border-t border-border/50">
-              <div>
-                <span className="text-xs font-medium text-foreground block">Estado Ativo</span>
-                <span className="text-[11px] text-muted-foreground block">
-                  Disponível para atribuição em escalas e turnos
-                </span>
+            {editingIsFallback ? (
+              <div className="flex items-start gap-2.5 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <Lock size={14} className="text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-xs font-semibold text-foreground block">
+                    Atividade Base do Sistema (Sempre Ativa)
+                  </span>
+                  <span className="text-[11px] text-muted-foreground block mt-0.5 leading-relaxed">
+                    Esta atividade é utilizada pelo algoritmo na Fase 3 para preencher automaticamente os períodos livres do turno. Não pode ser desativada nem associada a regras de horário.
+                  </span>
+                </div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formActive}
-                  onChange={(e) => setFormActive(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-              </label>
-            </div>
+            ) : (
+              <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                <div>
+                  <span className="text-xs font-medium text-foreground block">Estado Ativo</span>
+                  <span className="text-[11px] text-muted-foreground block">
+                    Disponível para atribuição em escalas e turnos
+                  </span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formActive}
+                    onChange={(e) => setFormActive(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                </label>
+              </div>
+            )}
           </div>
           <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/10 rounded-b-xl">
             <button
@@ -391,6 +475,7 @@ export default function ActivityTypesTab() {
               onClick={() => {
                 setShowDialog(false);
                 setEditingId(null);
+                setEditingIsFallback(false);
                 setFormName("");
               }}
               disabled={isSaving}
@@ -415,7 +500,7 @@ export default function ActivityTypesTab() {
       <div className="flex items-start gap-2 p-3 rounded-xl bg-muted/30 border border-border">
         <Info size={14} className="text-muted-foreground flex-shrink-0 mt-0.5" />
         <p className="text-xs text-muted-foreground leading-relaxed">
-          As atividades são configuradas especificamente para a escola selecionada. As atividades predefinidas do sistema ou que estejam associadas a escalas não podem ser eliminadas, podendo contudo ser desativadas a qualquer momento.
+          As atividades são configuradas especificamente para a escola selecionada. A <strong>Atividade Base (Preenchimento Automático)</strong> está sempre ativa para cobrir os períodos livres do turno e não pode ser usada em regras de horário. As restantes atividades predefinidas ou em uso não podem ser eliminadas, mas podem ser desativadas.
         </p>
       </div>
 

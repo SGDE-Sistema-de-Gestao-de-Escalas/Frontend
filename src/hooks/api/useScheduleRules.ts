@@ -38,8 +38,13 @@ export function useCreateScheduleRule() {
       notify.success("A regra de horário foi criada com sucesso.", "Regra Criada");
     },
     onError: (error: any) => {
+      const errors = error?.response?.data?.errors;
       const message =
-        error?.response?.data?.errors?.assistant_ids?.[0] ||
+        errors?.valid_from?.[0] ||
+        errors?.valid_until?.[0] ||
+        errors?.assistant_ids?.[0] ||
+        errors?.period_start?.[0] ||
+        errors?.period_end?.[0] ||
         error?.response?.data?.message ||
         "Não foi possível criar a regra de horário.";
       notify.error(message, "Erro ao Criar Regra");
@@ -61,8 +66,13 @@ export function useUpdateScheduleRule() {
       notify.success("A regra de horário foi atualizada com sucesso.", "Regra Atualizada");
     },
     onError: (error: any) => {
+      const errors = error?.response?.data?.errors;
       const message =
-        error?.response?.data?.errors?.assistant_ids?.[0] ||
+        errors?.valid_from?.[0] ||
+        errors?.valid_until?.[0] ||
+        errors?.assistant_ids?.[0] ||
+        errors?.period_start?.[0] ||
+        errors?.period_end?.[0] ||
         error?.response?.data?.message ||
         "Não foi possível atualizar a regra de horário.";
       notify.error(message, "Erro ao Atualizar Regra");

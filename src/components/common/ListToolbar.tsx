@@ -16,6 +16,7 @@ export interface ListToolbarProps {
   sortOptions?: SortOption[];
   extraFilters?: React.ReactNode;
   className?: string;
+  onSearchSubmit?: () => void;
 }
 
 export default function ListToolbar({
@@ -27,6 +28,7 @@ export default function ListToolbar({
   sortOptions,
   extraFilters,
   className = "",
+  onSearchSubmit,
 }: ListToolbarProps) {
   return (
     <div
@@ -42,6 +44,12 @@ export default function ListToolbar({
           type="text"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && onSearchSubmit) {
+              e.preventDefault();
+              onSearchSubmit();
+            }
+          }}
           placeholder={searchPlaceholder}
           className="w-full pl-8 pr-7 py-1.5 rounded-lg border border-border bg-card/60 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-colors shadow-xs"
         />

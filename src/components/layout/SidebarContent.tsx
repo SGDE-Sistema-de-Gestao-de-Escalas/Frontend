@@ -28,7 +28,7 @@ export interface NavItemConfig {
 export const ADMIN_NAV: NavItemConfig[] = [
   { id: "dashboard", label: "Dashboard", icon: <Calendar size={16} />, group: "Diário", to: "/dashboard" },
   { id: "assistants", label: "Assistentes", icon: <Users size={16} />, group: "Diário", to: "/assistants" },
-  { id: "absences", label: "Ausências", icon: <Inbox size={16} />, badge: 3, group: "Diário", to: "/absences" },
+  { id: "absences", label: "Ausências", icon: <Inbox size={16} />, group: "Diário", to: "/absences" },
   { id: "reports", label: "Relatórios", icon: <BarChart2 size={16} />, group: "Análise", to: "/reports" },
   { id: "config", label: "Regras do Motor", icon: <SlidersHorizontal size={16} />, group: "Configuração", to: "/config" },
   { id: "platform-settings", label: "Definições", icon: <Settings size={16} />, group: "Configuração", to: "/platform-settings" },
@@ -41,18 +41,25 @@ export const STAFF_NAV: NavItemConfig[] = [
   { id: "account", label: "A Minha Conta", icon: <User size={16} />, to: "/staff/account" },
 ];
 
-interface SidebarContentProps {
+export interface SidebarContentProps {
   currentPage?: string;
   onNavigate?: (pageId: string) => void;
   onCloseMobile?: () => void;
+  onSwitchRole?: () => void;
+  onLogout?: () => void;
 }
 
 export default function SidebarContent({
   currentPage = "dashboard",
   onNavigate,
   onCloseMobile,
+  onSwitchRole,
+  onLogout,
 }: SidebarContentProps) {
-  const { role, user, switchRole, logout } = useAuth();
+  const { role, user, switchRole: authSwitchRole, logout: authLogout } = useAuth();
+
+  const handleSwitchRole = onSwitchRole || authSwitchRole;
+  const handleLogout = onLogout || authLogout;
 
   const isStaff = role === "staff";
 
@@ -194,7 +201,7 @@ export default function SidebarContent({
           <div className="pt-1 border-t border-sidebar-border/50 space-y-0.5">
             <button
               type="button"
-              onClick={switchRole}
+              onClick={handleSwitchRole}
               className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors text-left"
             >
               <Users size={13} />
@@ -202,7 +209,7 @@ export default function SidebarContent({
             </button>
             <button
               type="button"
-              onClick={logout}
+              onClick={handleLogout}
               className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-destructive hover:bg-destructive/10 transition-colors text-left"
             >
               <LogOut size={13} />

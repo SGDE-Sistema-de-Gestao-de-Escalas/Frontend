@@ -84,7 +84,10 @@ export interface Assistant {
   birth_date?: string;
   admission_date?: string;
   has_criminal_record?: boolean;
-  criminal_record_expiry?: string;
+  criminal_record_name?: string | null;
+  criminal_record_path?: string | null;
+  criminal_record_url?: string | null;
+  criminal_record_expiry?: string | null;
   address_street?: string;
   address_zip_code?: string;
   address_city?: string;
@@ -116,7 +119,9 @@ export interface CreateAssistantPayload {
   social_security_number?: string;
   birth_date?: string;
   admission_date?: string;
-  criminal_record_expiry?: string;
+  criminal_record?: File | null;
+  criminal_record_file?: File | null;
+  criminal_record_expiry?: string | null;
   address_street?: string;
   address_zip_code?: string;
   address_city?: string;
@@ -126,7 +131,9 @@ export interface CreateAssistantPayload {
   available_for_transfer?: boolean;
 }
 
-export type UpdateAssistantPayload = Partial<CreateAssistantPayload>;
+export type UpdateAssistantPayload = Partial<CreateAssistantPayload> & {
+  remove_criminal_record?: boolean;
+};
 
 
 export interface AdminUser {
@@ -205,6 +212,7 @@ export interface ActivityType {
   color: string;
   builtIn?: boolean;
   is_system?: boolean;
+  is_fallback?: boolean;
   school_id?: string;
   active?: boolean;
   status_message?: string | null;

@@ -1,11 +1,24 @@
-import React, { useMemo, useState } from "react";
-import { ChevronRight, Loader2, SearchX, UserPlus, Users } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import {
+  ChevronRight,
+  Download,
+  FileSpreadsheet,
+  Loader2,
+  SearchX,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import { Card } from "../ui/card";
+import { Button } from "../ui/button";
 import type { EntityId } from "../../types";
-import { useAssistantsList } from "../../hooks/api/useAssistants";
+import {
+  useAssistantsPaginated,
+  useExportAssistantsCsv,
+} from "../../hooks/api/useAssistants";
 import { useSchool } from "../../context/SchoolContext";
 import ListToolbar from "../common/ListToolbar";
 import ListPagination from "../common/ListPagination";
+import ImportAssistantsModal from "./ImportAssistantsModal";
 
 interface AssistantsListPageProps {
   onAddNew: () => void;
@@ -18,49 +31,51 @@ export default function AssistantsListPage({
 }: AssistantsListPageProps) {
   const [tab, setTab] = useState<"ativos" | "inativos">("ativos");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sortBy, setSortBy] = useState<string>("name-asc");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const { selectedSchool } = useSchool();
-  // Muda automaticamente quando se troca de escola no header (schoolId na queryKey).
-  const { data: assistants = [], isLoading, isFetching } = useAssistantsList({ status: "all" });
-  const active = assistants.filter((a) => !a.deleted_at && (a.active ?? a.is_active ?? true));
-  const inactive = assistants.filter((a) => a.deleted_at || !(a.active ?? a.is_active ?? true));
-  const baseList = tab === "ativos" ? active : inactive;
+  const exportMutation = useExportAssistantsCsv();
 
-  // Filtragem e ordenação em memória (preparado para backend pagination)
-  const filteredList = useMemo(() => {
-    let result = baseList;
-    if (search.trim()) {
-      const q = search.toLowerCase().trim();
-      result = result.filter((a) => {
-        const fullName = (a.name || `${a.first_name || ""} ${a.last_name || ""}`).toLowerCase();
-        const num = (a.internal_number || a.mecanografico || a.staffNumber || "").toLowerCase();
-        const exc = (a.exception || "").toLowerCase();
-        return fullName.includes(q) || num.includes(q) || exc.includes(q);
-      });
+  // Debounce da pesquisa para não sobrecarregar a API a cada tecla (2 segundos)
+  useEffect(() => {
+    if (search.trim() === "") {
+      setDebouncedSearch("");
+      return;
     }
 
-    return [...result].sort((a, b) => {
-      const nameA = (a.name || `${a.first_name || ""} ${a.last_name || ""}`).trim().toLowerCase();
-      const nameB = (b.name || `${b.first_name || ""} ${b.last_name || ""}`).trim().toLowerCase();
-      if (sortBy === "name-asc") return nameA.localeCompare(nameB);
-      if (sortBy === "name-desc") return nameB.localeCompare(nameA);
-      if (sortBy === "number-asc") {
-        const numA = (a.internal_number || a.mecanografico || a.staffNumber || "").toLowerCase();
-        const numB = (b.internal_number || b.mecanografico || b.staffNumber || "").toLowerCase();
-        return numA.localeCompare(numB);
-      }
-      return 0;
-    });
-  }, [baseList, search, sortBy]);
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 1000);
 
-  // Paginação
-  const paginatedList = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredList.slice(start, start + pageSize);
-  }, [filteredList, currentPage, pageSize]);
+    return () => clearTimeout(handler);
+  }, [search]);
+
+  // Conversão da ordenação para os parâmetros do backend
+  const sort_by = sortBy.startsWith("number") ? "internal_number" : "name";
+  const sort_direction = sortBy.endsWith("desc") ? "desc" : "asc";
+
+  // Pedido paginado e filtrado ao backend
+  const {
+    data,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useAssistantsPaginated({
+    page: currentPage,
+    per_page: pageSize,
+    status: tab === "ativos" ? "active" : "inactive",
+    search: debouncedSearch.trim() || undefined,
+    sort_by,
+    sort_direction,
+  });
+
+  const assistants = data?.items ?? [];
+  const counts = data?.counts ?? { all: 0, active: 0, inactive: 0 };
+  const totalItems = data?.total ?? 0;
 
   const handleTabChange = (newTab: "ativos" | "inativos") => {
     setTab(newTab);
@@ -72,45 +87,57 @@ export default function AssistantsListPage({
     setCurrentPage(1);
   };
 
+  const handleSortChange = (val: string) => {
+    setSortBy(val);
+    setCurrentPage(1);
+  };
+
+  const handleExportCsv = () => {
+    exportMutation.mutate(tab === "ativos" ? "active" : "all");
+  };
+
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header com Ação Principal */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-xl font-semibold text-foreground">
             Equipa de Assistentes
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5">
-            {assistants.length} assistentes registados em {selectedSchool.name}
+            {counts.all} assistentes registados em {selectedSchool.name}
             {isFetching && !isLoading && (
-              <Loader2 size={12} className="animate-spin" />
+              <Loader2 size={12} className="animate-spin text-primary" />
             )}
           </p>
         </div>
-        <button
+
+        {/* Botão de Adicionar Assistente com destaque principal */}
+        <Button
           type="button"
+          size="sm"
           onClick={onAddNew}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs ml-auto"
+          className="gap-1.5 h-9 text-xs shadow-xs ml-auto"
         >
           <UserPlus size={14} />
-          Adicionar Assistente
-        </button>
+          <span>Adicionar Assistente</span>
+        </Button>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs com Contadores do Backend */}
       <div className="flex gap-px border-b border-border">
         {(
           [
             {
               id: "ativos" as const,
               label: "Ativos",
-              count: active.length,
+              count: counts.active,
               color: "bg-[#0E7C59]",
             },
             {
               id: "inativos" as const,
               label: "Inativos e Eliminados",
-              count: inactive.length,
+              count: counts.inactive,
               color: "bg-muted-foreground",
             },
           ] as const
@@ -140,39 +167,73 @@ export default function AssistantsListPage({
         ))}
       </div>
 
-      {/* Toolbar: Pesquisa e Ordenação */}
-      {baseList.length > 0 && (
-        <ListToolbar
-          search={search}
-          onSearchChange={handleSearchChange}
-          searchPlaceholder="Pesquisar por nome, nº mecanográfico..."
-          sortValue={sortBy}
-          onSortChange={setSortBy}
-          sortOptions={[
-            { label: "Nome (A-Z)", value: "name-asc" },
-            { label: "Nome (Z-A)", value: "name-desc" },
-            { label: "Nº Mecanográfico", value: "number-asc" },
-          ]}
-        />
-      )}
+      {/* Toolbar: Pesquisa, Ações de CSV e Ordenação no mesmo nível */}
+      <ListToolbar
+        search={search}
+        onSearchChange={handleSearchChange}
+        onSearchSubmit={() => setDebouncedSearch(search)}
+        searchPlaceholder="Pesquisar por nome, nº mecanográfico, email..."
+        sortValue={sortBy}
+        onSortChange={handleSortChange}
+        sortOptions={[
+          { label: "Nome (A-Z)", value: "name-asc" },
+          { label: "Nome (Z-A)", value: "name-desc" },
+          { label: "Nº Mecanográfico (asc)", value: "number-asc" },
+          { label: "Nº Mecanográfico (desc)", value: "number-desc" },
+        ]}
+        extraFilters={
+          <div className="flex items-center gap-1.5">
+            {/* Botão de Exportar CSV */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExportCsv}
+              disabled={exportMutation.isPending}
+              className="h-8 px-2.5 text-xs gap-1.5 border-border bg-card/60 hover:bg-muted text-foreground transition-colors shadow-xs"
+              title="Exportar assistentes para CSV"
+            >
+              {exportMutation.isPending ? (
+                <Loader2 size={13} className="animate-spin text-muted-foreground" />
+              ) : (
+                <Download size={13} className="text-muted-foreground" />
+              )}
+              <span className="hidden sm:inline">Exportar</span>
+            </Button>
 
-      {/* List */}
+            {/* Botão de Importar CSV */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsImportModalOpen(true)}
+              className="h-8 px-2.5 text-xs gap-1.5 border-border bg-card/60 hover:bg-muted text-foreground transition-colors shadow-xs"
+              title="Importar assistentes por CSV"
+            >
+              <FileSpreadsheet size={13} className="text-muted-foreground" />
+              <span>Importar CSV</span>
+            </Button>
+          </div>
+        }
+      />
+
+      {/* Listagem */}
       {isLoading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground">
-          <Loader2 size={20} className="animate-spin mr-2" />
+          <Loader2 size={20} className="animate-spin mr-2 text-primary" />
           <span className="text-sm">A carregar assistentes...</span>
         </div>
-      ) : baseList.length === 0 ? (
+      ) : assistants.length === 0 && !debouncedSearch ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <Users size={32} className="mb-3 opacity-30" />
           <p className="text-sm">Nenhum assistente nesta categoria para esta escola</p>
         </div>
-      ) : filteredList.length === 0 ? (
+      ) : assistants.length === 0 && debouncedSearch ? (
         <div className="flex flex-col items-center justify-center py-14 text-muted-foreground border border-dashed border-border rounded-xl bg-card/50">
           <SearchX size={30} className="mb-2 opacity-40 text-muted-foreground" />
           <p className="text-sm font-medium text-foreground">Nenhum assistente encontrado</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Não foram encontrados resultados para a pesquisa «{search}».
+            Não foram encontrados resultados para a pesquisa «{debouncedSearch}».
           </p>
           <button
             type="button"
@@ -191,20 +252,22 @@ export default function AssistantsListPage({
                 Nome
               </span>
               <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide hidden sm:block">
-                Observação / Exceção
+                Contacto / Observação
               </span>
               <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide hidden sm:block">
                 Estado
               </span>
               <span />
             </div>
-            {paginatedList.map((a, i) => (
+
+            {/* Linhas */}
+            {assistants.map((a, i) => (
               <button
                 key={a.id}
                 type="button"
                 onClick={() => onViewProfile(a.id)}
                 className={`w-full grid grid-cols-[2fr_2fr_1fr_auto] gap-4 px-4 py-3 items-center text-left transition-colors hover:bg-muted/40 group ${
-                  i !== paginatedList.length - 1 ? "border-b border-border/50" : ""
+                  i !== assistants.length - 1 ? "border-b border-border/50" : ""
                 } ${tab === "inativos" ? "opacity-60 hover:opacity-90" : ""}`}
               >
                 <div className="flex items-center gap-3 min-w-0">
@@ -220,7 +283,9 @@ export default function AssistantsListPage({
                           : "text-muted-foreground"
                       }`}
                     >
-                      {a.initials || `${a.first_name?.[0] || ""}${a.last_name?.[0] || ""}`.toUpperCase() || "AS"}
+                      {a.initials ||
+                        `${a.first_name?.[0] || ""}${a.last_name?.[0] || ""}`.toUpperCase() ||
+                        "AS"}
                     </span>
                   </div>
                   <div className="min-w-0">
@@ -232,15 +297,29 @@ export default function AssistantsListPage({
                     </span>
                   </div>
                 </div>
-                <span className="text-sm text-muted-foreground hidden sm:block truncate">
-                  {a.exception ?? "—"}
-                </span>
+
+                <div className="hidden sm:block truncate text-xs text-muted-foreground">
+                  <span className="block truncate">{a.email || "—"}</span>
+                  {a.phone && a.phone !== "-" && (
+                    <span className="block text-[10px] text-muted-foreground/80 font-mono">
+                      {a.phone}
+                    </span>
+                  )}
+                </div>
+
                 <span className="hidden sm:flex items-center gap-1.5">
                   {a.deleted_at ? (
                     <>
                       <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                       <span className="text-xs text-rose-600 dark:text-rose-400 font-medium">
                         Eliminado
+                      </span>
+                    </>
+                  ) : a.is_anonymized ? (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                      <span className="text-xs text-muted-foreground font-medium">
+                        Anonimizado
                       </span>
                     </>
                   ) : !(a.active ?? a.is_active ?? true) ? (
@@ -257,6 +336,7 @@ export default function AssistantsListPage({
                     </>
                   )}
                 </span>
+
                 <ChevronRight
                   size={14}
                   className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
@@ -265,17 +345,23 @@ export default function AssistantsListPage({
             ))}
           </Card>
 
-          {/* Paginação */}
+          {/* Paginação do Servidor */}
           <ListPagination
             currentPage={currentPage}
-            totalItems={filteredList.length}
+            totalItems={totalItems}
             pageSize={pageSize}
             onPageChange={setCurrentPage}
             onPageSizeChange={setPageSize}
           />
         </div>
       )}
+
+      {/* Modal de Importação CSV */}
+      <ImportAssistantsModal
+        open={isImportModalOpen}
+        onOpenChange={setIsImportModalOpen}
+        onSuccess={() => refetch()}
+      />
     </div>
   );
 }
-

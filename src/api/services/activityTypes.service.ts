@@ -14,6 +14,7 @@ export interface BackendActivityTypeResource {
   name: string;
   color: string;
   is_system: boolean;
+  is_fallback?: boolean;
   active: boolean;
   status_message: string;
   can_delete: boolean;

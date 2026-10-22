@@ -25,6 +25,7 @@ import DatePicker, { formatToIsoDate } from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import { ActionTooltip } from "../common/ActionTooltip";
 import CustomSelect from "../common/CustomSelect";
+import SearchableSelect from "../common/SearchableSelect";
 import {
   useScheduleRulesList,
   useCreateScheduleRule,
@@ -34,6 +35,7 @@ import {
 import { useActivityTypesList } from "../../hooks/api/useActivityTypes";
 import { useAssistantsList } from "../../hooks/api/useAssistants";
 import type { BackendScheduleRuleResource } from "../../api/services/scheduleRules.service";
+import { isFallbackActivityType } from "./ActivityTypesTab";
 
 const DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
@@ -78,6 +80,9 @@ export default function ScheduleRulesTab() {
 
   const isEditing = editingRuleId !== null;
   const selectedActivity = activityTypes.find((a) => a.id === formActivityId);
+  const ruleEligibleActivityTypes = activityTypes.filter(
+    (a) => a.active !== false && !isFallbackActivityType(a)
+  );
   function toggleDay(i: number) {
     setFormDays((p) => {
       const n = [...p];
@@ -88,7 +93,7 @@ export default function ScheduleRulesTab() {
 
   function openAdd() {
     setEditingRuleId(null);
-    setFormActivityId(activityTypes[0]?.id || "");
+    setFormActivityId(ruleEligibleActivityTypes[0]?.id || "");
     setFormDays([true, true, true, true, true, false, false]);
     setFormPeriodStart("07:30");
     setFormPeriodEnd("13:00");
@@ -118,8 +123,8 @@ export default function ScheduleRulesTab() {
     setFormPeriodEnd(rule.period_end);
     setFormMinStaff(String(rule.min));
     setFormRuleType(rule.type);
-    const rawStart = rule.valid_from || rule.start || todayStr;
-    const rawEnd = rule.valid_until || rule.end || "";
+    const rawStart = rule.valid_from || todayStr;
+    const rawEnd = rule.valid_until || "";
     setFormValidityStart(formatToIsoDate(rawStart) || rawStart);
     setFormValidityEnd(formatToIsoDate(rawEnd) || rawEnd);
     const sortedAssistants = [...(rule.assistants || [])].sort(
@@ -251,8 +256,6 @@ export default function ScheduleRulesTab() {
       type: formRuleType,
       valid_from: formValidityStart,
       valid_until: formValidityEnd || null,
-      start: formValidityStart,
-      end: formValidityEnd || null,
       days_of_week: selectedDaysOfWeek,
       assistant_ids: finalAssistantIds,
     };
@@ -351,8 +354,8 @@ export default function ScheduleRulesTab() {
                     (a, b) => a.priority - b.priority
                   );
 
-                  const startDate = rule.valid_from ?? rule.start;
-                  const endDate = rule.valid_until ?? rule.end;
+                  const startDate = rule.valid_from;
+                  const endDate = rule.valid_until;
 
                   return (
                     <tr
@@ -546,13 +549,20 @@ export default function ScheduleRulesTab() {
                 <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                   Tipo de Atividade *
                 </label>
-                <CustomSelect
+                <SearchableSelect
                   value={formActivityId}
-                  onChange={(e: any) => setFormActivityId(typeof e === "string" ? e : e.target.value)}
-                  options={activityTypes.map((a) => ({
+                  onChange={(val) => {
+                    setFormActivityId(val);
+                    setFormError(null);
+                  }}
+                  options={ruleEligibleActivityTypes.map((a) => ({
                     value: a.id,
                     label: a.name,
+                    color: a.color,
                   }))}
+                  placeholder="Selecionar tipo de atividade..."
+                  searchPlaceholder="Pesquisar tipo de atividade..."
+                  emptyMessage="Nenhuma atividade elegível encontrada (a atividade base é atribuída automaticamente)."
                 />
               </div>
 
@@ -957,9 +967,9 @@ export default function ScheduleRulesTab() {
                 {activityTypes.find((t) => t.id === deleteRuleTarget.activity_type_id)?.name ??
                   deleteRuleTarget.activity_type_id}
               </strong>{" "}
-              (Vigência: {deleteRuleTarget.valid_from ?? deleteRuleTarget.start}
-              {(deleteRuleTarget.valid_until ?? deleteRuleTarget.end)
-                ? ` a ${deleteRuleTarget.valid_until ?? deleteRuleTarget.end}`
+              (Vigência: {deleteRuleTarget.valid_from}
+              {deleteRuleTarget.valid_until
+                ? ` a ${deleteRuleTarget.valid_until}`
                 : " — Em aberto"})?
               Esta ação removerá esta restrição no cálculo de escalas do motor.
             </>
