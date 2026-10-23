@@ -26,6 +26,7 @@ import type { LunchBlockApi } from "../../api/services/schedules.service";
 interface AssistantDayModalProps {
   assistantId: EntityId | null;
   dayOffset?: number;
+  customDaySlots?: BlockState[];
   lunchBlocksByDate?: Record<string, Record<string, LunchBlockApi>>;
   onClose: () => void;
   onViewProfile: () => void;
@@ -35,6 +36,7 @@ interface AssistantDayModalProps {
 export default function AssistantDayModal({
   assistantId,
   dayOffset = 0,
+  customDaySlots,
   lunchBlocksByDate,
   onClose,
   onViewProfile,
@@ -112,7 +114,7 @@ export default function AssistantDayModal({
     exceptionsByAssistant,
   });
 
-  const slots = matrix[assistant.id] || Array(96).fill("off");
+  const slots = customDaySlots || matrix[assistant.id] || Array(96).fill("off");
   const meta = slotMetaByAssistant[assistant.id] || {};
   const blocks = slotsToBlocks(slots, meta).filter((b) => b.state !== "off");
 
