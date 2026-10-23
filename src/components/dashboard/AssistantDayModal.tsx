@@ -26,7 +26,6 @@ import type { LunchBlockApi } from "../../api/services/schedules.service";
 interface AssistantDayModalProps {
   assistantId: EntityId | null;
   dayOffset?: number;
-  customDaySlots?: BlockState[];
   lunchBlocksByDate?: Record<string, Record<string, LunchBlockApi>>;
   onClose: () => void;
   onViewProfile: () => void;
@@ -36,7 +35,6 @@ interface AssistantDayModalProps {
 export default function AssistantDayModal({
   assistantId,
   dayOffset = 0,
-  customDaySlots,
   lunchBlocksByDate,
   onClose,
   onViewProfile,
@@ -114,7 +112,7 @@ export default function AssistantDayModal({
     exceptionsByAssistant,
   });
 
-  const slots = customDaySlots || matrix[assistant.id] || Array(96).fill("off");
+  const slots = matrix[assistant.id] || Array(96).fill("off");
   const meta = slotMetaByAssistant[assistant.id] || {};
   const blocks = slotsToBlocks(slots, meta).filter((b) => b.state !== "off");
 
@@ -227,7 +225,7 @@ export default function AssistantDayModal({
 
         {/* Timeline */}
         <div className="flex-1 overflow-y-auto p-5 space-y-2.5">
-          {isLoadingSchedules && !customDaySlots ? (
+          {isLoadingSchedules ? (
             <div className="flex flex-col items-center justify-center py-16 space-y-3 text-muted-foreground">
               <Loader2 size={22} className="animate-spin text-primary" />
               <p className="text-xs">A carregar tarefas do dia...</p>
