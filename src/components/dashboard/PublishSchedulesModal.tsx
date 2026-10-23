@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowLeft,
   Calendar,
   CalendarDays,
@@ -362,6 +363,22 @@ export default function PublishSchedulesModal({
     [draftDays]
   );
 
+  const validationsByDate = useMemo(() => {
+    const map: Record<string, ReturnType<typeof validateDayForPublish>> = {};
+    draftDays.forEach((d) => {
+      map[d.isoDate] = validateDayForPublish(d.isoDate, schedules, assistants);
+    });
+    return map;
+  }, [draftDays, schedules, assistants]);
+
+  const publishableDates = useMemo(
+    () =>
+      draftDays
+        .filter((d) => validationsByDate[d.isoDate]?.canPublish)
+        .map((d) => d.isoDate),
+    [draftDays, validationsByDate]
+  );
+
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [previewDate, setPreviewDate] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -376,27 +393,33 @@ export default function PublishSchedulesModal({
     if (open) {
       setErrorMessage(null);
       if (initialSelectedDate && draftDays.some((d) => d.isoDate === initialSelectedDate)) {
-        setSelectedDates([initialSelectedDate]);
+        if (validationsByDate[initialSelectedDate]?.canPublish) {
+          setSelectedDates([initialSelectedDate]);
+        } else {
+          setSelectedDates([]);
+        }
         setPreviewDate(initialSelectedDate);
       } else {
-        setSelectedDates(draftDays.map((d) => d.isoDate));
+        setSelectedDates(publishableDates);
         setPreviewDate(null);
       }
     }
-  }, [open, initialSelectedDate, draftDays]);
+  }, [open, initialSelectedDate, draftDays, publishableDates, validationsByDate]);
 
   const allSelected =
-    draftDays.length > 0 && selectedDates.length === draftDays.length;
+    publishableDates.length > 0 &&
+    publishableDates.every((d) => selectedDates.includes(d));
 
   function toggleAll() {
     if (allSelected) {
       setSelectedDates([]);
     } else {
-      setSelectedDates(draftDays.map((d) => d.isoDate));
+      setSelectedDates(publishableDates);
     }
   }
 
   function toggleDate(isoDate: string) {
+    if (!validationsByDate[isoDate]?.canPublish) return;
     setSelectedDates((prev) =>
       prev.includes(isoDate)
         ? prev.filter((d) => d !== isoDate)
@@ -405,12 +428,22 @@ export default function PublishSchedulesModal({
   }
 
   function toggleWeek(days: DraftDaySummary[]) {
-    const weekIsoDates = days.map((d) => d.isoDate);
-    const allWeekSelected = weekIsoDates.every((iso) => selectedDates.includes(iso));
+    const weekPublishableDates = days
+      .filter((d) => validationsByDate[d.isoDate]?.canPublish)
+      .map((d) => d.isoDate);
+    if (weekPublishableDates.length === 0) return;
+
+    const allWeekSelected = weekPublishableDates.every((iso) =>
+      selectedDates.includes(iso)
+    );
     if (allWeekSelected) {
-      setSelectedDates((prev) => prev.filter((iso) => !weekIsoDates.includes(iso)));
+      setSelectedDates((prev) =>
+        prev.filter((iso) => !weekPublishableDates.includes(iso))
+      );
     } else {
-      setSelectedDates((prev) => Array.from(new Set([...prev, ...weekIsoDates])).sort());
+      setSelectedDates((prev) =>
+        Array.from(new Set([...prev, ...weekPublishableDates])).sort()
+      );
     }
   }
 
@@ -697,21 +730,33 @@ export default function PublishSchedulesModal({
                     </div>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={() => toggleDate(previewDate)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-2xs ${
-                      selectedDates.includes(previewDate)
-                        ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/20"
-                        : "border-border bg-card text-muted-foreground hover:text-foreground"
-                    }`}
+                  <ActionTooltip
+                    content={
+                      !validationsByDate[previewDate]?.canPublish
+                        ? validationsByDate[previewDate]?.reason
+                        : null
+                    }
                   >
-                    <Checkbox
-                      checked={selectedDates.includes(previewDate)}
-                      onCheckedChange={() => toggleDate(previewDate)}
-                    />
-                    <span>Incluir na Publicação</span>
-                  </button>
+                    <button
+                      type="button"
+                      disabled={!validationsByDate[previewDate]?.canPublish}
+                      onClick={() => toggleDate(previewDate)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all shadow-2xs ${
+                        !validationsByDate[previewDate]?.canPublish
+                          ? "opacity-50 cursor-not-allowed border-border text-muted-foreground bg-muted/20"
+                          : selectedDates.includes(previewDate)
+                          ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/20 cursor-pointer"
+                          : "border-border bg-card text-muted-foreground hover:text-foreground cursor-pointer"
+                      }`}
+                    >
+                      <Checkbox
+                        checked={selectedDates.includes(previewDate)}
+                        disabled={!validationsByDate[previewDate]?.canPublish}
+                        onCheckedChange={() => toggleDate(previewDate)}
+                      />
+                      <span>Incluir na Publicação</span>
+                    </button>
+                  </ActionTooltip>
                 </div>
               </div>
 
@@ -1100,23 +1145,48 @@ export default function PublishSchedulesModal({
                               >
                                 {/* Top: Checkbox + Dia e Número */}
                                 <div className="flex items-center justify-between gap-1.5 pb-2 border-b border-border/40">
-                                  <label
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="flex items-center gap-2 cursor-pointer select-none min-w-0"
-                                  >
-                                    <Checkbox
-                                      checked={isChecked}
-                                      onCheckedChange={() => toggleDate(d.isoDate)}
-                                    />
-                                    <div className="min-w-0 flex items-baseline gap-1">
-                                      <span className="text-xs font-bold text-foreground capitalize">
-                                        {d.dayShort}
-                                      </span>
-                                      <span className="font-mono text-xs font-semibold text-muted-foreground">
-                                        {dayNum}
-                                      </span>
-                                    </div>
-                                  </label>
+                                  <ActionTooltip content={!canPublish ? val?.reason : null}>
+                                    <label
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (!canPublish) return;
+                                      }}
+                                      className={`flex items-center gap-2 select-none min-w-0 ${
+                                        canPublish
+                                          ? "cursor-pointer"
+                                          : "cursor-not-allowed opacity-50"
+                                      }`}
+                                    >
+                                      <Checkbox
+                                        checked={isChecked}
+                                        disabled={!canPublish}
+                                        onCheckedChange={() => canPublish && toggleDate(d.isoDate)}
+                                      />
+                                      <div className="min-w-0 flex items-baseline gap-1">
+                                        <span className="text-xs font-bold text-foreground capitalize">
+                                          {d.dayShort}
+                                        </span>
+                                        <span className="font-mono text-xs font-semibold text-muted-foreground">
+                                          {dayNum}
+                                        </span>
+                                      </div>
+                                    </label>
+                                  </ActionTooltip>
+
+                                  {!canPublish && (
+                                    <ActionTooltip content={val?.reason || "Não publicável"}>
+                                      <Badge
+                                        variant="outline"
+                                        className={`text-[9px] py-0 px-1.5 cursor-help ${
+                                          val?.isPast
+                                            ? "bg-muted text-muted-foreground border-border"
+                                            : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                                        }`}
+                                      >
+                                        {val?.isPast ? "Passado" : "Incompleto"}
+                                      </Badge>
+                                    </ActionTooltip>
+                                  )}
                                 </div>
 
                                 {/* Middle: Contagens */}
@@ -1152,26 +1222,47 @@ export default function PublishSchedulesModal({
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {draftDays.map((d) => {
                     const isChecked = selectedDates.includes(d.isoDate);
+                    const val = validationsByDate[d.isoDate];
+                    const canPublish = val?.canPublish ?? false;
                     return (
                       <div
                         key={d.isoDate}
                         className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
                           isChecked
                             ? "border-emerald-500/40 bg-emerald-500/5 ring-1 ring-emerald-500/20"
+                            : !canPublish
+                            ? "border-border/60 bg-muted/10 opacity-75"
                             : "border-border bg-card hover:bg-muted/30"
                         }`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <Checkbox
-                            checked={isChecked}
-                            onCheckedChange={() => toggleDate(d.isoDate)}
-                          />
+                          <ActionTooltip content={!canPublish ? val?.reason : null}>
+                            <div className={canPublish ? "" : "cursor-not-allowed"}>
+                              <Checkbox
+                                checked={isChecked}
+                                disabled={!canPublish}
+                                onCheckedChange={() => canPublish && toggleDate(d.isoDate)}
+                              />
+                            </div>
+                          </ActionTooltip>
                           <div className="min-w-0">
-                            <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                            <p className="text-xs font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
                               <span className="capitalize">{d.dayName}</span>
                               <span className="font-mono text-muted-foreground font-normal">
                                 ({d.dateStr})
                               </span>
+                              {!canPublish && (
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[9px] py-0 px-1.5 ${
+                                    val?.isPast
+                                      ? "bg-muted text-muted-foreground border-border"
+                                      : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                                  }`}
+                                >
+                                  {val?.isPast ? "Passado" : "Incompleto"}
+                                </Badge>
+                              )}
                             </p>
                             <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
                               <Users size={11} />
