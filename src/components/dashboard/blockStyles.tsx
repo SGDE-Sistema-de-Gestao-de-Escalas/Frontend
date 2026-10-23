@@ -147,6 +147,58 @@ export function mapActivityToBlockState(
   return "work";
 }
 
+function normalizeActivityName(name?: string | null): string {
+  if (!name) return "";
+  const norm = name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+  if (norm.includes("apoio")) return "apoio";
+  if (norm.includes("limpeza")) return "limpeza";
+  if (norm.includes("vigilancia") && norm.includes("almoco")) return "vigilancia_almoco";
+  if (norm.includes("intervalo")) return "intervalo";
+  if (norm.includes("acolhimento")) return "acolhimento";
+  if (norm.includes("entrega")) return "entrega";
+
+  return norm;
+}
+
+export function areAdjacentSlotsCompatible(
+  prevState: BlockState,
+  prevMeta: MergedScheduleBlockMeta | undefined,
+  nextState: BlockState,
+  nextMeta: MergedScheduleBlockMeta | undefined
+): boolean {
+  // 1. O estado base do bloco tem de ser estritamente igual
+  if (prevState !== nextState) return false;
+
+  // 2. Estados de sistema sem regras específicas fundem sempre
+  if (prevState === "off" || prevState === "lunch" || prevState === "absent") {
+    return true;
+  }
+
+  // 3. Se algum dos slots estiver associado a uma ScheduleRule específica, só fundem se for a mesma regra
+  const prevRule = prevMeta?.ruleId;
+  const nextRule = nextMeta?.ruleId;
+  if (prevRule || nextRule) {
+    return String(prevRule || "") === String(nextRule || "");
+  }
+
+  // 4. Se ambos forem trabalho base ("work"), fundem sempre (ex: Apoio Escola e Apoio Turmas/escola)
+  if (prevState === "work") {
+    return true;
+  }
+
+  // 5. Para outras atividades com nomes customizados, compara os nomes normalizados
+  const prevName = normalizeActivityName(prevMeta?.activityName);
+  const nextName = normalizeActivityName(nextMeta?.activityName);
+
+  if (!prevName || !nextName) return true;
+  return prevName === nextName;
+}
+
 export function slotsToBlocks(
   slots: BlockState[],
   meta?: Record<number, MergedScheduleBlockMeta>
@@ -178,14 +230,15 @@ export function slotsToBlocks(
     }
 
     const sameState = cur !== null && cur.state === s;
-    const sameEntry =
-      sameState &&
-      (m?.entryId && cur?.meta?.entryId
-        ? m.entryId === cur.meta.entryId
-        : m?.activityName === cur?.meta?.activityName);
+    const isCompatible =
+      sameState && areAdjacentSlotsCompatible(cur.state, cur.meta, s, m);
 
-    if (cur && sameState && (!meta || sameEntry)) {
+    if (cur && sameState && (!meta || isCompatible)) {
       cur.count++;
+      // Preservar metadados mais ricos se o bloco inicial não os tinha
+      if (m && (!cur.meta || (!cur.meta.activityTypeId && m.activityTypeId))) {
+        cur.meta = { ...cur.meta, ...m };
+      }
     } else {
       if (cur) raw.push(cur);
       cur = { state: s, start: i, count: 1, meta: m };
