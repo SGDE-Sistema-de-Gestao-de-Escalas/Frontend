@@ -4,7 +4,7 @@ import type { EntityId } from "../../types";
 
 export interface SchoolApiPayload {
   name: string;
-  acronym: string;
+  acronym?: string | null;
   address?: string | null;
   phone?: string | null;
   email?: string | null;
