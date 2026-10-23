@@ -53,6 +53,8 @@ import {
   useDeleteAssistantException,
 } from "../../hooks/api/useAssistantExceptions";
 import { useAssistantSchedules } from "../../hooks/api/useAssistantSchedules";
+import { apiProfileToScheduleItem } from "../../api/services/assistantSchedules.service";
+import type { AssistantScheduleItem } from "./AssistantScheduleManager";
 import { computeActiveRotatingShift } from "../../utils/scheduleMatrixUtils";
 import type { EntityId } from "../../types";
 
@@ -100,6 +102,14 @@ interface ExceptionRule {
   canDelete?: boolean;
   cannotEditReason?: string | null;
   cannotDeleteReason?: string | null;
+}
+
+interface CurrentShiftDetails {
+  label: string;
+  lunch: string | null;
+  isRotating: boolean;
+  activeLabel?: "A" | "B";
+  cycleEnd?: string;
 }
 
 interface AssistantProfileProps {
@@ -180,7 +190,11 @@ export default function AssistantProfile({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showAnonymizeModal, setShowAnonymizeModal] = useState(false);
 
-  const { data: assistantSchedules = [] } = useAssistantSchedules(assistant?.id);
+  const { data: rawAssistantSchedules = [] } = useAssistantSchedules(assistant?.id);
+
+  const assistantSchedules = React.useMemo<AssistantScheduleItem[]>(() => {
+    return rawAssistantSchedules.map(apiProfileToScheduleItem);
+  }, [rawAssistantSchedules]);
 
   const activeSchedule = React.useMemo(() => {
     return (
@@ -202,7 +216,7 @@ export default function AssistantProfile({
     );
   }, [activeSchedule]);
 
-  const currentShiftDetails = React.useMemo(() => {
+  const currentShiftDetails = React.useMemo<CurrentShiftDetails | null>(() => {
     if (!activeSchedule) return null;
     if (activeSchedule.type === "fixed") {
       return {
