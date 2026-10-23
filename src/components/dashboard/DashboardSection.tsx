@@ -29,7 +29,7 @@ import {
 export type DashViewMode = "day" | "week" | "month";
 
 interface DashboardSectionProps {
-  onSelectAssistant: (id: EntityId) => void;
+  onSelectAssistant: (id: EntityId, offset?: number) => void;
   currentSchoolId?: EntityId;
 }
 
@@ -341,7 +341,9 @@ export default function DashboardSection({
         <MatrixGrid
           dayOffset={dayOffset}
           onChangeDayOffset={(nextOffset) => setDayOffset(nextOffset)}
-          onSelectAssistant={onSelectAssistant}
+          onSelectAssistant={(id, offset) =>
+            onSelectAssistant(id, offset ?? dayOffset)
+          }
           dateLabel={`${label.dayName}, ${label.dateStr} · blocos de 15 min`}
           lunchBlocksByDate={lastGenerationResult?.lunch_blocks}
           queryStartDate={queryStartDate}
@@ -356,7 +358,7 @@ export default function DashboardSection({
             setDayOffset(offset);
             switchView("day");
           }}
-          onSelectAssistant={onSelectAssistant}
+          onSelectAssistant={(id) => onSelectAssistant(id, weekStart)}
         />
       )}
       {viewMode === "month" && (

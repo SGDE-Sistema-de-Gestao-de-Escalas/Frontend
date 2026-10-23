@@ -108,7 +108,7 @@ interface DayRuleConfig {
 }
 
 interface MatrixGridProps {
-  onSelectAssistant?: (id: EntityId) => void;
+  onSelectAssistant?: (id: EntityId, offset?: number) => void;
   matrix?: ScheduleMatrix;
   dayOffset?: number;
   onChangeDayOffset?: (offset: number) => void;
@@ -1778,7 +1778,7 @@ export default function MatrixGrid({
                         className="w-44 flex-shrink-0 px-3 py-2 border-r border-border flex items-center gap-2.5 hover:bg-primary/5 transition-colors group/name text-left"
                         onClick={() =>
                           !canEditCurrentDay &&
-                          onSelectAssistant?.(assistant.id)
+                          onSelectAssistant?.(assistant.id, dayOffset)
                         }
                       >
                         <div className="w-7 h-7 rounded-full bg-primary/10 group-hover/name:bg-primary/20 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -2023,7 +2023,7 @@ export default function MatrixGrid({
                               key={bi}
                               onClick={() =>
                                 !canEditCurrentDay &&
-                                onSelectAssistant?.(assistant.id)
+                                onSelectAssistant?.(assistant.id, dayOffset)
                               }
                               className={`absolute ${
                                 canEditCurrentDay
@@ -2263,7 +2263,7 @@ export default function MatrixGrid({
                               type="button"
                               onClick={() =>
                                 !canEditCurrentDay &&
-                                onSelectAssistant?.(assistant.id)
+                                onSelectAssistant?.(assistant.id, dayOffset)
                               }
                               disabled={canEditCurrentDay}
                               className="w-44 flex-shrink-0 px-3 py-2 border-r border-border flex items-center gap-2.5 text-left disabled:cursor-not-allowed"

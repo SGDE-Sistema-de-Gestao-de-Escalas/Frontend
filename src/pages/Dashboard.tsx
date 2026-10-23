@@ -5,18 +5,20 @@ import DashboardSection from "../components/dashboard/DashboardSection";
 import AssistantDayModal from "../components/dashboard/AssistantDayModal";
 import QuickAbsenceModal from "../components/dashboard/QuickAbsenceModal";
 import NoSchoolPlaceholder from "../components/common/NoSchoolPlaceholder";
+import type { EntityId } from "../types";
 
 export default function Dashboard() {
-  const [selectedAssistantId, setSelectedAssistantId] = useState<number | null>(
-    null
-  );
+  const [selectedAssistantData, setSelectedAssistantData] = useState<{
+    id: EntityId;
+    dayOffset: number;
+  } | null>(null);
   const [absenceFor, setAbsenceFor] = useState<string | null>(null);
   const { currentSchoolId, selectedSchool } = useSchool();
   const navigate = useNavigate();
 
   // Resetar seleções e modais quando a escola ativa é alterada
   useEffect(() => {
-    setSelectedAssistantId(null);
+    setSelectedAssistantData(null);
     setAbsenceFor(null);
   }, [currentSchoolId]);
 
@@ -27,22 +29,25 @@ export default function Dashboard() {
   return (
     <div key={String(currentSchoolId ?? "dash")} className="w-full">
       <DashboardSection
-        onSelectAssistant={(id) => setSelectedAssistantId(id)}
+        onSelectAssistant={(id, offset) =>
+          setSelectedAssistantData({ id, dayOffset: offset ?? 0 })
+        }
         currentSchoolId={currentSchoolId}
       />
 
       {/* Assistant Day Drawer Modal */}
-      {selectedAssistantId !== null && (
+      {selectedAssistantData !== null && (
         <AssistantDayModal
-          assistantId={selectedAssistantId}
-          onClose={() => setSelectedAssistantId(null)}
+          assistantId={selectedAssistantData.id}
+          dayOffset={selectedAssistantData.dayOffset}
+          onClose={() => setSelectedAssistantData(null)}
           onViewProfile={() => {
-            const aid = selectedAssistantId;
-            setSelectedAssistantId(null);
+            const aid = selectedAssistantData.id;
+            setSelectedAssistantData(null);
             navigate(aid ? `/profile/${aid}` : "/profile");
           }}
           onMarkAbsence={(name) => {
-            setSelectedAssistantId(null);
+            setSelectedAssistantData(null);
             setAbsenceFor(name);
           }}
         />
