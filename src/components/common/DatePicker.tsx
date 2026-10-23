@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Calendar, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import ActionTooltip from "./ActionTooltip";
 
 interface DatePickerProps {
   value: string;
@@ -11,6 +12,9 @@ interface DatePickerProps {
   maxDate?: string; // Formato YYYY-MM-DD
   disabled?: boolean;
   hasError?: boolean;
+  allowClear?: boolean;
+  isDateDisabled?: (isoDate: string) => boolean;
+  getDayTooltip?: (isoDate: string) => string | undefined;
 }
 
 export function parseFlexibleDate(value: string | null | undefined): Date | null {
@@ -42,7 +46,7 @@ export function parseFlexibleDate(value: string | null | undefined): Date | null
   const ptMonths: Record<string, number> = {
     jan: 0,
     fev: 1,
-    mar: 2,
+    mar: 3 - 1,
     abr: 3,
     mai: 4,
     may: 4,
@@ -116,6 +120,9 @@ export default function DatePicker({
   maxDate,
   disabled = false,
   hasError = false,
+  allowClear = true,
+  isDateDisabled: customIsDateDisabled,
+  getDayTooltip,
 }: DatePickerProps) {
   const [open, setOpen] = useState(false);
 
@@ -156,9 +163,10 @@ export default function DatePicker({
   ];
   const dayLabels = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
-  function isDateDisabled(isoDate: string): boolean {
+  function checkDateDisabled(isoDate: string): boolean {
     if (minDate && isoDate < minDate) return true;
     if (maxDate && isoDate > maxDate) return true;
+    if (customIsDateDisabled && customIsDateDisabled(isoDate)) return true;
     return false;
   }
 
@@ -166,7 +174,7 @@ export default function DatePicker({
     const mm = String(viewMonth + 1).padStart(2, "0");
     const dd = String(day).padStart(2, "0");
     const iso = `${viewYear}-${mm}-${dd}`;
-    if (isDateDisabled(iso)) return;
+    if (checkDateDisabled(iso)) return;
     onChange(iso);
     setOpen(false);
   }
@@ -223,7 +231,7 @@ export default function DatePicker({
           >
             {displayValue || placeholder}
           </span>
-          {value && !disabled && (
+          {value && !disabled && allowClear && (
             <span
               role="button"
               tabIndex={0}
@@ -302,11 +310,11 @@ export default function DatePicker({
               today.getFullYear() === viewYear &&
               today.getMonth() === viewMonth &&
               today.getDate() === day;
-            const isDisabled = isDateDisabled(iso);
+            const isDisabled = checkDateDisabled(iso);
+            const dayTooltip = getDayTooltip?.(iso);
 
-            return (
+            const btn = (
               <button
-                key={day}
                 type="button"
                 disabled={isDisabled}
                 onClick={() => selectDay(day)}
@@ -318,29 +326,41 @@ export default function DatePicker({
                       ? "bg-accent text-white font-bold"
                       : isToday
                       ? "bg-accent/10 text-accent font-semibold hover:bg-accent/20"
-                      : "text-foreground hover:bg-muted"
+                      : "text-foreground hover:bg-muted cursor-pointer"
                   }`}
               >
                 {day}
               </button>
+            );
+
+            return dayTooltip ? (
+              <ActionTooltip key={day} content={dayTooltip}>
+                {btn}
+              </ActionTooltip>
+            ) : (
+              <React.Fragment key={day}>{btn}</React.Fragment>
             );
           })}
         </div>
 
         {/* Footer */}
         <div className="mt-2.5 pt-2 border-t border-border flex justify-between">
+          {allowClear ? (
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Limpar
+            </button>
+          ) : (
+            <span />
+          )}
           <button
             type="button"
-            onClick={() => onChange("")}
-            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Limpar
-          </button>
-          <button
-            type="button"
-            disabled={isDateDisabled(todayIso)}
+            disabled={checkDateDisabled(todayIso)}
             onClick={() => {
-              if (!isDateDisabled(todayIso)) {
+              if (!checkDateDisabled(todayIso)) {
                 onChange(todayIso);
                 setOpen(false);
               }
@@ -354,4 +374,3 @@ export default function DatePicker({
     </Popover>
   );
 }
-
