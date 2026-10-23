@@ -819,6 +819,62 @@ export function getShiftBoundsFromRow(
  * 5. Histórico de horários de trabalho do assistente para o mesmo dia da semana
  * 6. Horário padrão de funcionamento da escola (ex: 08:00–16:00)
  */
+export interface ActiveRotatingShiftInfo {
+  activeLabel: "A" | "B";
+  rotationCycle: number;
+  periodDays: number;
+  periodLabel: string;
+  cycleStartDate: string;
+  cycleEndDate: string;
+}
+
+export function computeActiveRotatingShift(
+  validFromStr: string,
+  rotationPeriod: string = "biweekly",
+  startsWith: string = "A",
+  targetDateStr: string = new Date().toISOString().split("T")[0]
+): ActiveRotatingShiftInfo {
+  const normPeriod = String(rotationPeriod).toLowerCase();
+  const periodDays =
+    normPeriod.includes("sem") || normPeriod === "weekly"
+      ? 7
+      : normPeriod.includes("men") || normPeriod === "monthly"
+      ? 28
+      : 14;
+
+  const validFrom = validFromStr ? validFromStr.slice(0, 10) : targetDateStr;
+  const tTarget = new Date(targetDateStr + "T00:00:00").getTime();
+  const tBase = new Date(validFrom + "T00:00:00").getTime();
+  const daysDiff = Math.max(0, Math.floor((tTarget - tBase) / (1000 * 60 * 60 * 24)));
+
+  const rotationCycle = Math.floor(daysDiff / periodDays);
+  const isInitial = rotationCycle % 2 === 0;
+  const startChar: "A" | "B" = startsWith === "B" ? "B" : "A";
+  const activeLabel: "A" | "B" = isInitial
+    ? startChar
+    : startChar === "A"
+    ? "B"
+    : "A";
+
+  const cycleStartMs = tBase + rotationCycle * periodDays * (1000 * 60 * 60 * 24);
+  const cycleEndMs = cycleStartMs + (periodDays - 1) * (1000 * 60 * 60 * 24);
+
+  const cycleStartDate = new Date(cycleStartMs).toISOString().split("T")[0];
+  const cycleEndDate = new Date(cycleEndMs).toISOString().split("T")[0];
+
+  const periodLabel =
+    periodDays === 7 ? "Semanal" : periodDays === 28 ? "Mensal" : "Quinzenal";
+
+  return {
+    activeLabel,
+    rotationCycle,
+    periodDays,
+    periodLabel,
+    cycleStartDate,
+    cycleEndDate,
+  };
+}
+
 export function resolveAssistantShiftBounds(params: {
   assistantId: EntityId;
   isoDate: string;

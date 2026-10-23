@@ -52,6 +52,8 @@ import {
   useUpdateAssistantException,
   useDeleteAssistantException,
 } from "../../hooks/api/useAssistantExceptions";
+import { useAssistantSchedules } from "../../hooks/api/useAssistantSchedules";
+import { computeActiveRotatingShift } from "../../utils/scheduleMatrixUtils";
 import type { EntityId } from "../../types";
 
 const WEEK_DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
@@ -177,6 +179,57 @@ export default function AssistantProfile({
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showAnonymizeModal, setShowAnonymizeModal] = useState(false);
+
+  const { data: assistantSchedules = [] } = useAssistantSchedules(assistant?.id);
+
+  const activeSchedule = React.useMemo(() => {
+    return (
+      assistantSchedules.find((s) => {
+        if (s.to && s.to < TODAY_STR) return false;
+        if (s.from > TODAY_STR) return false;
+        return true;
+      }) || assistantSchedules.find((s) => s.to === null) || assistantSchedules[0]
+    );
+  }, [assistantSchedules]);
+
+  const activeRotatingInfo = React.useMemo(() => {
+    if (!activeSchedule || activeSchedule.type !== "rotating") return null;
+    return computeActiveRotatingShift(
+      activeSchedule.from,
+      activeSchedule.period || "Quinzenal",
+      activeSchedule.startsWith || "A",
+      TODAY_STR
+    );
+  }, [activeSchedule]);
+
+  const currentShiftDetails = React.useMemo(() => {
+    if (!activeSchedule) return null;
+    if (activeSchedule.type === "fixed") {
+      return {
+        label: `Turno Fixo: ${activeSchedule.entry}–${activeSchedule.exit}`,
+        lunch: activeSchedule.lunch
+          ? `Almoço: ${activeSchedule.lunch.start}–${activeSchedule.lunch.end} (${activeSchedule.lunch.duration}m)`
+          : null,
+        isRotating: false,
+      };
+    }
+    if (activeRotatingInfo) {
+      const s =
+        activeRotatingInfo.activeLabel === "A"
+          ? activeSchedule.shiftA
+          : activeSchedule.shiftB;
+      return {
+        label: `Turno Rotativo: Atualmente Turno ${activeRotatingInfo.activeLabel} (${s?.entry}–${s?.exit})`,
+        lunch: s?.lunch
+          ? `Almoço: ${s.lunch.start}–${s.lunch.end} (${s.lunch.duration}m)`
+          : null,
+        isRotating: true,
+        activeLabel: activeRotatingInfo.activeLabel,
+        cycleEnd: activeRotatingInfo.cycleEndDate,
+      };
+    }
+    return null;
+  }, [activeSchedule, activeRotatingInfo]);
 
   function toggleExceptionDay(day: string) {
     if (exceptionDays.includes(day)) {
@@ -615,6 +668,24 @@ export default function AssistantProfile({
                   {assistant.exception}
                 </Badge>
               )}
+              {currentShiftDetails && (
+                <Badge
+                  variant="outline"
+                  className={
+                    currentShiftDetails.isRotating
+                      ? "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30 flex items-center gap-1.5 font-medium text-xs py-0.5 px-2.5"
+                      : "bg-primary/10 text-primary border-primary/30 flex items-center gap-1.5 font-medium text-xs py-0.5 px-2.5"
+                  }
+                >
+                  <Clock size={12} className="shrink-0" />
+                  <span>{currentShiftDetails.label}</span>
+                  {currentShiftDetails.lunch && (
+                    <span className="opacity-80 font-normal">
+                      · {currentShiftDetails.lunch}
+                    </span>
+                  )}
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -1026,15 +1097,39 @@ export default function AssistantProfile({
 
       {/* ── Horários & Exceções tab (Lado a Lado) ── */}
       {activeTab === "schedule" && (
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-          {/* Lado Esquerdo: Horário Padrão & Vigências */}
-          <div className="xl:col-span-7 space-y-4">
-            <AssistantScheduleManager assistantId={assistant?.id} />
-          </div>
+        <div className="space-y-4">
+          {currentShiftDetails?.isRotating && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-xs shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                  {currentShiftDetails.activeLabel}
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground text-sm">
+                    Escala Ativa Esta Semana: Turno {currentShiftDetails.activeLabel} em Vigor
+                  </p>
+                  <p className="text-muted-foreground mt-0.5">
+                    O assistente está atualmente no ciclo do <strong>Turno {currentShiftDetails.activeLabel}</strong> (até {formatDateDisplay(currentShiftDetails.cycleEnd)}).
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 text-xs bg-background/80 px-3.5 py-2 rounded-lg border border-purple-500/20">
+                <span className="font-medium text-foreground">
+                  🍽️ Pausa de Almoço: <strong className="text-purple-700 dark:text-purple-300">{currentShiftDetails.lunch?.replace("Almoço: ", "") || "Sem pausa"}</strong>
+                </span>
+              </div>
+            </div>
+          )}
 
-          {/* Lado Direito: Regras de Exceção */}
-          <div className="xl:col-span-5 space-y-4">
-            <Card className="p-5 w-full">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+            {/* Lado Esquerdo: Horário Padrão & Vigências */}
+            <div className="xl:col-span-7 space-y-4">
+              <AssistantScheduleManager assistantId={assistant?.id} />
+            </div>
+
+            {/* Lado Direito: Regras de Exceção */}
+            <div className="xl:col-span-5 space-y-4">
+              <Card className="p-5 w-full">
               <div className="flex items-center justify-between pb-3 mb-3 border-b border-border/50 flex-wrap gap-2">
                 <div className="flex items-center gap-2.5">
                   <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600">
@@ -1481,6 +1576,7 @@ export default function AssistantProfile({
             )}
           </div>
         </div>
+      </div>
       )}
 
       {/* ── Horários & Escalas tab ── */}
