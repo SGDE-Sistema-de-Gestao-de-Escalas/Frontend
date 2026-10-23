@@ -723,7 +723,7 @@ export function getAllDraftDaysFromSchedules(
  * Verifica se um assistente tem ausência registada na API para uma determinada data civil.
  */
 export function checkAssistantAbsenceOnDate(
-  assistant: Pick<Assistant, "id" | "exception">,
+  assistant: Pick<Assistant, "id">,
   isoDate: string,
   absences: BackendAbsenceResource[] = []
 ): {
@@ -1160,7 +1160,7 @@ export function resolveAssistantShiftBounds(params: {
 
   if (absences && absences.length > 0) {
     const absInfo = checkAssistantAbsenceOnDate(
-      { id: assistantId, exception: false },
+      { id: assistantId },
       isoDate,
       absences
     );
