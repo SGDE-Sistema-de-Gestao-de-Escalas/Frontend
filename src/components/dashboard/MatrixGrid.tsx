@@ -26,8 +26,28 @@ import {
   Send,
   Trash2,
   UserX,
+  ChevronDown,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Layers,
+  Printer,
+  UserCheck,
   X
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import PrintScheduleModal, {
+  exportDailyScheduleToCsv,
+  PrintableAssistantSchedule,
+  PrintableAbsentAssistant,
+} from "./PrintScheduleModal";
 import type { Assistant, BlockState, EntityId, ScheduleMatrix } from "../../types";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
@@ -147,7 +167,7 @@ export default function MatrixGrid({
   queryEndDate,
   onRequestRecalculate,
 }: MatrixGridProps) {
-  const { selectedSchoolId } = useSchool();
+  const { selectedSchoolId, selectedSchool, agrupamento } = useSchool();
   const [editMode, setEditMode] = useState(false);
   // Persisted/confirmed schedules per dayOffset
   const [savedMatricesByDay, setSavedMatricesByDay] = useState<
@@ -203,7 +223,15 @@ export default function MatrixGrid({
       setPaintAid(null);
     }
   }
-  const [publishModalState, setPublishModalState] = useState<{
+    const [printModalState, setPrintModalState] = useState<{
+    open: boolean;
+    initialTab: "wall" | "individual";
+  }>({
+    open: false,
+    initialTab: "wall",
+  });
+
+const [publishModalState, setPublishModalState] = useState<{
     open: boolean;
     preselectedDate?: string;
   }>({ open: false });
@@ -1401,6 +1429,44 @@ export default function MatrixGrid({
     TIME_SLOTS[viewEndSlot] ?? "21:00"
   }`;
 
+  const printableWorkingAssistants: PrintableAssistantSchedule[] = useMemo(() => {
+    return workingAssistants.map((assistant) => {
+      const shiftBounds = fixedShiftBoundsByAssistant[assistant.id] || {
+        startSlot: viewStartSlot,
+        endSlot: viewEndSlot,
+      };
+      const rowSlots = effectiveMatrix[assistant.id] || [];
+      const blocks = slotsToBlocks(rowSlots, slotMetaByAssistant[assistant.id]);
+      return {
+        assistant,
+        shiftBounds,
+        blocks,
+      };
+    });
+  }, [workingAssistants, fixedShiftBoundsByAssistant, effectiveMatrix, slotMetaByAssistant, viewStartSlot, viewEndSlot]);
+
+  const printableAbsentAssistants: PrintableAbsentAssistant[] = useMemo(() => {
+    return absentAssistants.map((item) => ({
+      assistant: item.assistant,
+      reason: item.reason,
+      isTransfer: item.isTransfer,
+      transferDestName: item.transferDestName,
+      shiftBounds: item.shiftBounds,
+    }));
+  }, [absentAssistants]);
+
+  function handleExportDayCsv() {
+    exportDailyScheduleToCsv({
+      schoolName: selectedSchool?.name || "Escola",
+      dateStr: dayInfo.dateStr,
+      isoDate: dayInfo.isoDate,
+      operatingWindowStr,
+      workingAssistants: printableWorkingAssistants,
+      absentAssistants: printableAbsentAssistants,
+    });
+    notify.success("Ficheiro CSV da escala diária descarregado com sucesso.", "Escala Exportada");
+  }
+
   function renderWorkingAssistantRow(assistant: (typeof activeAssistants)[0]) {
 
                   const rowSlots = effectiveMatrix[assistant.id] || [];
@@ -2073,71 +2139,210 @@ export default function MatrixGrid({
             )}
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap">
-            
-
-            {/* Copy Schedule button */}
-            {!isDayLoading &&
-              schoolStatus.isOpen &&
-              (hasScheduleForCurrentDay || canEditCurrentDay) && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    openCopyScheduleModal(
-                      isPastDay || !editMode ? "to_future" : "from_other"
-                    )
-                  }
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-primary/30 bg-primary/5 text-primary hover:bg-primary/15 transition-colors"
-                >
-                  <Copy size={11} />
-                  {isPastDay || !editMode
-                    ? "Copiar Horário para Dia Futuro"
-                    : "Copiar Horário"}
-                </button>
-              )}
-
-            {/* Publicar Este Dia (quando em rascunho) */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* GRUPO 1: FERRAMENTAS DE HORÁRIO, IMPRESSÃO E EXPORTAÇÃO */}
             {!isDayLoading &&
               !editMode &&
               schoolStatus.isOpen &&
-              hasScheduleForCurrentDay &&
-              publishStatus.isDraft && (
-                <ActionTooltip content="Publicar a escala deste dia para ficar visível aos assistentes">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPublishModalState({
-                        open: true,
-                        preselectedDate: dayInfo.isoDate,
-                      })
+              (hasScheduleForCurrentDay || canEditCurrentDay) && (
+                <div className="flex items-center rounded-lg border border-border bg-card p-0.5 shadow-2xs">
+                  {/* Botão Copiar Horário */}
+                  <ActionTooltip
+                    content={
+                      isPastDay
+                        ? "Copiar a escala deste dia para um dia futuro"
+                        : "Copiar horário entre dias"
                     }
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer"
                   >
-                    <Send size={11} />
-                    Publicar Dia
-                  </button>
-                </ActionTooltip>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openCopyScheduleModal(
+                          isPastDay ? "to_future" : "from_other"
+                        )
+                      }
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
+                    >
+                      <Copy size={12} className="text-primary" />
+                      <span>
+                        {isPastDay ? "Copiar para Futuro" : "Copiar Horário"}
+                      </span>
+                    </button>
+                  </ActionTooltip>
+
+                  <div className="h-4 w-[1px] bg-border mx-0.5" />
+
+                  {/* Dropdown Menu Imprimir / Exportar */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
+                      >
+                        <Printer size={12} className="text-primary" />
+                        <span>Imprimir / Exportar</span>
+                        <ChevronDown size={11} className="text-muted-foreground ml-0.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56 p-1.5">
+                      <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1">
+                        Documentos para Impressão
+                      </DropdownMenuLabel>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          setPrintModalState({
+                            open: true,
+                            initialTab: "wall",
+                          })
+                        }
+                        className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
+                      >
+                        <Printer size={13} className="text-primary" />
+                        <div>
+                          <div className="font-medium">Escala do Dia (Afixação)</div>
+                          <div className="text-[10px] text-muted-foreground">Formato oficial para o placard</div>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          setPrintModalState({
+                            open: true,
+                            initialTab: "individual",
+                          })
+                        }
+                        className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
+                      >
+                        <UserCheck size={13} className="text-blue-600" />
+                        <div>
+                          <div className="font-medium">Horários Individuais</div>
+                          <div className="text-[10px] text-muted-foreground">Fichas para entrega e assinatura</div>
+                        </div>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuSeparator className="my-1" />
+
+                      <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1">
+                        Exportação de Dados
+                      </DropdownMenuLabel>
+                      <DropdownMenuItem
+                        onClick={handleExportDayCsv}
+                        className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
+                      >
+                        <FileSpreadsheet size={13} className="text-emerald-600" />
+                        <div>
+                          <div className="font-medium">Descarregar Excel / CSV</div>
+                          <div className="text-[10px] text-muted-foreground">Tabela com horários e postos</div>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          setPrintModalState({
+                            open: true,
+                            initialTab: "wall",
+                          })
+                        }
+                        className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
+                      >
+                        <Eye size={13} className="text-muted-foreground" />
+                        <div>
+                          <div className="font-medium">Pré-visualizar Tudo...</div>
+                          <div className="text-[10px] text-muted-foreground">Abrir central de documentos</div>
+                        </div>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               )}
 
-            {/* Publicar Vários Dias em Rascunho */}
-            {!isDayLoading && !editMode && allDraftDays.length > 0 && (
-              <ActionTooltip content="Abrir modal para selecionar e publicar vários dias em rascunho">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPublishModalState({
-                      open: true,
-                      preselectedDate: undefined,
-                    })
-                  }
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15 transition-colors cursor-pointer"
-                >
-                  <Send size={11} />
-                  Publicar Escalas ({allDraftDays.length})
-                </button>
-              </ActionTooltip>
+            {/* GRUPO 2: PUBLICAÇÃO (Button Group com Dropdown) */}
+            {!isDayLoading && !editMode && schoolStatus.isOpen && (
+              <>
+                {publishStatus.isDraft ? (
+                  // Caso A: Dia atual está em rascunho -> Split Button
+                  <div className="inline-flex rounded-lg shadow-xs overflow-hidden border border-emerald-600/40 bg-emerald-600 text-white">
+                    <ActionTooltip content="Publicar a escala deste dia para ficar visível aos assistentes">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPublishModalState({
+                            open: true,
+                            preselectedDate: dayInfo.isoDate,
+                          })
+                        }
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold hover:bg-emerald-700 transition-colors cursor-pointer"
+                      >
+                        <Send size={11} />
+                        Publicar Dia
+                      </button>
+                    </ActionTooltip>
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="px-1.5 py-1.5 border-l border-emerald-500 hover:bg-emerald-700 transition-colors cursor-pointer flex items-center justify-center"
+                        >
+                          <ChevronDown size={12} />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56 p-1.5">
+                        <DropdownMenuItem
+                          onClick={() =>
+                            setPublishModalState({
+                              open: true,
+                              preselectedDate: dayInfo.isoDate,
+                            })
+                          }
+                          className="flex items-center gap-2 text-xs py-2 cursor-pointer"
+                        >
+                          <Send size={12} className="text-emerald-600" />
+                          <div>
+                            <div className="font-semibold">Publicar Este Dia</div>
+                            <div className="text-[10px] text-muted-foreground">{dayInfo.dayShort}, {dayInfo.dateStr}</div>
+                          </div>
+                        </DropdownMenuItem>
+                        {allDraftDays.length > 0 && (
+                          <DropdownMenuItem
+                            onClick={() =>
+                              setPublishModalState({
+                                open: true,
+                                preselectedDate: undefined,
+                              })
+                            }
+                            className="flex items-center gap-2 text-xs py-2 cursor-pointer"
+                          >
+                            <Calendar size={12} className="text-primary" />
+                            <div>
+                              <div className="font-semibold">Publicar Vários Dias em Rascunho...</div>
+                              <div className="text-[10px] text-muted-foreground">{allDraftDays.length} {allDraftDays.length === 1 ? "dia pendente" : "dias pendentes"}</div>
+                            </div>
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                ) : allDraftDays.length > 0 ? (
+                  // Caso B: Dia atual já publicado ou sem escala, mas há outros dias em rascunho
+                  <ActionTooltip content="Abrir modal para selecionar e publicar vários dias em rascunho">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPublishModalState({
+                          open: true,
+                          preselectedDate: undefined,
+                        })
+                      }
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition-colors cursor-pointer"
+                    >
+                      <Send size={11} />
+                      Publicar Escalas ({allDraftDays.length})
+                    </button>
+                  </ActionTooltip>
+                ) : null}
+              </>
             )}
 
+            {/* GRUPO 3: MODO DE EDIÇÃO */}
             {editMode && draftMatricesByDay[dayOffset] && (
               <ActionTooltip content="Anular alterações não guardadas deste dia">
                 <button
@@ -2184,7 +2389,7 @@ export default function MatrixGrid({
                   onClick={handleClickFinishButton}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                     editMode
-                      ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                      ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold"
                       : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
                   }`}
                 >
@@ -3324,7 +3529,23 @@ export default function MatrixGrid({
       </Dialog>
 
       {/* Modal de Publicação de Escalas (Rascunho -> Publicada) */}
-      <PublishSchedulesModal
+            <PrintScheduleModal
+        open={printModalState.open}
+        onClose={() => setPrintModalState((prev) => ({ ...prev, open: false }))}
+        initialTab={printModalState.initialTab}
+        schoolName={selectedSchool?.name || "Escola"}
+        agrupamentoName={agrupamento?.name || "Agrupamento de Escolas"}
+        dateInfo={{
+          dateStr: dayInfo.dateStr,
+          dayName: dayInfo.dayName,
+          isoDate: dayInfo.isoDate,
+        }}
+        operatingWindowStr={operatingWindowStr}
+        workingAssistants={printableWorkingAssistants}
+        absentAssistants={printableAbsentAssistants}
+      />
+
+<PublishSchedulesModal
         open={publishModalState.open}
         onClose={() => setPublishModalState({ open: false })}
         schedules={schedulesList}
