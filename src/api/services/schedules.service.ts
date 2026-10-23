@@ -296,6 +296,20 @@ export const schedulesService = {
     );
     return response.data;
   },
+
+  /**
+   * Grava as alterações manuais às escalas dos dias indicados.
+   * POST /api/schedules/save-days
+   */
+  async saveDays(
+    payload: SaveScheduleDaysPayload
+  ): Promise<{ message: string; saved_days_count: number }> {
+    const response = await apiClient.post<{
+      message: string;
+      saved_days_count: number;
+    }>("/schedules/save-days", payload);
+    return response.data;
+  },
 };
 
 export default schedulesService;

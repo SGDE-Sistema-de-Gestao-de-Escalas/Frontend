@@ -135,9 +135,8 @@ export function useSaveScheduleDays() {
   return useMutation({
     mutationFn: (payload: SaveScheduleDaysPayload) => schedulesService.saveDays(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: SCHEDULES_QUERY_KEY,
-      });
+      queryClient.invalidateQueries({ queryKey: SCHEDULES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
     },
   });
 }
