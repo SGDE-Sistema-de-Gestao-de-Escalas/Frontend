@@ -363,6 +363,8 @@ export default function MatrixGrid({
       schedules: schedulesList,
       absences: absencesRes?.data || [],
       lunchBlocksForDate: lunchBlocksByDate[info.isoDate],
+      profilesByAssistant,
+      exceptionsByAssistant,
     });
   }, [
     dayOffset,
@@ -371,6 +373,8 @@ export default function MatrixGrid({
     schedulesList,
     absencesRes,
     lunchBlocksByDate,
+    profilesByAssistant,
+    exceptionsByAssistant,
   ]);
 
   const slotMetaByAssistant = currentDayApiData.slotMetaByAssistant;
@@ -388,6 +392,8 @@ export default function MatrixGrid({
       schedules: schedulesList,
       absences: absencesRes?.data || [],
       lunchBlocksForDate: lunchBlocksByDate[info.isoDate],
+      profilesByAssistant,
+      exceptionsByAssistant,
     });
     return matrix;
   }

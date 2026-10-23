@@ -7,6 +7,8 @@ import { BLOCK_STYLES, formatDurationSlots, slotsToBlocks, TIME_SLOTS } from "./
 import { useAssistantsList } from "../../hooks/api/useAssistants";
 import { useSchedulesList } from "../../hooks/api/useSchedules";
 import { useAbsencesList } from "../../hooks/api/useAbsences";
+import { useAssistantSchedules } from "../../hooks/api/useAssistantSchedules";
+import { useAssistantExceptions } from "../../hooks/api/useAssistantExceptions";
 import {
   useOperatingCalendar,
   useOperatingExceptions,
@@ -75,6 +77,22 @@ export default function AssistantDayModal({
 
   if (assistantId === null) return null;
 
+  const { data: assistantProfiles = [] } = useAssistantSchedules(
+    assistantId ? String(assistantId) : ""
+  );
+  const { data: assistantExceptions = [] } = useAssistantExceptions(
+    assistantId ? String(assistantId) : ""
+  );
+
+  const profilesByAssistant = useMemo(
+    () => (assistantId ? { [String(assistantId)]: assistantProfiles } : {}),
+    [assistantId, assistantProfiles]
+  );
+  const exceptionsByAssistant = useMemo(
+    () => (assistantId ? { [String(assistantId)]: assistantExceptions } : {}),
+    [assistantId, assistantExceptions]
+  );
+
   const assistant = assistants.find((a) => String(a.id) === String(assistantId));
   if (!assistant) return null;
 
@@ -90,6 +108,8 @@ export default function AssistantDayModal({
     schedules,
     absences: absencesRes?.data || [],
     lunchBlocksForDate: lunchBlocksByDate?.[dayInfo.isoDate],
+    profilesByAssistant,
+    exceptionsByAssistant,
   });
 
   const slots = matrix[assistant.id] || Array(96).fill("off");

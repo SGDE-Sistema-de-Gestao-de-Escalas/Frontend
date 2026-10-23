@@ -1147,6 +1147,8 @@ export function buildDayMatrixFromApi(params: {
   schedules?: BackendScheduleResource[];
   absences?: BackendAbsenceResource[];
   lunchBlocksForDate?: Record<string, LunchBlockApi>;
+  profilesByAssistant?: Record<string, AssistantScheduleProfileApi[]>;
+  exceptionsByAssistant?: Record<string, AssistantExceptionApi[]>;
 }): {
   matrix: ScheduleMatrix;
   slotMetaByAssistant: Record<EntityId, Record<number, SlotEntryMetadata>>;
@@ -1158,6 +1160,8 @@ export function buildDayMatrixFromApi(params: {
     schedules = [],
     absences = [],
     lunchBlocksForDate = {},
+    profilesByAssistant,
+    exceptionsByAssistant,
   } = params;
 
   const matrix: ScheduleMatrix = {};
@@ -1210,34 +1214,78 @@ export function buildDayMatrixFromApi(params: {
       }
     });
 
-    // 2. Se houver lunch_blocks devolvidos pelo motor de geração para esta data/assistente, marcar "lunch"
+    // 2. Determinar intervalo de almoço do assistente
+    let lunchS: number | null = null;
+    let lunchE: number | null = null;
+
+    // Fonte A: lunchBlocksForDate (devolvido diretamente pelo motor de geração)
     const lunch = lunchBlocksForDate[String(assistant.id)];
     if (lunch && lunch.start_time && lunch.end_time) {
-      const lStart = timeToSlotIndex(lunch.start_time);
-      const lEnd = timeToSlotIndex(lunch.end_time);
-      for (let i = lStart; i < lEnd && i < 96; i++) {
-        row[i] = "lunch";
-        metaRow[i] = {
-          activityName: "Pausa Almoço",
-        };
+      const ls = timeToSlotIndex(lunch.start_time);
+      const le = timeToSlotIndex(lunch.end_time);
+      if (le > ls) {
+        lunchS = ls;
+        lunchE = le;
       }
-    } else if (entriesForDay.length >= 2) {
-      // Inferir buraco de almoço (entre 11:30 e 15:00) entre dois blocos de trabalho do mesmo dia
-      const sorted = [...entriesForDay].sort((a, b) =>
-        a.start_time.localeCompare(b.start_time)
-      );
-      for (let idx = 0; idx < sorted.length - 1; idx++) {
-        const gapStart = timeToSlotIndex(sorted[idx].end_time);
-        const gapEnd = timeToSlotIndex(sorted[idx + 1].start_time);
+    }
+
+    // Fonte B: Perfil de horário contratual / exceções do assistente
+    if (lunchS === null && profilesByAssistant && profilesByAssistant[String(assistant.id)]) {
+      const dow = (new Date(isoDate + "T12:00:00Z").getDay() + 6) % 7;
+      const bounds = resolveAssistantShiftBounds({
+        assistantId: assistant.id,
+        isoDate,
+        dow,
+        viewStartSlot: 0,
+        viewEndSlot: 96,
+        profiles: profilesByAssistant[String(assistant.id)],
+        exceptions: exceptionsByAssistant?.[String(assistant.id)],
+        schedulesList: schedules,
+        lunchBlocksForDate,
+        absences,
+      });
+      if (bounds.lunchStartSlot !== null && bounds.lunchEndSlot !== null) {
+        lunchS = bounds.lunchStartSlot;
+        lunchE = bounds.lunchEndSlot;
+      }
+    }
+
+    // Fonte C: Heurística entre tarefas/ausências
+    // Se não há perfil ou lunchBlock, inferir a partir do intervalo livre entre entradas e ausências
+    if (lunchS === null && entriesForDay.length >= 1) {
+      const absInfo = checkAssistantAbsenceOnDate(assistant, isoDate, absences);
+      const absStart = absInfo.absent && absInfo.startSlot !== undefined ? absInfo.startSlot : -1;
+      const absEnd = absInfo.absent && absInfo.endSlot !== undefined ? absInfo.endSlot : -1;
+
+      const busyIntervals: Array<{ start: number; end: number }> = entriesForDay.map((e) => ({
+        start: timeToSlotIndex(e.start_time),
+        end: timeToSlotIndex(e.end_time),
+      }));
+      if (absInfo.absent && absStart >= 0 && absEnd > absStart) {
+        busyIntervals.push({ start: absStart, end: absEnd });
+      }
+      busyIntervals.sort((a, b) => a.start - b.start);
+
+      for (let idx = 0; idx < busyIntervals.length - 1; idx++) {
+        const gapStart = busyIntervals[idx].end;
+        const gapEnd = busyIntervals[idx + 1].start;
         const gapSlots = gapEnd - gapStart;
-        // Entre 30 min (2 slots) e 90 min (6 slots) na janela 11:00 (44) .. 15:30 (62)
         if (gapSlots >= 2 && gapSlots <= 6 && gapStart >= 44 && gapEnd <= 62) {
-          for (let s = gapStart; s < gapEnd; s++) {
-            if (row[s] === "off") {
-              row[s] = "lunch";
-              metaRow[s] = { activityName: "Pausa Almoço" };
-            }
-          }
+          lunchS = gapStart;
+          lunchE = gapEnd;
+          break;
+        }
+      }
+    }
+
+    // Marcar "lunch" nos slots livres correspondentes
+    if (lunchS !== null && lunchE !== null) {
+      for (let i = lunchS; i < lunchE && i < 96; i++) {
+        if (row[i] === "off") {
+          row[i] = "lunch";
+          metaRow[i] = {
+            activityName: "Pausa Almoço",
+          };
         }
       }
     }
