@@ -178,6 +178,31 @@ export interface PublishScheduleResponse {
   published_schedules_count: number;
 }
 
+export interface PendingRecalculationConflict {
+  date: string;
+  type: string;
+  assistant_id?: string;
+  assistant_name?: string;
+  rule_id?: string;
+  activity_name?: string;
+  period_start?: string;
+  period_end?: string;
+  period?: string;
+  start_time?: string;
+  end_time?: string;
+  required?: number;
+  covered?: number;
+  missing?: number;
+  message: string;
+}
+
+export interface PendingRecalculationsResponse {
+  has_pending: boolean;
+  affected_dates: string[];
+  conflicts: Record<string, PendingRecalculationConflict[]>;
+  summary: string;
+}
+
 export interface ListSchedulesParams {
   start_date?: string;
   end_date?: string;
@@ -232,6 +257,20 @@ export const schedulesService = {
     const response = await apiClient.post<PublishScheduleResponse>(
       "/schedules/publish",
       payload
+    );
+    return response.data;
+  },
+
+  /**
+   * Obtém a lista de dias com escalas geradas que têm quebra de integridade/regras e requerem recálculo.
+   * GET /api/schedules/pending-recalculations
+   */
+  async getPendingRecalculations(schoolId?: string): Promise<PendingRecalculationsResponse> {
+    const response = await apiClient.get<PendingRecalculationsResponse>(
+      "/schedules/pending-recalculations",
+      {
+        headers: schoolId ? { "X-School-ID": schoolId } : {},
+      }
     );
     return response.data;
   },

@@ -9,6 +9,14 @@ export interface AbsenceAssistantInfo {
   active?: boolean;
 }
 
+export interface ScheduleImpact {
+  has_impact: boolean;
+  requires_recalculation: boolean;
+  affected_dates: string[];
+  conflicts?: Record<string, any[]> | any[];
+  message: string;
+}
+
 export interface BackendAbsenceResource {
   id: string | number;
   assistant_id: string | number;
@@ -42,6 +50,7 @@ export interface BackendAbsenceResource {
   cannot_delete_reason?: string | null;
   created_at?: string;
   updated_at?: string;
+  impact?: ScheduleImpact;
 }
 
 export interface CreateAbsencePayload {
@@ -455,7 +464,11 @@ export const absencesService = {
     try {
       const response = await apiClient.get<any>(`/absences/${id}`);
       const raw = response.data?.data ?? response.data;
-      return normalizeAbsenceResource(raw);
+      const normalized = normalizeAbsenceResource(raw);
+      if (response.data?.impact) {
+        normalized.impact = response.data.impact;
+      }
+      return normalized;
     } catch (err: any) {
       if (err?.response && err.response.status !== 404) {
         throw err;
@@ -498,7 +511,11 @@ export const absencesService = {
     try {
       const response = await apiClient.post<any>("/absences", body);
       const raw = response.data?.data ?? response.data;
-      return normalizeAbsenceResource(raw);
+      const normalized = normalizeAbsenceResource(raw);
+      if (response.data?.impact) {
+        normalized.impact = response.data.impact;
+      }
+      return normalized;
     } catch (error: any) {
       // Se o backend respondeu com erro 422 (validação), 400 ou 403, propaga o erro para o utilizador
       if (error?.response && error.response.status !== 404) {
@@ -562,7 +579,11 @@ export const absencesService = {
       }
 
       const raw = response.data?.data ?? response.data;
-      return normalizeAbsenceResource(raw);
+      const normalized = normalizeAbsenceResource(raw);
+      if (response.data?.impact) {
+        normalized.impact = response.data.impact;
+      }
+      return normalized;
     } catch (error: any) {
       if (error?.response && error.response.status !== 404) {
         throw error;
@@ -676,7 +697,11 @@ export const absencesService = {
     try {
       const response = await apiClient.post<any>(`/absences/${id}/document`, formData);
       const raw = response.data?.data ?? response.data;
-      return normalizeAbsenceResource(raw);
+      const normalized = normalizeAbsenceResource(raw);
+      if (response.data?.impact) {
+        normalized.impact = response.data.impact;
+      }
+      return normalized;
     } catch (err: any) {
       if (err?.response && err.response.status !== 404) {
         throw err;

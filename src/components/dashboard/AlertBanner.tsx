@@ -5,19 +5,26 @@ import {
   ChevronUp,
   RefreshCw,
   X,
+  Calendar,
+  AlertCircle,
 } from "lucide-react";
 import { Badge } from "../ui/badge";
-import type { ScheduleConflictApi } from "../../api/services/schedules.service";
+import type {
+  PendingRecalculationsResponse,
+  ScheduleConflictApi,
+} from "../../api/services/schedules.service";
 
 interface AlertBannerProps {
-  onRecalculate?: () => void;
+  onRecalculate?: (affectedDates?: string[]) => void;
   conflicts?: ScheduleConflictApi[];
+  pendingRecalculations?: PendingRecalculationsResponse | null;
   hasGeneratedClean?: boolean;
 }
 
 export default function AlertBanner({
   onRecalculate,
   conflicts,
+  pendingRecalculations,
   hasGeneratedClean = false,
 }: AlertBannerProps) {
   const [expanded, setExpanded] = useState(false);
@@ -25,18 +32,61 @@ export default function AlertBanner({
 
   if (dismissed) return null;
 
-  // Só apresenta o banner de alerta quando existem défices reais de cobertura
-  if (!conflicts || conflicts.length === 0) {
+  const hasPending = Boolean(
+    pendingRecalculations?.has_pending &&
+      pendingRecalculations.affected_dates.length > 0
+  );
+  const hasGenerationConflicts = Boolean(conflicts && conflicts.length > 0);
+
+  // Se não há pendências na BD nem défices da última geração, não renderiza
+  if (!hasPending && !hasGenerationConflicts) {
     return null;
   }
 
-  const alertsList = conflicts.map((c) => ({
+  // Lista unificada de avisos para expansão
+  const pendingItems: Array<{
+    day: string;
+    time: string;
+    activityName: string;
+    message: string;
+    type?: string;
+  }> = [];
+
+  if (pendingRecalculations?.conflicts) {
+    Object.entries(pendingRecalculations.conflicts).forEach(([date, list]) => {
+      list.forEach((item) => {
+        const timeStr =
+          item.period ||
+          (item.start_time && item.end_time
+            ? `${item.start_time} – ${item.end_time}`
+            : "Dia completo");
+        pendingItems.push({
+          day: date,
+          time: timeStr,
+          activityName:
+            item.activity_name ||
+            (item.type === "school_closed"
+              ? "Estabelecimento Encerrado"
+              : "Conflito de Escala"),
+          message: item.message,
+          type: item.type,
+        });
+      });
+    });
+  }
+
+  const generationAlerts = (conflicts || []).map((c) => ({
+    day: c.date,
     time: `${c.period_start} – ${c.period_end}`,
     activityName: c.activity_name ?? "Regra Obrigatória",
-    count: c.assigned,
-    min: c.required,
-    day: c.date,
+    message: `Apenas ${c.assigned} assistente(s) atribuído(s) (mínimo exigido: ${c.required}).`,
+    type: "generation_deficit",
   }));
+
+  const allAlerts = [...pendingItems, ...generationAlerts];
+
+  const affectedDates = pendingRecalculations?.affected_dates ?? [];
+  const daysCount = affectedDates.length || (conflicts ? new Set(conflicts.map((c) => c.date)).size : 0);
 
   return (
     <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 overflow-hidden shadow-xs">
@@ -45,28 +95,31 @@ export default function AlertBanner({
           <AlertTriangle size={16} className="text-destructive" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground">
-            {alertsList.length}{" "}
-            {alertsList.length === 1
-              ? "Alerta de Cobertura Insuficiente"
-              : "Alertas de Cobertura Insuficiente"}
+          <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <span>
+              {hasPending
+                ? "Recálculo de Escala Necessário"
+                : "Alerta de Cobertura Insuficiente"}
+            </span>
+            <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">
+              {daysCount} {daysCount === 1 ? "dia afetado" : "dias afetados"}
+            </Badge>
           </p>
           <p className="text-xs text-destructive mt-0.5 font-medium">
-            Nível mínimo de segurança não garantido em{" "}
-            {alertsList.length === 1
-              ? "um intervalo obrigatório"
-              : `${alertsList.length} intervalos obrigatórios`}
+            {hasPending
+              ? `Existem escalas geradas com quebra de regras ou ausências em ${daysCount} dia(s). É necessário recalcular o horário.`
+              : `Nível mínimo de segurança não garantido em ${allAlerts.length} intervalo(s) obrigatório(s).`}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {onRecalculate && (
             <button
               type="button"
-              onClick={onRecalculate}
+              onClick={() => onRecalculate(affectedDates)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground text-xs font-medium hover:bg-destructive/90 transition-colors shadow-xs"
             >
               <RefreshCw size={12} />
-              Recalcular / Transferir
+              Recalcular Escala
             </button>
           )}
           <button
@@ -88,20 +141,23 @@ export default function AlertBanner({
         </div>
       </div>
       {expanded && (
-        <div className="border-t border-destructive/15 px-4 py-3 space-y-2 bg-destructive/5">
-          {alertsList.map((alert, i) => (
-            <div key={i} className="flex items-center gap-3 text-sm flex-wrap">
-              <span className="font-mono text-xs text-destructive font-semibold w-28">
-                {alert.time}
-              </span>
-              <span className="text-foreground text-xs">
-                <strong>{alert.activityName}:</strong> Apenas{" "}
-                <strong>{alert.count}</strong> assistentes presentes (mínimo
-                exigido: <strong>{alert.min}</strong>)
-              </span>
-              <Badge variant="destructive" className="ml-auto text-[10px]">
-                {alert.day}
-              </Badge>
+        <div className="border-t border-destructive/15 px-4 py-3 space-y-2.5 bg-destructive/5">
+          {allAlerts.map((alert, i) => (
+            <div
+              key={i}
+              className="flex items-start gap-3 text-xs bg-background/60 p-2.5 rounded-lg border border-destructive/15"
+            >
+              <div className="flex items-center gap-1.5 font-mono text-[11px] text-destructive font-semibold min-w-32">
+                <Calendar size={12} className="shrink-0" />
+                <span>{alert.day}</span>
+                <span className="text-muted-foreground font-normal">({alert.time})</span>
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-foreground">
+                  {alert.activityName}
+                </p>
+                <p className="text-muted-foreground mt-0.5">{alert.message}</p>
+              </div>
             </div>
           ))}
         </div>

@@ -7,11 +7,29 @@ import schedulesService, {
   type ListSchedulesParams,
   type PublishSchedulePayload,
   type PublishScheduleResponse,
+  type PendingRecalculationsResponse,
 } from "../../api/services/schedules.service";
 import { useSchool } from "../../context/SchoolContext";
 import { schoolScopedKey } from "../../lib/queryClient";
 
 export const SCHEDULES_QUERY_KEY = ["schedules"];
+export const PENDING_RECALCULATIONS_QUERY_KEY = ["schedules", "pending-recalculations"];
+
+/**
+ * Hook para obter a lista de dias com escalas geradas que têm quebra de integridade/regras e requerem recálculo.
+ */
+export function usePendingRecalculations() {
+  const { selectedSchoolId } = useSchool();
+
+  return useQuery({
+    queryKey: schoolScopedKey("schedules", selectedSchoolId, "pending-recalculations"),
+    queryFn: async (): Promise<PendingRecalculationsResponse> => {
+      return await schedulesService.getPendingRecalculations(selectedSchoolId ?? undefined);
+    },
+    enabled: !!selectedSchoolId,
+    staleTime: 10000,
+  });
+}
 
 /**
  * Hook para obter a lista de escalas da escola ativa num intervalo de datas.
@@ -46,6 +64,7 @@ export function useGenerateSchedules() {
       schedulesService.generate(payload),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: SCHEDULES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
       if (data.conflicts?.length > 0) {
         notify.warning(
           `Escala gerada com ${data.conflicts.length} ${
@@ -90,6 +109,7 @@ export function usePublishSchedules() {
       schedulesService.publish(payload),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: SCHEDULES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
       notify.success(
         `${data.published_schedules_count} ${
           data.published_schedules_count === 1 ? "escala publicada" : "escalas publicadas"

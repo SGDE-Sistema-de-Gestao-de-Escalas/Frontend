@@ -17,6 +17,7 @@ import MatrixGrid from "./MatrixGrid";
 import MonthDashboardView from "./MonthDashboardView";
 import RecalculateModal from "./RecalculateModal";
 import WeekMatrixView from "./WeekMatrixView";
+import { usePendingRecalculations } from "../../hooks/api/useSchedules";
 import type { GenerateScheduleResponse } from "../../api/services/schedules.service";
 import type { EntityId } from "../../types";
 import {
@@ -55,8 +56,11 @@ export default function DashboardSection({
   // index 3 corresponds to the current month when monthsBefore = 3
   const [monthOffset, setMonthOffset] = useState(3);
   const [showRecalcModal, setShowRecalcModal] = useState(false);
+  const [recalcDates, setRecalcDates] = useState<{ start?: string; end?: string }>({});
   const [lastGenerationResult, setLastGenerationResult] =
     useState<GenerateScheduleResponse | null>(null);
+
+  const { data: pendingRecalculations } = usePendingRecalculations();
 
   // Limpar resultados de geração e modais ao mudar de escola
   useEffect(() => {
@@ -324,17 +328,26 @@ export default function DashboardSection({
         </div>
       </div>
 
-      {/* Alert banner only on day view when real conflicts exist */}
-      {viewMode === "day" && (
-        <AlertBanner
-          onRecalculate={() => setShowRecalcModal(true)}
-          conflicts={lastGenerationResult?.conflicts}
-          hasGeneratedClean={
-            lastGenerationResult !== null &&
-            lastGenerationResult.conflicts.length === 0
+      {/* Alert banner when real conflicts exist or pending recalculations exist */}
+      <AlertBanner
+        onRecalculate={(affectedDates) => {
+          if (affectedDates && affectedDates.length > 0) {
+            setRecalcDates({
+              start: affectedDates[0],
+              end: affectedDates[affectedDates.length - 1],
+            });
+          } else {
+            setRecalcDates({});
           }
-        />
-      )}
+          setShowRecalcModal(true);
+        }}
+        conflicts={lastGenerationResult?.conflicts}
+        pendingRecalculations={pendingRecalculations}
+        hasGeneratedClean={
+          lastGenerationResult !== null &&
+          lastGenerationResult.conflicts.length === 0
+        }
+      />
 
       {/* Views */}
       {viewMode === "day" && (
@@ -378,8 +391,13 @@ export default function DashboardSection({
 
       <RecalculateModal
         open={showRecalcModal}
-        onClose={() => setShowRecalcModal(false)}
+        onClose={() => {
+          setShowRecalcModal(false);
+          setRecalcDates({});
+        }}
         currentSchoolId={currentSchoolId}
+        initialStartDate={recalcDates.start}
+        initialEndDate={recalcDates.end}
         onGenerated={(result) => setLastGenerationResult(result)}
       />
     </div>
