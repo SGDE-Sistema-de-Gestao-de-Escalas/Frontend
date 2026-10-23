@@ -3263,6 +3263,8 @@ export default function MatrixGrid({
         schedules={schedulesList}
         assistants={activeAssistants}
         absences={absencesRes?.data || []}
+        temporaryAssignments={temporaryAssignments}
+        selectedSchoolId={selectedSchoolId}
         initialSelectedDate={publishModalState.preselectedDate}
       />
     </TooltipProvider>

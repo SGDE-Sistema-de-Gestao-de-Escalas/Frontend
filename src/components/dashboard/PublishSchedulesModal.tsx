@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import {
   AlertCircle,
   AlertTriangle,
+  ArrowDownLeft,
   ArrowLeft,
   Calendar,
   CalendarDays,
@@ -40,6 +41,7 @@ import { usePublishSchedules } from "../../hooks/api/useSchedules";
 import { useSchool } from "../../context/SchoolContext";
 import type { BackendScheduleResource } from "../../api/services/schedules.service";
 import type { BackendAbsenceResource } from "../../api/services/absences.service";
+import type { AssistantTemporaryAssignmentApi } from "../../api/services/assistantTemporaryAssignments.service";
 import type { Assistant } from "../../types";
 import {
   getAllDraftDaysFromSchedules,
@@ -52,6 +54,8 @@ interface PublishSchedulesModalProps {
   schedules: BackendScheduleResource[];
   assistants?: Assistant[];
   absences?: BackendAbsenceResource[];
+  temporaryAssignments?: AssistantTemporaryAssignmentApi[];
+  selectedSchoolId?: string;
   initialSelectedDate?: string;
   onSuccess?: () => void;
 }
@@ -150,12 +154,25 @@ function getDayScheduleDetails(
   const assistantsMap = new Map<string, AssistantDaySchedule>();
   let totalEntries = 0;
 
+  // Agrupar todas as entradas por assistente para esta data
+  const entriesByAssistant = new Map<string, any[]>();
+  const scheduleMetaByAssistant = new Map<string, BackendScheduleResource>();
+
   schedules.forEach((sc) => {
     const dayEntries = (sc.entries || []).filter(
       (e) => e.date?.slice(0, 10) === isoDate
     );
     if (dayEntries.length === 0) return;
+    const aId = String(sc.assistant_id);
+    if (!scheduleMetaByAssistant.has(aId)) {
+      scheduleMetaByAssistant.set(aId, sc);
+    }
+    const existing = entriesByAssistant.get(aId) || [];
+    entriesByAssistant.set(aId, [...existing, ...dayEntries]);
+  });
 
+  entriesByAssistant.forEach((dayEntries, aId) => {
+    const sc = scheduleMetaByAssistant.get(aId);
     const sortedEntries = [...dayEntries].sort((a, b) =>
       a.start_time.localeCompare(b.start_time)
     );
@@ -164,13 +181,13 @@ function getDayScheduleDetails(
     const shiftEnd = sortedEntries[sortedEntries.length - 1].end_time.slice(0, 5);
 
     const matchedAssistant = assistantsList.find(
-      (a) => String(a.id) === String(sc.assistant_id)
+      (a) => String(a.id) === aId
     );
 
     const assistantName =
       matchedAssistant?.name ||
-      sc.assistant_name ||
-      `Assistente #${sc.assistant_id}`;
+      sc?.assistant_name ||
+      `Assistente #${aId.slice(0, 6)}`;
 
     const initials =
       matchedAssistant?.initials ||
@@ -202,8 +219,6 @@ function getDayScheduleDetails(
         isFallback: Boolean(e.is_fallback),
       });
 
-      // Se houver um intervalo entre blocos consecutivos na janela de almoço (11h00 - 15h30),
-      // inferir e adicionar a cápsula de "Pausa Almoço" idêntica ao dashboard
       if (idx < sortedEntries.length - 1) {
         const next = sortedEntries[idx + 1];
         const gapStart = e.end_time.slice(0, 5);
@@ -212,7 +227,6 @@ function getDayScheduleDetails(
         const gapEndMin = parseTimeToMinutes(gapEnd);
         const gapDuration = gapEndMin - gapStartMin;
 
-        // Intervalo entre 30 min e 120 min na janela das 11h às 16h
         if (
           gapDuration >= 30 &&
           gapDuration <= 120 &&
@@ -220,7 +234,7 @@ function getDayScheduleDetails(
           gapEndMin <= 16 * 60
         ) {
           entriesWithLunch.push({
-            id: `lunch-${sc.assistant_id}-${gapStart}`,
+            id: `lunch-${aId}-${gapStart}`,
             activityName: "Pausa Almoço",
             activityColor: "#F97316",
             startTime: gapStart,
@@ -233,13 +247,13 @@ function getDayScheduleDetails(
     }
 
     const isTemporaryTransfer = Boolean(
-      sc.is_temporary_transfer || matchedAssistant?.is_temporary_transfer
+      sc?.is_temporary_transfer || matchedAssistant?.is_temporary_transfer
     );
     const originSchoolName =
-      sc.origin_school_name || matchedAssistant?.origin_school_name || null;
+      sc?.origin_school_name || matchedAssistant?.origin_school_name || null;
 
-    assistantsMap.set(String(sc.assistant_id), {
-      assistantId: String(sc.assistant_id),
+    assistantsMap.set(aId, {
+      assistantId: aId,
       assistantName,
       initials,
       shiftStart,
@@ -252,9 +266,13 @@ function getDayScheduleDetails(
     totalEntries += dayEntries.length;
   });
 
-  const assistants = Array.from(assistantsMap.values()).sort((a, b) =>
-    a.assistantName.localeCompare(b.assistantName)
-  );
+  const assistants = Array.from(assistantsMap.values()).sort((a, b) => {
+    // Residentes primeiro, depois transferidos; dentro de cada grupo, por nome
+    if (Boolean(a.isTemporaryTransfer) !== Boolean(b.isTemporaryTransfer)) {
+      return a.isTemporaryTransfer ? 1 : -1;
+    }
+    return a.assistantName.localeCompare(b.assistantName);
+  });
 
   return { assistants, totalEntries };
 }
@@ -263,7 +281,9 @@ function validateDayForPublish(
   isoDate: string,
   schedules: BackendScheduleResource[],
   assistants: Assistant[] = [],
-  absences: BackendAbsenceResource[] = []
+  absences: BackendAbsenceResource[] = [],
+  temporaryAssignments: AssistantTemporaryAssignmentApi[] = [],
+  selectedSchoolId?: string
 ): {
   canPublish: boolean;
   isPast: boolean;
@@ -305,7 +325,31 @@ function validateDayForPublish(
   const assistantsWithEntries = new Set(allDayEntries.map((e) => e.assistantId));
   const missingAssistants = assistants.filter((ast) => {
     if (assistantsWithEntries.has(String(ast.id))) return false;
-    // Ignorar se estiver ausente (baixa, férias, etc.)
+
+    // Se é assistente recebido por transferência temporária (ast.is_temporary_transfer):
+    // Só deve ser esperado se tiver uma transferência ativa para esta escola nesta data específica!
+    if (ast.is_temporary_transfer) {
+      const isTransferredHereToday = temporaryAssignments.some((tr) => {
+        if (String(tr.assistant_id) !== String(ast.id)) return false;
+        if (selectedSchoolId && String(tr.destination_school_id) !== String(selectedSchoolId)) return false;
+        const from = (tr.valid_from || "").slice(0, 10);
+        const until = (tr.valid_until || tr.valid_from || "").slice(0, 10);
+        return from <= isoDate && isoDate <= until;
+      });
+      if (!isTransferredHereToday) return false;
+    }
+
+    // Se é assistente residente cedido a outra escola nesta data, não é esperado nesta escola
+    const isTransferredOutToday = temporaryAssignments.some((tr) => {
+      if (String(tr.assistant_id) !== String(ast.id)) return false;
+      if (selectedSchoolId && String(tr.origin_school_id) !== String(selectedSchoolId)) return false;
+      const from = (tr.valid_from || "").slice(0, 10);
+      const until = (tr.valid_until || tr.valid_from || "").slice(0, 10);
+      return from <= isoDate && isoDate <= until;
+    });
+    if (isTransferredOutToday) return false;
+
+    // Verificar se tem ausência registada para a data
     const isAbsent = absences.some((abs) => {
       if (String(abs.assistant_id) !== String(ast.id)) return false;
       const from = (abs.valid_from || abs.start_date || "").slice(0, 10);
@@ -351,7 +395,8 @@ function validateDayForPublish(
       totalWorkMin += parseTimeToMinutes(e.end_time) - parseTimeToMinutes(e.start_time);
     });
 
-    if (sorted.length > 0 && totalWorkMin < 4 * 60) {
+    // Apenas assistentes residentes têm obrigatoriedade de turno normal >= 4h; transferidos podem vir para apoios pontuais
+    if (!ast?.is_temporary_transfer && sorted.length > 0 && totalWorkMin < 4 * 60) {
       gapReasons.push(`${astName} (apenas ${Math.floor(totalWorkMin / 60)}h atribuídas)`);
     }
   });
@@ -379,6 +424,8 @@ export default function PublishSchedulesModal({
   schedules,
   assistants = [],
   absences = [],
+  temporaryAssignments = [],
+  selectedSchoolId,
   initialSelectedDate,
   onSuccess,
 }: PublishSchedulesModalProps) {
@@ -398,10 +445,17 @@ export default function PublishSchedulesModal({
   const validationsByDate = useMemo(() => {
     const map: Record<string, ReturnType<typeof validateDayForPublish>> = {};
     draftDays.forEach((d) => {
-      map[d.isoDate] = validateDayForPublish(d.isoDate, schedules, assistants, absences);
+      map[d.isoDate] = validateDayForPublish(
+        d.isoDate,
+        schedules,
+        assistants,
+        absences,
+        temporaryAssignments,
+        selectedSchoolId
+      );
     });
     return map;
-  }, [draftDays, schedules, assistants, absences]);
+  }, [draftDays, schedules, assistants, absences, temporaryAssignments, selectedSchoolId]);
 
   const publishableDates = useMemo(
     () =>
@@ -639,6 +693,148 @@ export default function PublishSchedulesModal({
 
   const isPublishing = publishMutation.isPending;
 
+  function renderAssistantPreviewRow(ast: AssistantDaySchedule) {
+    return (
+      <div
+        key={ast.assistantId}
+        className="flex items-center hover:bg-muted/15 transition-colors group"
+      >
+        {/* Coluna do Assistente */}
+        <div className="w-48 sm:w-56 px-3 py-2.5 border-r border-border/60 flex items-center gap-2.5 flex-shrink-0 bg-card/60 group-hover:bg-card">
+          <div className="w-7 h-7 rounded-full bg-primary/10 text-primary font-bold text-[10px] flex items-center justify-center flex-shrink-0">
+            {ast.initials}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="text-xs font-semibold text-foreground truncate">
+                {ast.assistantName}
+              </p>
+              {ast.isTemporaryTransfer && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
+                  Transferência ({ast.originSchoolName || "Outra Escola"})
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] font-mono text-muted-foreground flex items-center gap-1 mt-0.5">
+              <Clock size={9} className="text-primary/70 flex-shrink-0" />
+              <span>Turno {ast.shiftStart}–{ast.shiftEnd}</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Coluna da Linha do Tempo / Escala */}
+        <div className="relative flex-1 h-11 px-0 flex items-center bg-muted/5">
+          {/* Linhas verticais guia de cada hora */}
+          {timelineRange.hours.map((hour) => {
+            const leftPct =
+              ((hour - timelineRange.startHour) /
+                (timelineRange.endHour - timelineRange.startHour)) *
+              100;
+            return (
+              <div
+                key={hour}
+                className="absolute top-0 bottom-0 border-l border-dashed border-border/25 pointer-events-none"
+                style={{ left: `${leftPct}%` }}
+              />
+            );
+          })}
+
+          {/* Sombra do Turno Total do Assistente */}
+          {ast.shiftStart && ast.shiftEnd && (
+            <div
+              className="absolute top-1.5 bottom-1.5 rounded-lg bg-primary/[0.04] border border-primary/15 pointer-events-none"
+              style={{
+                left: `${Math.max(
+                  0,
+                  ((parseTimeToMinutes(ast.shiftStart) -
+                    timelineRange.minM) /
+                    timelineRange.totalMinutes) *
+                    100
+                )}%`,
+                width: `${Math.min(
+                  100,
+                  ((parseTimeToMinutes(ast.shiftEnd) -
+                    parseTimeToMinutes(ast.shiftStart)) /
+                    timelineRange.totalMinutes) *
+                    100
+                )}%`,
+              }}
+            />
+          )}
+
+          {/* Cápsulas de Atividades */}
+          {ast.entries.map((ent) => {
+            const entStartMin = parseTimeToMinutes(ent.startTime);
+            const entEndMin = parseTimeToMinutes(ent.endTime);
+            const leftPct = Math.max(
+              0,
+              ((entStartMin - timelineRange.minM) /
+                timelineRange.totalMinutes) *
+                100
+            );
+            const widthPct = Math.max(
+              1,
+              Math.min(
+                100 - leftPct,
+                ((entEndMin - entStartMin) /
+                  timelineRange.totalMinutes) *
+                  100
+              )
+            );
+
+            return (
+              <Tooltip key={ent.id}>
+                <TooltipTrigger asChild>
+                  <div
+                    className="absolute top-2 bottom-2 rounded-md text-white shadow-2xs overflow-hidden flex items-center px-2 gap-1.5 cursor-pointer hover:brightness-110 hover:z-20 transition-all z-10"
+                    style={{
+                      left: `${leftPct}%`,
+                      width: `calc(${widthPct}% - 1px)`,
+                      backgroundColor: ent.activityColor || "#3B82F6",
+                    }}
+                  >
+                    <span className="text-[11px] font-semibold leading-none truncate drop-shadow-2xs">
+                      {ent.activityName}
+                    </span>
+                    {widthPct >= 14 && (
+                      <span className="ml-auto text-[9px] font-mono bg-black/20 px-1 py-0.5 rounded text-white/90 flex-shrink-0">
+                        {ent.startTime}–{ent.endTime}
+                      </span>
+                    )}
+                    {ent.isLocked && (
+                      <Lock
+                        size={9}
+                        className={`${
+                          widthPct >= 14 ? "" : "ml-auto"
+                        } text-white/70 flex-shrink-0`}
+                      />
+                    )}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  <div className="font-semibold">{ent.activityName}</div>
+                  <div className="text-[11px] text-muted-foreground font-mono">
+                    {ent.startTime} – {ent.endTime}
+                  </div>
+                  {ent.isLocked && (
+                    <div className="text-[10px] text-amber-500 font-medium">
+                      Atividade bloqueada (manual)
+                    </div>
+                  )}
+                  {ent.isFallback && (
+                    <div className="text-[10px] text-blue-400 font-medium">
+                      Atividade base/apoio
+                    </div>
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={(val) => !val && !isPublishing && onClose()}>
       <DialogContent className="max-w-4xl lg:max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden sm:rounded-xl">
@@ -859,153 +1055,27 @@ export default function PublishSchedulesModal({
 
                         {/* Linhas de Cada Assistente */}
                         <div className="divide-y divide-border/50 max-h-[380px] overflow-y-auto">
-                          {previewDetails.assistants.map((ast) => {
-                            return (
-                              <div
-                                key={ast.assistantId}
-                                className="flex items-center hover:bg-muted/15 transition-colors group"
-                              >
-                                {/* Coluna do Assistente */}
-                                <div className="w-48 sm:w-56 px-3 py-2.5 border-r border-border/60 flex items-center gap-2.5 flex-shrink-0 bg-card/60 group-hover:bg-card">
-                                  <div className="w-7 h-7 rounded-full bg-primary/10 text-primary font-bold text-[10px] flex items-center justify-center flex-shrink-0">
-                                    {ast.initials}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <p
-                                        className="text-xs font-semibold text-foreground truncate"
-                                      >
-                                        {ast.assistantName}
-                                      </p>
-                                      {ast.isTemporaryTransfer && (
-                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
-                                          Transferência ({ast.originSchoolName || "Outra Escola"})
-                                        </span>
-                                      )}
-                                    </div>
-                                    <p className="text-[10px] font-mono text-muted-foreground flex items-center gap-1 mt-0.5">
-                                      <Clock size={9} className="text-primary/70 flex-shrink-0" />
-                                      <span>Turno {ast.shiftStart}–{ast.shiftEnd}</span>
-                                    </p>
-                                  </div>
-                                </div>
+                          {previewDetails.assistants
+                            .filter((a) => !a.isTemporaryTransfer)
+                            .map(renderAssistantPreviewRow)}
 
-                                {/* Coluna da Linha do Tempo / Escala */}
-                                <div className="relative flex-1 h-11 px-0 flex items-center bg-muted/5">
-                                  {/* Linhas verticais guia de cada hora */}
-                                  {timelineRange.hours.map((hour) => {
-                                    const leftPct =
-                                      ((hour - timelineRange.startHour) /
-                                        (timelineRange.endHour - timelineRange.startHour)) *
-                                      100;
-                                    return (
-                                      <div
-                                        key={hour}
-                                        className="absolute top-0 bottom-0 border-l border-dashed border-border/25 pointer-events-none"
-                                        style={{ left: `${leftPct}%` }}
-                                      />
-                                    );
-                                  })}
-
-                                  {/* Sombra do Turno Total do Assistente */}
-                                  {ast.shiftStart && ast.shiftEnd && (
-                                    <div
-                                      className="absolute top-1.5 bottom-1.5 rounded-lg bg-primary/[0.04] border border-primary/15 pointer-events-none"
-                                      style={{
-                                        left: `${Math.max(
-                                          0,
-                                          ((parseTimeToMinutes(ast.shiftStart) -
-                                            timelineRange.minM) /
-                                            timelineRange.totalMinutes) *
-                                            100
-                                        )}%`,
-                                        width: `${Math.min(
-                                          100,
-                                          ((parseTimeToMinutes(ast.shiftEnd) -
-                                            parseTimeToMinutes(ast.shiftStart)) /
-                                            timelineRange.totalMinutes) *
-                                            100
-                                        )}%`,
-                                      }}
-                                    />
-                                  )}
-
-                                  {/* Cápsulas de Atividades */}
-                                  {ast.entries.map((ent) => {
-                                    const entStartMin = parseTimeToMinutes(ent.startTime);
-                                    const entEndMin = parseTimeToMinutes(ent.endTime);
-                                    const leftPct = Math.max(
-                                      0,
-                                      ((entStartMin - timelineRange.minM) /
-                                        timelineRange.totalMinutes) *
-                                        100
-                                    );
-                                    const widthPct = Math.max(
-                                      1,
-                                      Math.min(
-                                        100 - leftPct,
-                                        ((entEndMin - entStartMin) /
-                                          timelineRange.totalMinutes) *
-                                          100
-                                      )
-                                    );
-
-                                    return (
-                                      <Tooltip key={ent.id}>
-                                        <TooltipTrigger asChild>
-                                          <div
-                                            className="absolute top-2 bottom-2 rounded-md text-white shadow-2xs overflow-hidden flex items-center px-2 gap-1.5 cursor-pointer hover:brightness-110 hover:z-20 transition-all z-10"
-                                            style={{
-                                              left: `${leftPct}%`,
-                                              width: `calc(${widthPct}% - 1px)`,
-                                              backgroundColor: ent.activityColor || "#3B82F6",
-                                            }}
-                                          >
-                                            <span className="text-[11px] font-semibold leading-none truncate drop-shadow-2xs">
-                                              {ent.activityName}
-                                            </span>
-                                            {widthPct >= 14 && (
-                                              <span className="ml-auto text-[9px] font-mono bg-black/20 px-1 py-0.5 rounded text-white/90 flex-shrink-0">
-                                                {ent.startTime}–{ent.endTime}
-                                              </span>
-                                            )}
-                                            {ent.isLocked && (
-                                              <Lock
-                                                size={9}
-                                                className={`${
-                                                  widthPct >= 14 ? "" : "ml-auto"
-                                                } flex-shrink-0 text-white/80`}
-                                              />
-                                            )}
-                                          </div>
-                                        </TooltipTrigger>
-                                        <TooltipContent
-                                          side="top"
-                                          sideOffset={6}
-                                          className="bg-popover text-popover-foreground border border-border shadow-xl px-3 py-2 rounded-xl text-left min-w-[170px]"
-                                        >
-                                          <div className="flex items-center gap-2">
-                                            <span
-                                              className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                                              style={{
-                                                backgroundColor: ent.activityColor || "#3B82F6",
-                                              }}
-                                            />
-                                            <span className="font-semibold text-xs text-foreground">
-                                              {ent.activityName}
-                                            </span>
-                                          </div>
-                                          <p className="text-[11px] font-mono text-muted-foreground mt-1">
-                                            {ent.startTime} – {ent.endTime} · {ast.assistantName}
-                                          </p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    );
-                                  })}
-                                </div>
+                          {previewDetails.assistants.some((a) => a.isTemporaryTransfer) && (
+                            <>
+                              <div className="px-3 py-1.5 bg-blue-500/10 border-y border-blue-500/25 flex items-center justify-between">
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                                  <ArrowDownLeft size={12} className="text-blue-600 dark:text-blue-400" />
+                                  Assistentes Recebidos por Transferência Temporária (
+                                  {
+                                    previewDetails.assistants.filter((a) => a.isTemporaryTransfer).length
+                                  }
+                                  )
+                                </span>
                               </div>
-                            );
-                          })}
+                              {previewDetails.assistants
+                                .filter((a) => a.isTemporaryTransfer)
+                                .map(renderAssistantPreviewRow)}
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
