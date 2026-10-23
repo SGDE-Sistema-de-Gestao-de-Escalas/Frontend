@@ -1134,6 +1134,8 @@ export default function PublishSchedulesModal({
                           {week.days.map((d) => {
                             const isChecked = selectedDates.includes(d.isoDate);
                             const dayNum = d.isoDate.split("-")[2];
+                            const val = validationsByDate[d.isoDate];
+                            const canPublish = val?.canPublish ?? false;
                             return (
                               <div
                                 key={d.isoDate}
