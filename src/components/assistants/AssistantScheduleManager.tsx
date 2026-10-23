@@ -121,7 +121,7 @@ export default function AssistantScheduleManager({
   }, [apiProfiles]);
 
   const [showAddScheduleModal, setShowAddScheduleModal] = useState(false);
-  const [editingScheduleId, setEditingScheduleId] = useState<number | null>(null);
+  const [editingScheduleId, setEditingScheduleId] = useState<string | number | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [scheduleFieldErrors, setScheduleFieldErrors] = useState<{ start?: string; end?: string }>({});
   const [scheduleToDelete, setScheduleToDelete] = useState<AssistantScheduleItem | null>(null);
