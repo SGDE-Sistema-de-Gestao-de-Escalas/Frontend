@@ -1184,10 +1184,12 @@ export function resolveAssistantShiftBounds(params: {
 
 export interface SlotEntryMetadata {
   entryId?: string;
+  activityTypeId?: string | null;
   activityName: string;
   activityColor?: string | null;
   isFallback?: boolean;
   isLocked?: boolean;
+  ruleId?: string | null;
   replacedAssistantId?: string | null;
   replacementReason?: string | null;
 }
@@ -1258,6 +1260,8 @@ export function buildDayMatrixFromApi(params: {
         row[i] = blockState;
         metaRow[i] = {
           entryId: entry.id,
+          activityTypeId: entry.activity_type_id,
+          ruleId: entry.schedule_rule_id,
           activityName:
             entry.activity_name ||
             (entry.is_fallback ? "Apoio Escola" : "Atividade"),

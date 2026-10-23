@@ -51,6 +51,18 @@ export const PRESET_COLORS = [
   "#E11D48", "#7C3AED", "#0EA5E9", "#64748B", "#84CC16", "#1A56DB",
 ];
 
+export interface MergedScheduleBlockMeta {
+  entryId?: string;
+  activityTypeId?: string | null;
+  activityName?: string;
+  activityColor?: string | null;
+  isFallback?: boolean;
+  isLocked?: boolean;
+  ruleId?: string | null;
+  replacedAssistantId?: string | null;
+  replacementReason?: string | null;
+}
+
 export interface MergedScheduleBlock {
   state: BlockState;
   start: number;
@@ -62,44 +74,24 @@ export interface MergedScheduleBlock {
   entryId?: string;
   isFallback?: boolean;
   isLocked?: boolean;
+  meta?: MergedScheduleBlockMeta;
 }
 
 export function slotsToBlocks(
   slots: BlockState[],
-  meta?: Record<
-    number,
-    {
-      entryId?: string;
-      activityName?: string;
-      activityColor?: string | null;
-      isFallback?: boolean;
-      isLocked?: boolean;
-    }
-  >
+  meta?: Record<number, MergedScheduleBlockMeta>
 ): MergedScheduleBlock[] {
   const raw: {
     state: BlockState;
     start: number;
     count: number;
-    meta?: {
-      entryId?: string;
-      activityName?: string;
-      activityColor?: string | null;
-      isFallback?: boolean;
-      isLocked?: boolean;
-    };
+    meta?: MergedScheduleBlockMeta;
   }[] = [];
   let cur: {
     state: BlockState;
     start: number;
     count: number;
-    meta?: {
-      entryId?: string;
-      activityName?: string;
-      activityColor?: string | null;
-      isFallback?: boolean;
-      isLocked?: boolean;
-    };
+    meta?: MergedScheduleBlockMeta;
   } | null = null;
 
   for (let i = 0; i < slots.length; i++) {
@@ -147,6 +139,7 @@ export function slotsToBlocks(
       entryId: b.meta?.entryId,
       isFallback: b.meta?.isFallback,
       isLocked: b.meta?.isLocked,
+      meta: b.meta,
     };
   });
 }
