@@ -257,7 +257,7 @@ function getDayScheduleDetails(
   return { assistants, totalEntries };
 }
 
-function getDayPublishValidation(
+function validateDayForPublish(
   isoDate: string,
   schedules: BackendScheduleResource[],
   assistants: Assistant[]
