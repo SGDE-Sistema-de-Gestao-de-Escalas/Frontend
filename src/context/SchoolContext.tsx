@@ -65,8 +65,8 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
       if (String(selectedSchoolId) !== staffSchoolId) {
         localStorage.setItem("selected_school_id", staffSchoolId);
         apiClient.defaults.headers.common["X-School-ID"] = staffSchoolId;
+        queryClient.cancelQueries();
         setSelectedSchoolId(user.school_id);
-        queryClient.cancelQueries().then(() => queryClient.clear());
       }
     }
   }, [isStaff, user?.school_id]);
@@ -133,7 +133,7 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
     schoolsList.find((s) => String(s.id) === String(selectedSchoolId)) ||
     (schoolsList.length > 0 ? schoolsList[0] : null);
 
-  async function setSchoolId(id: number | string) {
+  function setSchoolId(id: number | string) {
     if (String(id) === String(selectedSchoolId)) return;
 
     if (isStaff && user?.school_id && String(id) !== String(user.school_id)) {
@@ -144,12 +144,10 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
     const schoolStr = String(id);
     localStorage.setItem("selected_school_id", schoolStr);
     apiClient.defaults.headers.common["X-School-ID"] = schoolStr;
-    setSelectedSchoolId(id);
+    // Cancelar queries ativas da escola anterior antes de mudar o estado para prevenir race conditions
+    queryClient.cancelQueries();
 
-    // Cancelar imediatamente queries pendentes da escola anterior para prevenir race conditions
-    await queryClient.cancelQueries();
-    // Limpar completamente a cache de queries para que não haja contaminação nem duplicação de dados entre escolas
-    queryClient.clear();
+    setSelectedSchoolId(id);
   }
 
   function updateSchool(updated: School) {
