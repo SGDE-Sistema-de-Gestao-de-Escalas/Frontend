@@ -83,7 +83,26 @@ export default function AlertBanner({
     type: "generation_deficit",
   }));
 
-  const allAlerts = [...pendingItems, ...generationAlerts];
+  // Desduplicação: Se o backend já devolve a pendência em pendingItems,
+  // não repetimos o mesmo défice que veio do resultado em memória da geração.
+  const seenKeys = new Set<string>();
+  const allAlerts: typeof pendingItems = [];
+
+  pendingItems.forEach((item) => {
+    const normTime = item.time.replace(/[^0-9:]/g, "");
+    const key = `${item.day}_${item.activityName}_${normTime}`;
+    seenKeys.add(key);
+    allAlerts.push(item);
+  });
+
+  generationAlerts.forEach((gen) => {
+    const normTime = gen.time.replace(/[^0-9:]/g, "");
+    const key = `${gen.day}_${gen.activityName}_${normTime}`;
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      allAlerts.push(gen);
+    }
+  });
 
   const affectedDates = pendingRecalculations?.affected_dates ?? [];
   const daysCount = affectedDates.length || (conflicts ? new Set(conflicts.map((c) => c.date)).size : 0);
