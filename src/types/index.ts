@@ -72,6 +72,7 @@ export interface Assistant {
   last_name?: string;
   name: string;
   initials: string;
+  role?: string;
   is_active?: boolean;
   active?: boolean;
   internal_number?: string;

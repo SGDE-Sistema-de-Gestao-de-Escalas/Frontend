@@ -55,7 +55,7 @@ interface PublishSchedulesModalProps {
   assistants?: Assistant[];
   absences?: BackendAbsenceResource[];
   temporaryAssignments?: AssistantTemporaryAssignmentApi[];
-  selectedSchoolId?: string;
+  selectedSchoolId?: string | number;
   initialSelectedDate?: string;
   onSuccess?: () => void;
 }
@@ -283,7 +283,7 @@ function validateDayForPublish(
   assistants: Assistant[] = [],
   absences: BackendAbsenceResource[] = [],
   temporaryAssignments: AssistantTemporaryAssignmentApi[] = [],
-  selectedSchoolId?: string
+  selectedSchoolId?: string | number
 ): {
   canPublish: boolean;
   isPast: boolean;

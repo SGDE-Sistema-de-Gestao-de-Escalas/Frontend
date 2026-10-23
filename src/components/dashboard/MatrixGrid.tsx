@@ -1479,11 +1479,14 @@ const [publishModalState, setPublishModalState] = useState<{
 
   const printableWorkingAssistants: PrintableAssistantSchedule[] = useMemo(() => {
     return workingAssistants.map((assistant) => {
-      const shiftBounds = fixedShiftBoundsByAssistant[assistant.id] || {
-        startSlot: viewStartSlot,
-        endSlot: viewEndSlot,
-      };
       const rowSlots = effectiveMatrix[assistant.id] || [];
+      const shiftBounds: AssistantResolvedShiftBounds =
+        fixedShiftBoundsByAssistant[assistant.id] ||
+        getShiftBoundsFromRow(
+          rowSlots,
+          viewStartSlot,
+          viewEndSlot
+        );
       const blocks = slotsToBlocks(rowSlots, slotMetaByAssistant[assistant.id]);
       return {
         assistant,

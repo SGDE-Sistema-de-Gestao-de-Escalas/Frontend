@@ -768,11 +768,11 @@ export interface AssistantResolvedShiftBounds {
   endSlot: number;
   lunchStart?: number | null;
   lunchEnd?: number | null;
-  lunchStartSlot: number | null;
-  lunchEndSlot: number | null;
-  absenceStartSlot: number | null;
-  absenceEndSlot: number | null;
-  absenceReason: string | null;
+  lunchStartSlot?: number | null;
+  lunchEndSlot?: number | null;
+  absenceStartSlot?: number | null;
+  absenceEndSlot?: number | null;
+  absenceReason?: string | null;
 }
 
 /**
