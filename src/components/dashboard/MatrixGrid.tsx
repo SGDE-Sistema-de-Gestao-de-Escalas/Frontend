@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   AlertTriangle,
+  ArrowDownLeft,
   ArrowRight,
   Building2,
   Calendar,
@@ -25,6 +26,7 @@ import {
   Send,
   Trash2,
   UserX,
+  X
 } from "lucide-react";
 import type { Assistant, BlockState, EntityId, ScheduleMatrix } from "../../types";
 import { Badge } from "../ui/badge";
@@ -96,6 +98,7 @@ import {
   SlotEntryMetadata,
   AssistantResolvedShiftBounds,
 } from "../../utils/scheduleMatrixUtils";
+
 
 interface DayRuleConfig {
   id: string;
@@ -921,6 +924,12 @@ export default function MatrixGrid({
     schedulesList,
   ]);
 
+  const { regularAssistants, transferredAssistants } = useMemo(() => {
+    const regular = workingAssistants.filter((a) => !a.is_temporary_transfer);
+    const transferred = workingAssistants.filter((a) => a.is_temporary_transfer);
+    return { regularAssistants: regular, transferredAssistants: transferred };
+  }, [workingAssistants]);
+
   // Evaluate rules & warnings for any given dayOffset + matrix
   function evaluateDaySchedule(targetOffset: number, mat: ScheduleMatrix) {
     const info = getDateInfo(targetOffset);
@@ -1204,6 +1213,24 @@ export default function MatrixGrid({
     activeAssistants,
   ]);
 
+  const hasAnyIncompleteWarnings = useMemo(
+    () =>
+      modifiedDaysSummary.some((item) =>
+        item.warnings.some((w) => w.id.startsWith("unfilled-slots-"))
+      ),
+    [modifiedDaysSummary]
+  );
+
+  useEffect(() => {
+    if (!editMode || modifiedDaysSummary.length === 0) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [editMode, modifiedDaysSummary.length]);
+
   function handleClickFinishButton() {
     if (!editMode) {
       setEditMode(true);
@@ -1268,12 +1295,21 @@ export default function MatrixGrid({
       setIsPainting(false);
       setPaintAid(null);
 
-      notify.success(
-        `Alterações guardadas com sucesso na base de dados para ${daysToSave.length} ${
-          daysToSave.length === 1 ? "dia" : "dias"
-        }.`,
-        "Escala Gravada"
-      );
+      if (hasAnyIncompleteWarnings) {
+        notify.warning(
+          `Escala guardada como rascunho para ${daysToSave.length} ${
+            daysToSave.length === 1 ? "dia" : "dias"
+          }. Atenção: ainda existem períodos por preencher que devem ser concluídos antes de publicar.`,
+          "Rascunho Guardado"
+        );
+      } else {
+        notify.success(
+          `Alterações guardadas com sucesso na base de dados para ${daysToSave.length} ${
+            daysToSave.length === 1 ? "dia" : "dias"
+          }.`,
+          "Escala Gravada"
+        );
+      }
     } catch (err: any) {
       const msg = err?.response?.data?.message || "Ocorreu um erro ao guardar as escalas.";
       notify.error(msg, "Erro ao Gravar");
@@ -1294,6 +1330,547 @@ export default function MatrixGrid({
   const operatingWindowStr = `${TIME_SLOTS[viewStartSlot] ?? "06:00"}–${
     TIME_SLOTS[viewEndSlot] ?? "21:00"
   }`;
+
+  function renderWorkingAssistantRow(assistant: (typeof activeAssistants)[0]) {
+
+                  const rowSlots = effectiveMatrix[assistant.id] || [];
+                  const shiftBounds: AssistantResolvedShiftBounds =
+                    fixedShiftBoundsByAssistant[assistant.id] ||
+                    getShiftBoundsFromRow(
+                      rowSlots,
+                      viewStartSlot,
+                      viewEndSlot
+                    );
+                  const shiftRangeStr = `${TIME_SLOTS[shiftBounds.startSlot]}–${
+                    TIME_SLOTS[shiftBounds.endSlot]
+                  }`;
+                  const blocks = slotsToBlocks(rowSlots, slotMetaByAssistant[assistant.id]);
+
+                  const hasOutOfBoundsPaint = rowSlots.some(
+                    (st, sIdx) =>
+                      st !== "off" &&
+                      st !== "absent" &&
+                      (sIdx < viewStartSlot || sIdx >= viewEndSlot)
+                  );
+
+                  const clampedShiftStart = Math.max(
+                    shiftBounds.startSlot,
+                    viewStartSlot
+                  );
+                  const clampedShiftEnd = Math.min(shiftBounds.endSlot, viewEndSlot);
+
+                  const clampedLunchStart =
+                    shiftBounds.lunchStartSlot !== null &&
+                    shiftBounds.lunchStartSlot !== undefined
+                      ? Math.max(shiftBounds.lunchStartSlot, viewStartSlot)
+                      : 0;
+                  const clampedLunchEnd =
+                    shiftBounds.lunchEndSlot !== null &&
+                    shiftBounds.lunchEndSlot !== undefined
+                      ? Math.min(shiftBounds.lunchEndSlot, viewEndSlot)
+                      : 0;
+                  const hasLunchBounds =
+                    shiftBounds.lunchStartSlot !== null &&
+                    shiftBounds.lunchEndSlot !== null &&
+                    shiftBounds.lunchStartSlot !== undefined &&
+                    shiftBounds.lunchEndSlot !== undefined &&
+                    shiftBounds.lunchEndSlot > shiftBounds.lunchStartSlot &&
+                    clampedLunchEnd > clampedLunchStart;
+                  const lunchRangeStr = hasLunchBounds
+                    ? `${TIME_SLOTS[shiftBounds.lunchStartSlot!]}-${
+                        TIME_SLOTS[shiftBounds.lunchEndSlot!]
+                      }`
+                    : "";
+
+                  const clampedAbsenceStart =
+                    shiftBounds.absenceStartSlot !== null &&
+                    shiftBounds.absenceStartSlot !== undefined
+                      ? Math.max(shiftBounds.absenceStartSlot, viewStartSlot)
+                      : 0;
+                  const clampedAbsenceEnd =
+                    shiftBounds.absenceEndSlot !== null &&
+                    shiftBounds.absenceEndSlot !== undefined
+                      ? Math.min(shiftBounds.absenceEndSlot, viewEndSlot)
+                      : 0;
+                  const hasAbsenceBounds =
+                    shiftBounds.absenceStartSlot !== null &&
+                    shiftBounds.absenceEndSlot !== null &&
+                    shiftBounds.absenceStartSlot !== undefined &&
+                    shiftBounds.absenceEndSlot !== undefined &&
+                    shiftBounds.absenceEndSlot > shiftBounds.absenceStartSlot &&
+                    clampedAbsenceEnd > clampedAbsenceStart;
+                  const absenceRangeStr = hasAbsenceBounds
+                    ? `${TIME_SLOTS[shiftBounds.absenceStartSlot!]}-${
+                        TIME_SLOTS[shiftBounds.absenceEndSlot!]
+                      }`
+                    : "";
+
+                  return (
+                    <div
+                      key={assistant.id}
+                      className="flex border-b border-border/50 hover:bg-muted/15 transition-colors group"
+                    >
+                      <button
+                        type="button"
+                        className="w-44 flex-shrink-0 px-3 py-2 border-r border-border flex items-center gap-2.5 hover:bg-primary/5 transition-colors group/name text-left"
+                        onClick={() =>
+                          !canEditCurrentDay &&
+                          onSelectAssistant?.(assistant.id, dayOffset)
+                        }
+                      >
+                        <div
+                          className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
+                            assistant.is_temporary_transfer
+                              ? "bg-blue-500/15 group-hover/name:bg-blue-500/25 text-blue-700 dark:text-blue-300"
+                              : "bg-primary/10 group-hover/name:bg-primary/20 text-primary"
+                          }`}
+                        >
+                          <span className="text-[10px] font-bold font-mono">
+                            {assistant.initials}
+                          </span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1 min-w-0">
+                            <p className="text-xs font-medium text-foreground group-hover/name:text-primary truncate transition-colors">
+                              {assistant.name.split(" ")[0]}{" "}
+                              {assistant.name.split(" ").slice(-1)[0]?.[0]
+                                ? `${
+                                    assistant.name.split(" ").slice(-1)[0][0]
+                                  }.`
+                                : ""}
+                            </p>
+                            {assistant.is_temporary_transfer && (
+                              <ActionTooltip
+                                content={`Transferência temporária de ${
+                                  assistant.origin_school_name || "outra escola"
+                                }`}
+                              >
+                                <span className="inline-flex items-center text-blue-600 dark:text-blue-400 shrink-0">
+                                  <ArrowDownLeft size={11} />
+                                </span>
+                              </ActionTooltip>
+                            )}
+                            {hasOutOfBoundsPaint && (
+                              <ActionTooltip content="Tem blocos pintados fora do horário de funcionamento da escola">
+                                <span className="inline-flex items-center">
+                                  <AlertTriangle
+                                    size={11}
+                                    className="text-[#D97706] flex-shrink-0"
+                                  />
+                                </span>
+                              </ActionTooltip>
+                            )}
+                            {hasAbsenceBounds && (
+                              <ActionTooltip
+                                content={`Falta prevista registada: ${absenceRangeStr}${
+                                  shiftBounds.absenceReason
+                                    ? ` (${shiftBounds.absenceReason})`
+                                    : ""
+                                }`}
+                              >
+                                <span className="inline-flex items-center">
+                                  <UserX
+                                    size={11}
+                                    className="text-destructive flex-shrink-0"
+                                  />
+                                </span>
+                              </ActionTooltip>
+                            )}
+                          </div>
+                          <p className="text-[9px] font-mono text-muted-foreground/85 truncate">
+                            Turno: {shiftRangeStr}
+                            {assistant.is_temporary_transfer && assistant.origin_school_name
+                              ? ` · De: ${assistant.origin_school_name}`
+                              : assistant.exception
+                              ? ` · ${assistant.exception}`
+                              : ""}
+                          </p>
+                        </div>
+                      </button>
+
+                      {/* Timeline Row */}
+                      <div
+                        className={`relative flex-1 ${
+                          canEditCurrentDay
+                            ? "h-14 bg-muted/20 select-none"
+                            : "h-11 bg-muted/10"
+                        }`}
+                      >
+                        {/* Background dynamic hour gridlines aligned with header */}
+                        <div className="absolute inset-0 flex pointer-events-none">
+                          {hourSegments.map((seg) => (
+                            <div
+                              key={seg.startSlot}
+                              className="flex-none h-full border-r border-border/35 last:border-r-0"
+                              style={{ width: `${seg.widthPct}%` }}
+                            />
+                          ))}
+                        </div>
+
+                        {/* In Edit Mode: Shift Background Container Frame (Verde) */}
+                        {canEditCurrentDay &&
+                          clampedShiftEnd > clampedShiftStart && (
+                            <div
+                              className="absolute inset-y-1 bg-primary/6 border-2 border-dashed border-primary/45 rounded-xl pointer-events-none z-0"
+                              style={{
+                                left: `${
+                                  ((clampedShiftStart - viewStartSlot) /
+                                    viewSlotsCount) *
+                                  100
+                                }%`,
+                                width: `${
+                                  ((clampedShiftEnd - clampedShiftStart) /
+                                    viewSlotsCount) *
+                                  100
+                                }%`,
+                              }}
+                            >
+                              <span className="absolute -top-0.5 left-2 px-1 bg-card text-[8px] font-mono font-semibold text-primary rounded shadow-2xs">
+                                Horário {shiftRangeStr}
+                              </span>
+                            </div>
+                          )}
+
+                        {/* In Edit Mode: Lunch Break Dashed Frame (Laranja) */}
+                        {canEditCurrentDay && hasLunchBounds && (
+                          <div
+                            className="absolute inset-y-1.5 bg-orange-500/12 border-2 border-dashed border-orange-500/70 rounded-lg pointer-events-none z-0 overflow-hidden"
+                            style={{
+                              left: `${
+                                ((clampedLunchStart - viewStartSlot) /
+                                  viewSlotsCount) *
+                                100
+                              }%`,
+                              width: `${
+                                ((clampedLunchEnd - clampedLunchStart) /
+                                  viewSlotsCount) *
+                                100
+                              }%`,
+                            }}
+                          >
+                            <span className="absolute -top-0.5 left-1.5 px-1 bg-card text-[8px] font-mono font-semibold text-orange-600 dark:text-orange-400 rounded border border-orange-500/30 shadow-2xs">
+                              Almoço {lunchRangeStr}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* In Edit Mode: Scheduled Absence Dashed Frame (Vermelho) */}
+                        {canEditCurrentDay && hasAbsenceBounds && (
+                          <div
+                            className="absolute inset-y-1.5 bg-destructive/12 border-2 border-dashed border-destructive/75 rounded-lg pointer-events-none z-0 overflow-hidden"
+                            style={{
+                              left: `${
+                                ((clampedAbsenceStart - viewStartSlot) /
+                                  viewSlotsCount) *
+                                100
+                              }%`,
+                              width: `${
+                                ((clampedAbsenceEnd - clampedAbsenceStart) /
+                                  viewSlotsCount) *
+                                100
+                              }%`,
+                            }}
+                          >
+                            <span className="absolute -top-0.5 left-1.5 px-1 bg-card text-[8px] font-mono font-semibold text-destructive rounded border border-destructive/30 shadow-2xs truncate max-w-[90%]">
+                              Falta Prevista {absenceRangeStr}
+                              {shiftBounds.absenceReason
+                                ? ` (${shiftBounds.absenceReason})`
+                                : ""}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Highlighted Rule Window */}
+                        {canEditCurrentDay &&
+                          highlightedRule &&
+                          Math.min(highlightedRule.endSlot, viewEndSlot) >
+                            Math.max(
+                              highlightedRule.startSlot,
+                              viewStartSlot
+                            ) && (
+                            <div
+                              className="absolute inset-y-0 bg-primary/12 border-x-2 border-primary pointer-events-none z-10"
+                              style={{
+                                left: `${
+                                  ((Math.max(
+                                    highlightedRule.startSlot,
+                                    viewStartSlot
+                                  ) -
+                                    viewStartSlot) /
+                                    viewSlotsCount) *
+                                  100
+                                }%`,
+                                width: `${
+                                  ((Math.min(
+                                    highlightedRule.endSlot,
+                                    viewEndSlot
+                                  ) -
+                                    Math.max(
+                                      highlightedRule.startSlot,
+                                      viewStartSlot
+                                    )) /
+                                    viewSlotsCount) *
+                                  100
+                                }%`,
+                              }}
+                            />
+                          )}
+
+                        {/* Smooth Merged Capsule Activity Bars */}
+                        {blocks.map((b, bi) => {
+                          const clipStart = Math.max(b.start, viewStartSlot);
+                          const clipEnd = Math.min(
+                            b.start + b.count,
+                            viewEndSlot
+                          );
+                          if (b.state === "off" || clipEnd <= clipStart)
+                            return null;
+
+                          const visibleSlots = clipEnd - clipStart;
+                          const styleConfig = BLOCK_STYLES[b.state];
+                          const displayLabel = b.activityName || styleConfig.label;
+                          const isLocked = b.isLocked ?? styleConfig.locked;
+                          const startTimeStr = TIME_SLOTS[b.start] ?? "";
+                          const endTimeStr =
+                            TIME_SLOTS[Math.min(b.start + b.count, 95)] ??
+                            "24:00";
+                          const durationStr = formatDurationSlots(b.count);
+
+                          const isBlockOutOfShift =
+                            b.start < viewStartSlot ||
+                            b.start + b.count > viewEndSlot;
+
+                          const isMatchesSpotlight = b.state === paintType;
+                          const spotlightClass = isSpotlightActive
+                            ? isMatchesSpotlight
+                              ? "opacity-100 ring-2 ring-white/80 shadow-sm z-10"
+                              : "opacity-30"
+                            : "opacity-95 hover:opacity-100";
+
+                          const radiusClass =
+                            b.hasPrevAdjacent && b.hasNextAdjacent
+                              ? "rounded-none"
+                              : b.hasPrevAdjacent
+                              ? "rounded-l-none rounded-r-lg"
+                              : b.hasNextAdjacent
+                              ? "rounded-l-lg rounded-r-none"
+                              : "rounded-lg";
+
+                          const separatorClass = b.hasPrevAdjacent
+                            ? "border-l-[1.5px] border-card/90"
+                            : "";
+
+                          const showLabel = visibleSlots >= 2;
+                          const showDurationChip = visibleSlots >= 8;
+
+                          const leftPct =
+                            ((clipStart - viewStartSlot) / viewSlotsCount) *
+                            100;
+                          const widthPct =
+                            ((clipEnd - clipStart) / viewSlotsCount) * 100;
+
+                          const padLeftPx =
+                            canEditCurrentDay && !b.hasPrevAdjacent ? 4 : 0;
+                          const padRightPx =
+                            canEditCurrentDay && !b.hasNextAdjacent ? 4 : 0;
+
+                          const barElement = (
+                            <div
+                              key={bi}
+                              onClick={() =>
+                                !canEditCurrentDay &&
+                                onSelectAssistant?.(assistant.id, dayOffset)
+                              }
+                              className={`absolute ${
+                                canEditCurrentDay
+                                  ? "inset-y-3 pointer-events-none"
+                                  : "inset-y-1.5 cursor-pointer hover:brightness-110 hover:z-10 hover:ring-2 hover:ring-white/40"
+                              } ${radiusClass} ${separatorClass} ${
+                                b.activityColor ? "" : styleConfig.bg
+                              } ${spotlightClass} ${
+                                isBlockOutOfShift && canEditCurrentDay
+                                  ? "ring-2 ring-[#D97706]"
+                                  : ""
+                              } text-white shadow-2xs overflow-hidden transition-all flex items-center px-2 gap-1.5 text-left`}
+                              style={{
+                                left: `calc(${leftPct}% + ${padLeftPx}px)`,
+                                width: `calc(${widthPct}% - ${
+                                  padLeftPx + padRightPx
+                                }px)`,
+                                ...(b.activityColor
+                                  ? { backgroundColor: b.activityColor }
+                                  : {}),
+                              }}
+                            >
+                              {showLabel && (
+                                <>
+                                  <span className="text-[11px] font-semibold leading-none tracking-tight truncate drop-shadow-2xs">
+                                    {displayLabel}
+                                  </span>
+                                  {showDurationChip && (
+                                    <span className="ml-auto text-[9px] font-mono bg-black/15 px-1.5 py-0.5 rounded text-white/90 flex-shrink-0">
+                                      {durationStr}
+                                    </span>
+                                  )}
+                                  {isLocked && (
+                                    <Lock
+                                      size={10}
+                                      className={`${
+                                        showDurationChip ? "" : "ml-auto"
+                                      } flex-shrink-0 text-white/80`}
+                                    />
+                                  )}
+                                </>
+                              )}
+
+                              {!showLabel && isLocked && (
+                                <div className="w-full flex items-center justify-center">
+                                  <Lock size={8} className="text-white/80" />
+                                </div>
+                              )}
+                            </div>
+                          );
+
+                          if (canEditCurrentDay) {
+                            return barElement;
+                          }
+
+                          return (
+                            <Tooltip key={bi}>
+                              <TooltipTrigger asChild>
+                                {barElement}
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                sideOffset={6}
+                                className="bg-popover text-popover-foreground border border-border shadow-xl px-3.5 py-2.5 rounded-xl text-left min-w-[190px]"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`w-2.5 h-2.5 rounded-full ${
+                                        b.activityColor ? "" : styleConfig.bg
+                                      }`}
+                                      style={
+                                        b.activityColor
+                                          ? { backgroundColor: b.activityColor }
+                                          : undefined
+                                      }
+                                    />
+                                    <span className="font-semibold text-xs text-foreground">
+                                      {displayLabel}
+                                    </span>
+                                    {b.activityName &&
+                                      b.activityName !== styleConfig.label && (
+                                        <span className="text-[10px] text-muted-foreground">
+                                          ({styleConfig.label})
+                                        </span>
+                                      )}
+                                  </div>
+                                  {isLocked && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                                      <Lock size={9} />
+                                      Fixo
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="mt-1.5 pt-1.5 border-t border-border/60 space-y-0.5">
+                                  <p className="text-xs font-medium text-foreground">
+                                    {assistant.name}
+                                  </p>
+                                  <p className="text-[11px] font-mono text-muted-foreground">
+                                    {startTimeStr} – {endTimeStr}{" "}
+                                    <span className="text-foreground/80 font-semibold">
+                                      ({durationStr})
+                                    </span>
+                                  </p>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        })}
+
+                        {/* Interactive 15-min Paint Overlay in Edit Mode */}
+                        {canEditCurrentDay && (
+                          <div className="absolute inset-0 flex z-20">
+                            {Array.from({ length: viewSlotsCount }, (_, i) => {
+                              const slot = viewStartSlot + i;
+                              const state = rowSlots[slot];
+                              const isInsideShift =
+                                slot >= shiftBounds.startSlot &&
+                                slot < shiftBounds.endSlot;
+                              const nextTime =
+                                TIME_SLOTS[Math.min(slot + 1, 95)] ?? "24:00";
+
+                              return (
+                                <Tooltip key={slot}>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                      className="flex-none h-full cursor-crosshair group/slot flex items-center justify-center px-[1px]"
+                                      style={{
+                                        width: `${(1 / viewSlotsCount) * 100}%`,
+                                      }}
+                                      onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        setIsPainting(true);
+                                        setPaintAid(assistant.id);
+                                        paintSlot(assistant.id, slot);
+                                      }}
+                                      onMouseEnter={() => {
+                                        if (
+                                          isPainting &&
+                                          paintAid === assistant.id
+                                        ) {
+                                          paintSlot(assistant.id, slot);
+                                        }
+                                      }}
+                                    >
+                                      {/* Hover brush preview pill */}
+                                      <div
+                                        className={`w-full h-8 rounded-sm opacity-0 group-hover/slot:opacity-45 transition-opacity ${
+                                          paintType === "off"
+                                            ? "bg-destructive/50 border border-destructive"
+                                            : BLOCK_STYLES[paintType].bg
+                                        }`}
+                                      />
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent
+                                    side="top"
+                                    sideOffset={6}
+                                    className="bg-popover text-popover-foreground border border-border shadow-lg px-3 py-2 rounded-lg text-left"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className={`w-2.5 h-2.5 rounded-full ${
+                                          state !== "off"
+                                            ? BLOCK_STYLES[state].bg
+                                            : "bg-muted-foreground/40"
+                                        }`}
+                                      />
+                                      <span className="font-semibold text-xs text-foreground">
+                                        {BLOCK_STYLES[state].label}
+                                      </span>
+                                      {!isInsideShift && (
+                                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[#D97706]/15 text-[#D97706]">
+                                          Fora do Turno ({shiftRangeStr})
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] font-mono text-muted-foreground mt-0.5">
+                                      {TIME_SLOTS[slot]} – {nextTime} ·{" "}
+                                      {assistant.name}
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+  }
 
   return (
     <TooltipProvider delayDuration={60}>
@@ -1526,6 +2103,25 @@ export default function MatrixGrid({
                 >
                   <RotateCcw size={11} />
                   Repor Dia
+                </button>
+              </ActionTooltip>
+            )}
+
+            {editMode && (
+              <ActionTooltip
+                content={
+                  modifiedDaysSummary.length > 0
+                    ? "Sair do modo de edição (pede confirmação para descartar alterações)"
+                    : "Sair do modo de edição"
+                }
+              >
+                <button
+                  type="button"
+                  onClick={handleRequestCancelEditMode}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-border text-muted-foreground hover:text-destructive hover:border-destructive/30 hover:bg-destructive/10 transition-colors cursor-pointer"
+                >
+                  <X size={11} />
+                  Cancelar
                 </button>
               </ActionTooltip>
             )}
@@ -1983,543 +2579,32 @@ export default function MatrixGrid({
                   </div>
                 </div>
 
-                {/* 1. WORKING ASSISTANTS ROWS */}
-                {workingAssistants.map((assistant) => {
-                  const rowSlots = effectiveMatrix[assistant.id] || [];
-                  const shiftBounds: AssistantResolvedShiftBounds =
-                    fixedShiftBoundsByAssistant[assistant.id] ||
-                    getShiftBoundsFromRow(
-                      rowSlots,
-                      viewStartSlot,
-                      viewEndSlot
-                    );
-                  const shiftRangeStr = `${TIME_SLOTS[shiftBounds.startSlot]}–${
-                    TIME_SLOTS[shiftBounds.endSlot]
-                  }`;
-                  const blocks = slotsToBlocks(rowSlots, slotMetaByAssistant[assistant.id]);
+                {/* 1. REGULAR RESIDENT ASSISTANTS */}
+                {regularAssistants.map(renderWorkingAssistantRow)}
 
-                  const hasOutOfBoundsPaint = rowSlots.some(
-                    (st, sIdx) =>
-                      st !== "off" &&
-                      st !== "absent" &&
-                      (sIdx < viewStartSlot || sIdx >= viewEndSlot)
-                  );
-
-                  const clampedShiftStart = Math.max(
-                    shiftBounds.startSlot,
-                    viewStartSlot
-                  );
-                  const clampedShiftEnd = Math.min(shiftBounds.endSlot, viewEndSlot);
-
-                  const clampedLunchStart =
-                    shiftBounds.lunchStartSlot !== null &&
-                    shiftBounds.lunchStartSlot !== undefined
-                      ? Math.max(shiftBounds.lunchStartSlot, viewStartSlot)
-                      : 0;
-                  const clampedLunchEnd =
-                    shiftBounds.lunchEndSlot !== null &&
-                    shiftBounds.lunchEndSlot !== undefined
-                      ? Math.min(shiftBounds.lunchEndSlot, viewEndSlot)
-                      : 0;
-                  const hasLunchBounds =
-                    shiftBounds.lunchStartSlot !== null &&
-                    shiftBounds.lunchEndSlot !== null &&
-                    shiftBounds.lunchStartSlot !== undefined &&
-                    shiftBounds.lunchEndSlot !== undefined &&
-                    shiftBounds.lunchEndSlot > shiftBounds.lunchStartSlot &&
-                    clampedLunchEnd > clampedLunchStart;
-                  const lunchRangeStr = hasLunchBounds
-                    ? `${TIME_SLOTS[shiftBounds.lunchStartSlot!]}-${
-                        TIME_SLOTS[shiftBounds.lunchEndSlot!]
-                      }`
-                    : "";
-
-                  const clampedAbsenceStart =
-                    shiftBounds.absenceStartSlot !== null &&
-                    shiftBounds.absenceStartSlot !== undefined
-                      ? Math.max(shiftBounds.absenceStartSlot, viewStartSlot)
-                      : 0;
-                  const clampedAbsenceEnd =
-                    shiftBounds.absenceEndSlot !== null &&
-                    shiftBounds.absenceEndSlot !== undefined
-                      ? Math.min(shiftBounds.absenceEndSlot, viewEndSlot)
-                      : 0;
-                  const hasAbsenceBounds =
-                    shiftBounds.absenceStartSlot !== null &&
-                    shiftBounds.absenceEndSlot !== null &&
-                    shiftBounds.absenceStartSlot !== undefined &&
-                    shiftBounds.absenceEndSlot !== undefined &&
-                    shiftBounds.absenceEndSlot > shiftBounds.absenceStartSlot &&
-                    clampedAbsenceEnd > clampedAbsenceStart;
-                  const absenceRangeStr = hasAbsenceBounds
-                    ? `${TIME_SLOTS[shiftBounds.absenceStartSlot!]}-${
-                        TIME_SLOTS[shiftBounds.absenceEndSlot!]
-                      }`
-                    : "";
-
-                  return (
-                    <div
-                      key={assistant.id}
-                      className="flex border-b border-border/50 hover:bg-muted/15 transition-colors group"
-                    >
-                      <button
-                        type="button"
-                        className="w-44 flex-shrink-0 px-3 py-2 border-r border-border flex items-center gap-2.5 hover:bg-primary/5 transition-colors group/name text-left"
-                        onClick={() =>
-                          !canEditCurrentDay &&
-                          onSelectAssistant?.(assistant.id, dayOffset)
-                        }
-                      >
-                        <div className="w-7 h-7 rounded-full bg-primary/10 group-hover/name:bg-primary/20 flex items-center justify-center flex-shrink-0 transition-colors">
-                          <span className="text-[10px] font-bold text-primary font-mono">
-                            {assistant.initials}
-                          </span>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1 flex-wrap">
-                            <p className="text-xs font-medium text-foreground group-hover/name:text-primary truncate transition-colors">
-                              {assistant.name.split(" ")[0]}{" "}
-                              {assistant.name.split(" ").slice(-1)[0]?.[0]
-                                ? `${
-                                    assistant.name.split(" ").slice(-1)[0][0]
-                                  }.`
-                                : ""}
-                            </p>
-                            {assistant.is_temporary_transfer && (
-                              <ActionTooltip content={`Transferência temporária de ${assistant.origin_school_name || "outra escola"}`}>
-                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
-                                  Transferência ({assistant.origin_school_name || "Outra Escola"})
-                                </span>
-                              </ActionTooltip>
-                            )}
-                            {hasOutOfBoundsPaint && (
-                              <ActionTooltip content="Tem blocos pintados fora do horário de funcionamento da escola">
-                                <span className="inline-flex items-center">
-                                  <AlertTriangle
-                                    size={11}
-                                    className="text-[#D97706] flex-shrink-0"
-                                  />
-                                </span>
-                              </ActionTooltip>
-                            )}
-                            {hasAbsenceBounds && (
-                              <ActionTooltip
-                                content={`Falta prevista registada: ${absenceRangeStr}${
-                                  shiftBounds.absenceReason
-                                    ? ` (${shiftBounds.absenceReason})`
-                                    : ""
-                                }`}
-                              >
-                                <span className="inline-flex items-center">
-                                  <UserX
-                                    size={11}
-                                    className="text-destructive flex-shrink-0"
-                                  />
-                                </span>
-                              </ActionTooltip>
-                            )}
-                          </div>
-                          <p className="text-[9px] font-mono text-muted-foreground/85 truncate">
-                            Turno: {shiftRangeStr}
-                            {assistant.exception
-                              ? ` · ${assistant.exception}`
-                              : ""}
-                          </p>
-                        </div>
-                      </button>
-
-                      {/* Timeline Row */}
-                      <div
-                        className={`relative flex-1 ${
-                          canEditCurrentDay
-                            ? "h-14 bg-muted/20 select-none"
-                            : "h-11 bg-muted/10"
-                        }`}
-                      >
-                        {/* Background dynamic hour gridlines aligned with header */}
-                        <div className="absolute inset-0 flex pointer-events-none">
-                          {hourSegments.map((seg) => (
-                            <div
-                              key={seg.startSlot}
-                              className="flex-none h-full border-r border-border/35 last:border-r-0"
-                              style={{ width: `${seg.widthPct}%` }}
-                            />
-                          ))}
-                        </div>
-
-                        {/* In Edit Mode: Shift Background Container Frame (Verde) */}
-                        {canEditCurrentDay &&
-                          clampedShiftEnd > clampedShiftStart && (
-                            <div
-                              className="absolute inset-y-1 bg-primary/6 border-2 border-dashed border-primary/45 rounded-xl pointer-events-none z-0"
-                              style={{
-                                left: `${
-                                  ((clampedShiftStart - viewStartSlot) /
-                                    viewSlotsCount) *
-                                  100
-                                }%`,
-                                width: `${
-                                  ((clampedShiftEnd - clampedShiftStart) /
-                                    viewSlotsCount) *
-                                  100
-                                }%`,
-                              }}
-                            >
-                              <span className="absolute -top-0.5 left-2 px-1 bg-card text-[8px] font-mono font-semibold text-primary rounded shadow-2xs">
-                                Horário {shiftRangeStr}
-                              </span>
-                            </div>
-                          )}
-
-                        {/* In Edit Mode: Lunch Break Dashed Frame (Laranja) */}
-                        {canEditCurrentDay && hasLunchBounds && (
-                          <div
-                            className="absolute inset-y-1.5 bg-orange-500/12 border-2 border-dashed border-orange-500/70 rounded-lg pointer-events-none z-0 overflow-hidden"
-                            style={{
-                              left: `${
-                                ((clampedLunchStart - viewStartSlot) /
-                                  viewSlotsCount) *
-                                100
-                              }%`,
-                              width: `${
-                                ((clampedLunchEnd - clampedLunchStart) /
-                                  viewSlotsCount) *
-                                100
-                              }%`,
-                            }}
-                          >
-                            <span className="absolute -top-0.5 left-1.5 px-1 bg-card text-[8px] font-mono font-semibold text-orange-600 dark:text-orange-400 rounded border border-orange-500/30 shadow-2xs">
-                              Almoço {lunchRangeStr}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* In Edit Mode: Scheduled Absence Dashed Frame (Vermelho) */}
-                        {canEditCurrentDay && hasAbsenceBounds && (
-                          <div
-                            className="absolute inset-y-1.5 bg-destructive/12 border-2 border-dashed border-destructive/75 rounded-lg pointer-events-none z-0 overflow-hidden"
-                            style={{
-                              left: `${
-                                ((clampedAbsenceStart - viewStartSlot) /
-                                  viewSlotsCount) *
-                                100
-                              }%`,
-                              width: `${
-                                ((clampedAbsenceEnd - clampedAbsenceStart) /
-                                  viewSlotsCount) *
-                                100
-                              }%`,
-                            }}
-                          >
-                            <span className="absolute -top-0.5 left-1.5 px-1 bg-card text-[8px] font-mono font-semibold text-destructive rounded border border-destructive/30 shadow-2xs truncate max-w-[90%]">
-                              Falta Prevista {absenceRangeStr}
-                              {shiftBounds.absenceReason
-                                ? ` (${shiftBounds.absenceReason})`
-                                : ""}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Highlighted Rule Window */}
-                        {canEditCurrentDay &&
-                          highlightedRule &&
-                          Math.min(highlightedRule.endSlot, viewEndSlot) >
-                            Math.max(
-                              highlightedRule.startSlot,
-                              viewStartSlot
-                            ) && (
-                            <div
-                              className="absolute inset-y-0 bg-primary/12 border-x-2 border-primary pointer-events-none z-10"
-                              style={{
-                                left: `${
-                                  ((Math.max(
-                                    highlightedRule.startSlot,
-                                    viewStartSlot
-                                  ) -
-                                    viewStartSlot) /
-                                    viewSlotsCount) *
-                                  100
-                                }%`,
-                                width: `${
-                                  ((Math.min(
-                                    highlightedRule.endSlot,
-                                    viewEndSlot
-                                  ) -
-                                    Math.max(
-                                      highlightedRule.startSlot,
-                                      viewStartSlot
-                                    )) /
-                                    viewSlotsCount) *
-                                  100
-                                }%`,
-                              }}
-                            />
-                          )}
-
-                        {/* Smooth Merged Capsule Activity Bars */}
-                        {blocks.map((b, bi) => {
-                          const clipStart = Math.max(b.start, viewStartSlot);
-                          const clipEnd = Math.min(
-                            b.start + b.count,
-                            viewEndSlot
-                          );
-                          if (b.state === "off" || clipEnd <= clipStart)
-                            return null;
-
-                          const visibleSlots = clipEnd - clipStart;
-                          const styleConfig = BLOCK_STYLES[b.state];
-                          const displayLabel = b.activityName || styleConfig.label;
-                          const isLocked = b.isLocked ?? styleConfig.locked;
-                          const startTimeStr = TIME_SLOTS[b.start] ?? "";
-                          const endTimeStr =
-                            TIME_SLOTS[Math.min(b.start + b.count, 95)] ??
-                            "24:00";
-                          const durationStr = formatDurationSlots(b.count);
-
-                          const isBlockOutOfShift =
-                            b.start < viewStartSlot ||
-                            b.start + b.count > viewEndSlot;
-
-                          const isMatchesSpotlight = b.state === paintType;
-                          const spotlightClass = isSpotlightActive
-                            ? isMatchesSpotlight
-                              ? "opacity-100 ring-2 ring-white/80 shadow-sm z-10"
-                              : "opacity-30"
-                            : "opacity-95 hover:opacity-100";
-
-                          const radiusClass =
-                            b.hasPrevAdjacent && b.hasNextAdjacent
-                              ? "rounded-none"
-                              : b.hasPrevAdjacent
-                              ? "rounded-l-none rounded-r-lg"
-                              : b.hasNextAdjacent
-                              ? "rounded-l-lg rounded-r-none"
-                              : "rounded-lg";
-
-                          const separatorClass = b.hasPrevAdjacent
-                            ? "border-l-[1.5px] border-card/90"
-                            : "";
-
-                          const showLabel = visibleSlots >= 2;
-                          const showDurationChip = visibleSlots >= 8;
-
-                          const leftPct =
-                            ((clipStart - viewStartSlot) / viewSlotsCount) *
-                            100;
-                          const widthPct =
-                            ((clipEnd - clipStart) / viewSlotsCount) * 100;
-
-                          const padLeftPx =
-                            canEditCurrentDay && !b.hasPrevAdjacent ? 4 : 0;
-                          const padRightPx =
-                            canEditCurrentDay && !b.hasNextAdjacent ? 4 : 0;
-
-                          const barElement = (
-                            <div
-                              key={bi}
-                              onClick={() =>
-                                !canEditCurrentDay &&
-                                onSelectAssistant?.(assistant.id, dayOffset)
-                              }
-                              className={`absolute ${
-                                canEditCurrentDay
-                                  ? "inset-y-3 pointer-events-none"
-                                  : "inset-y-1.5 cursor-pointer hover:brightness-110 hover:z-10 hover:ring-2 hover:ring-white/40"
-                              } ${radiusClass} ${separatorClass} ${
-                                b.activityColor ? "" : styleConfig.bg
-                              } ${spotlightClass} ${
-                                isBlockOutOfShift && canEditCurrentDay
-                                  ? "ring-2 ring-[#D97706]"
-                                  : ""
-                              } text-white shadow-2xs overflow-hidden transition-all flex items-center px-2 gap-1.5 text-left`}
-                              style={{
-                                left: `calc(${leftPct}% + ${padLeftPx}px)`,
-                                width: `calc(${widthPct}% - ${
-                                  padLeftPx + padRightPx
-                                }px)`,
-                                ...(b.activityColor
-                                  ? { backgroundColor: b.activityColor }
-                                  : {}),
-                              }}
-                            >
-                              {showLabel && (
-                                <>
-                                  <span className="text-[11px] font-semibold leading-none tracking-tight truncate drop-shadow-2xs">
-                                    {displayLabel}
-                                  </span>
-                                  {showDurationChip && (
-                                    <span className="ml-auto text-[9px] font-mono bg-black/15 px-1.5 py-0.5 rounded text-white/90 flex-shrink-0">
-                                      {durationStr}
-                                    </span>
-                                  )}
-                                  {isLocked && (
-                                    <Lock
-                                      size={10}
-                                      className={`${
-                                        showDurationChip ? "" : "ml-auto"
-                                      } flex-shrink-0 text-white/80`}
-                                    />
-                                  )}
-                                </>
-                              )}
-
-                              {!showLabel && isLocked && (
-                                <div className="w-full flex items-center justify-center">
-                                  <Lock size={8} className="text-white/80" />
-                                </div>
-                              )}
-                            </div>
-                          );
-
-                          if (canEditCurrentDay) {
-                            return barElement;
-                          }
-
-                          return (
-                            <Tooltip key={bi}>
-                              <TooltipTrigger asChild>
-                                {barElement}
-                              </TooltipTrigger>
-                              <TooltipContent
-                                side="top"
-                                sideOffset={6}
-                                className="bg-popover text-popover-foreground border border-border shadow-xl px-3.5 py-2.5 rounded-xl text-left min-w-[190px]"
-                              >
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="flex items-center gap-2">
-                                    <span
-                                      className={`w-2.5 h-2.5 rounded-full ${
-                                        b.activityColor ? "" : styleConfig.bg
-                                      }`}
-                                      style={
-                                        b.activityColor
-                                          ? { backgroundColor: b.activityColor }
-                                          : undefined
-                                      }
-                                    />
-                                    <span className="font-semibold text-xs text-foreground">
-                                      {displayLabel}
-                                    </span>
-                                    {b.activityName &&
-                                      b.activityName !== styleConfig.label && (
-                                        <span className="text-[10px] text-muted-foreground">
-                                          ({styleConfig.label})
-                                        </span>
-                                      )}
-                                  </div>
-                                  {isLocked && (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                                      <Lock size={9} />
-                                      Fixo
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="mt-1.5 pt-1.5 border-t border-border/60 space-y-0.5">
-                                  <p className="text-xs font-medium text-foreground">
-                                    {assistant.name}
-                                  </p>
-                                  <p className="text-[11px] font-mono text-muted-foreground">
-                                    {startTimeStr} – {endTimeStr}{" "}
-                                    <span className="text-foreground/80 font-semibold">
-                                      ({durationStr})
-                                    </span>
-                                  </p>
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          );
-                        })}
-
-                        {/* Interactive 15-min Paint Overlay in Edit Mode */}
-                        {canEditCurrentDay && (
-                          <div className="absolute inset-0 flex z-20">
-                            {Array.from({ length: viewSlotsCount }, (_, i) => {
-                              const slot = viewStartSlot + i;
-                              const state = rowSlots[slot];
-                              const isInsideShift =
-                                slot >= shiftBounds.startSlot &&
-                                slot < shiftBounds.endSlot;
-                              const nextTime =
-                                TIME_SLOTS[Math.min(slot + 1, 95)] ?? "24:00";
-
-                              return (
-                                <Tooltip key={slot}>
-                                  <TooltipTrigger asChild>
-                                    <div
-                                      className="flex-none h-full cursor-crosshair group/slot flex items-center justify-center px-[1px]"
-                                      style={{
-                                        width: `${(1 / viewSlotsCount) * 100}%`,
-                                      }}
-                                      onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        setIsPainting(true);
-                                        setPaintAid(assistant.id);
-                                        paintSlot(assistant.id, slot);
-                                      }}
-                                      onMouseEnter={() => {
-                                        if (
-                                          isPainting &&
-                                          paintAid === assistant.id
-                                        ) {
-                                          paintSlot(assistant.id, slot);
-                                        }
-                                      }}
-                                    >
-                                      {/* Hover brush preview pill */}
-                                      <div
-                                        className={`w-full h-8 rounded-sm opacity-0 group-hover/slot:opacity-45 transition-opacity ${
-                                          paintType === "off"
-                                            ? "bg-destructive/50 border border-destructive"
-                                            : BLOCK_STYLES[paintType].bg
-                                        }`}
-                                      />
-                                    </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent
-                                    side="top"
-                                    sideOffset={6}
-                                    className="bg-popover text-popover-foreground border border-border shadow-lg px-3 py-2 rounded-lg text-left"
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <span
-                                        className={`w-2.5 h-2.5 rounded-full ${
-                                          state !== "off"
-                                            ? BLOCK_STYLES[state].bg
-                                            : "bg-muted-foreground/40"
-                                        }`}
-                                      />
-                                      <span className="font-semibold text-xs text-foreground">
-                                        {BLOCK_STYLES[state].label}
-                                      </span>
-                                      {!isInsideShift && (
-                                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[#D97706]/15 text-[#D97706]">
-                                          Fora do Turno ({shiftRangeStr})
-                                        </span>
-                                      )}
-                                    </div>
-                                    <p className="text-[11px] font-mono text-muted-foreground mt-0.5">
-                                      {TIME_SLOTS[slot]} – {nextTime} ·{" "}
-                                      {assistant.name}
-                                    </p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
+                {/* 2. TRANSFERRED-IN ASSISTANTS SECTION */}
+                {transferredAssistants.length > 0 && (
+                  <>
+                    <div className="px-3 py-1.5 bg-blue-500/10 border-b border-blue-500/25 flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                        <ArrowDownLeft size={12} className="text-blue-600 dark:text-blue-400" />
+                        Assistentes Recebidos por Transferência Temporária ({transferredAssistants.length})
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        Reforço inter-escolar · Alocados temporariamente a esta escola
+                      </span>
                     </div>
-                  );
-                })}
+                    {transferredAssistants.map(renderWorkingAssistantRow)}
+                  </>
+                )}
 
-                {/* 2. ABSENT ASSISTANTS SECTION */}
+                {/* 3. ABSENT ASSISTANTS SECTION */}
                 {absentAssistants.length > 0 && (
                   <>
                     <div className="px-3 py-1.5 bg-muted/30 border-b border-border/60 flex items-center justify-between">
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                         <UserX size={11} className="text-destructive" />
-                        Assistentes Ausentes / Cedidos Hoje ({absentAssistants.length}) —
-                        Horário Previsto e Tarefas
+                        Assistentes Ausentes / Cedidos Hoje ({absentAssistants.length}) — Horário Previsto
                       </span>
                       <span className="text-[10px] text-muted-foreground">
                         Linhas desativadas (disabled) · Faltas e transferências inter-escolares
@@ -2992,6 +3077,26 @@ export default function MatrixGrid({
           </DialogHeader>
 
           <div className="p-5 space-y-3 max-h-96 overflow-y-auto">
+            {hasAnyIncompleteWarnings && (
+              <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
+                <AlertTriangle
+                  size={16}
+                  className="mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-400"
+                />
+                <div className="space-y-1">
+                  <p className="font-semibold text-foreground">
+                    Horário com períodos por preencher
+                  </p>
+                  <p className="leading-relaxed opacity-90">
+                    Existem assistentes com espaços em branco sem atividades atribuídas no turno. Como este horário é gravado em modo <strong>Rascunho</strong>, podes guardar agora e continuar a preencher mais tarde.
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    <em>Nota: A publicação só será permitida quando todos os turnos estiverem completos.</em>
+                  </p>
+                </div>
+              </div>
+            )}
+
             {modifiedDaysSummary.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-4">
                 Não restam alterações pendentes para guardar.
@@ -3097,6 +3202,8 @@ export default function MatrixGrid({
                 <span>
                   {saveDaysMutation.isPending
                     ? "A gravar..."
+                    : hasAnyIncompleteWarnings
+                    ? `Guardar Rascunho Mesmo Assim (${modifiedDaysSummary.length})`
                     : `Confirmar e Guardar (${modifiedDaysSummary.length})`}
                 </span>
               </button>
