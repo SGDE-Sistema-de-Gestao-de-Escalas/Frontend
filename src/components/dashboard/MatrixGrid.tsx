@@ -505,6 +505,76 @@ export default function MatrixGrid({
 
   const slotMetaByAssistant = currentDayApiData.slotMetaByAssistant;
 
+  const dayLegendItems = useMemo(() => {
+    const items: { key: string; name: string; color: string }[] = [];
+    const seenNames = new Set<string>();
+
+    activityTypes
+      .filter((at) => at.active !== false)
+      .forEach((at) => {
+        const isLunchSurveillance =
+          at.name.toLowerCase().includes("vigilância almoço") ||
+          at.name.toLowerCase().includes("vigilancia almoco");
+        const color =
+          isLunchSurveillance && (at.color === "#EF4444" || !at.color)
+            ? "#A855F7"
+            : at.color || "#3B82F6";
+        seenNames.add(at.name.toLowerCase());
+        items.push({
+          key: `act-${at.id}`,
+          name: at.name,
+          color,
+        });
+      });
+
+    if (slotMetaByAssistant) {
+      Object.values(slotMetaByAssistant).forEach((metaRow) => {
+        if (!metaRow) return;
+        Object.values(metaRow).forEach((meta) => {
+          if (meta?.activityName && !seenNames.has(meta.activityName.toLowerCase())) {
+            seenNames.add(meta.activityName.toLowerCase());
+            const isLunchSurveillance =
+              meta.activityName.toLowerCase().includes("vigilância almoço") ||
+              meta.activityName.toLowerCase().includes("vigilancia almoco");
+            const color =
+              isLunchSurveillance && (meta.activityColor === "#EF4444" || !meta.activityColor)
+                ? "#A855F7"
+                : meta.activityColor || "#3B82F6";
+            items.push({
+              key: `meta-${meta.activityName}`,
+              name: meta.activityName,
+              color,
+            });
+          }
+        });
+      });
+    }
+
+    if (items.length === 0) {
+      items.push(
+        { key: "acolhimento", name: "Acolhimento", color: "#F59E0B" },
+        { key: "apoio-turmas", name: "Apoio Turmas/escola", color: "#3B82F6" },
+        { key: "intervalo", name: "Intervalo", color: "#10B981" },
+        { key: "vigilancia-almoco", name: "Vigilância almoço", color: "#A855F7" },
+        { key: "limpeza", name: "Limpeza", color: "#8B5CF6" },
+        { key: "entrega", name: "Entrega de alunos", color: "#14B8A6" }
+      );
+    }
+
+    items.push({
+      key: "system-lunch",
+      name: "Pausa Almoço",
+      color: "#F97316",
+    });
+    items.push({
+      key: "system-absent",
+      name: "Falta / Ausência",
+      color: "#EF4444",
+    });
+
+    return items;
+  }, [activityTypes, slotMetaByAssistant]);
+
   function buildApiMatrixForOffset(offset: number): ScheduleMatrix {
     if (offset === dayOffset) {
       return currentDayApiData.matrix;
@@ -1686,7 +1756,7 @@ export default function MatrixGrid({
                                   ? "inset-y-3 pointer-events-none"
                                   : "inset-y-1.5 cursor-pointer hover:brightness-110 hover:z-10 hover:ring-2 hover:ring-white/40"
                               } ${radiusClass} ${separatorClass} ${
-                                b.activityColor ? "" : styleConfig.bg
+                                (b.activityColor === "#EF4444" && (b.activityName?.toLowerCase().includes("vigilância almoço") || b.activityName?.toLowerCase().includes("vigilancia almoco")) ? "#A855F7" : b.activityColor) ? "" : styleConfig.bg
                               } ${spotlightClass} ${
                                 isBlockOutOfShift && canEditCurrentDay
                                   ? "ring-2 ring-[#D97706]"
@@ -1698,7 +1768,7 @@ export default function MatrixGrid({
                                   padLeftPx + padRightPx
                                 }px)`,
                                 ...(b.activityColor
-                                  ? { backgroundColor: b.activityColor }
+                                  ? { backgroundColor: (b.activityColor === "#EF4444" && (b.activityName?.toLowerCase().includes("vigilância almoço") || b.activityName?.toLowerCase().includes("vigilancia almoco")) ? "#A855F7" : b.activityColor) }
                                   : {}),
                               }}
                             >
@@ -1749,11 +1819,11 @@ export default function MatrixGrid({
                                   <div className="flex items-center gap-2">
                                     <span
                                       className={`w-2.5 h-2.5 rounded-full ${
-                                        b.activityColor ? "" : styleConfig.bg
+                                        (b.activityColor === "#EF4444" && (b.activityName?.toLowerCase().includes("vigilância almoço") || b.activityName?.toLowerCase().includes("vigilancia almoco")) ? "#A855F7" : b.activityColor) ? "" : styleConfig.bg
                                       }`}
                                       style={
                                         b.activityColor
-                                          ? { backgroundColor: b.activityColor }
+                                          ? { backgroundColor: (b.activityColor === "#EF4444" && (b.activityName?.toLowerCase().includes("vigilância almoço") || b.activityName?.toLowerCase().includes("vigilancia almoco")) ? "#A855F7" : b.activityColor) }
                                           : undefined
                                       }
                                     />
@@ -2004,33 +2074,7 @@ export default function MatrixGrid({
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
-            {!editMode &&
-              schoolStatus.isOpen &&
-              hasScheduleForCurrentDay &&
-              (
-                [
-                  "collection",
-                  "work",
-                  "surveillance",
-                  "cleaning",
-                  "delivery",
-                  "lunch",
-                  "absent",
-                ] as BlockState[]
-              ).map((s) => (
-                <div key={s} className="flex items-center gap-1.5">
-                  <div
-                    className={`w-3 h-3 rounded-sm ${BLOCK_STYLES[s].bg} flex items-center justify-center shadow-2xs`}
-                  >
-                    {BLOCK_STYLES[s].locked && (
-                      <Lock size={6} className="text-white/80" />
-                    )}
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {BLOCK_STYLES[s].label}
-                  </span>
-                </div>
-              ))}
+            
 
             {/* Copy Schedule button */}
             {!isDayLoading &&
@@ -2861,6 +2905,29 @@ export default function MatrixGrid({
               </div>
             </div>
 
+            
+            {/* Legenda das Atividades (modo de visualização) */}
+            {!editMode && schoolStatus.isOpen && hasScheduleForCurrentDay && (
+              <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between flex-wrap gap-4 text-xs animate-in fade-in-50 duration-200">
+                <div className="flex items-center gap-2 text-foreground font-semibold">
+                  <Info size={14} className="text-primary" />
+                  <span>Legenda de Atividades:</span>
+                </div>
+                <div className="flex items-center gap-4 flex-wrap text-xs">
+                  {dayLegendItems.map((item) => (
+                    <div key={item.key} className="flex items-center gap-1.5">
+                      <div
+                        className="w-3.5 h-3.5 rounded-sm shadow-2xs flex-shrink-0"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="text-foreground/90 font-medium">
+                        {item.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Legenda dos elementos visuais da grelha de planeamento (apenas no modo de edição) */}
             {canEditCurrentDay && (
               <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between flex-wrap gap-4 text-xs animate-in fade-in-50 duration-200">

@@ -11,11 +11,11 @@ export interface BlockStyleConfig {
 export const BLOCK_STYLES: Record<BlockState, BlockStyleConfig> = {
   work: { bg: "bg-[#3B82F6]", label: "Apoio Turmas/escola" },
   collection: { bg: "bg-[#F59E0B]", label: "Acolhimento" },
-  surveillance: { bg: "bg-[#A855F7]", label: "Vigilância / Intervalos" },
+  surveillance: { bg: "bg-[#A855F7]", label: "Vigilância almoço" },
   lunch: { bg: "bg-[#F97316]", label: "Pausa Almoço" },
   cleaning: { bg: "bg-[#8B5CF6]", label: "Limpeza" },
   delivery: { bg: "bg-[#14B8A6]", label: "Entrega de alunos" },
-  absent: { bg: "bg-[#EF4444]", label: "Ausência" },
+  absent: { bg: "bg-[#EF4444]", label: "Falta / Ausência" },
   off: { bg: "bg-transparent border border-border/40", label: "Inativo / Folga" },
 };
 

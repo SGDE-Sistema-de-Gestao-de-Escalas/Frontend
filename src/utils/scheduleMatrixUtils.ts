@@ -1269,7 +1269,12 @@ export function buildDayMatrixFromApi(params: {
           activityName:
             entry.activity_name ||
             (entry.is_fallback ? "Apoio Escola" : "Atividade"),
-          activityColor: entry.activity_color,
+          activityColor:
+            ((entry.activity_name || "").toLowerCase().includes("vigilância almoço") ||
+             (entry.activity_name || "").toLowerCase().includes("vigilancia almoco")) &&
+            (!entry.activity_color || entry.activity_color === "#EF4444")
+              ? "#A855F7"
+              : entry.activity_color,
           isFallback: entry.is_fallback,
           isLocked: entry.is_locked,
           replacedAssistantId: entry.replaced_assistant_id,
