@@ -16,6 +16,7 @@ import {
   Eraser,
   Eye,
   Info,
+  Loader2,
   Lock,
   RefreshCw,
   RotateCcw,
@@ -201,26 +202,42 @@ export default function MatrixGrid({
     return candidates.sort()[candidates.length - 1];
   }, [queryEndDate, dayOffset, copyPickerIsoDate]);
 
-  const { data: assistantsList = [] } = useAssistantsList();
+  const { data: assistantsList = [], isLoading: isLoadingAssistants } =
+    useAssistantsList();
   const { data: schedulesList = [], isLoading: isLoadingSchedules } =
     useSchedulesList({
       start_date: effectiveRangeStartIso,
       end_date: effectiveRangeEndIso,
     });
-  const { data: absencesRes } = useAbsencesList({
+  const { data: absencesRes, isLoading: isLoadingAbsences } = useAbsencesList({
     start_date: effectiveRangeStartIso,
     end_date: effectiveRangeEndIso,
     per_page: 200,
   });
   const { data: scheduleRules = [] } = useScheduleRulesList();
   const { data: activityTypes = [] } = useActivityTypesList();
-  const { data: calendarDays = [] } = useOperatingCalendar(
-    effectiveRangeStartIso,
-    effectiveRangeEndIso
-  );
-  const { data: operatingRules = [] } = useOperatingRules();
-  const { data: operatingExceptions = [] } = useOperatingExceptions();
-  const { data: holidays = [] } = useHolidaysList();
+  const { data: calendarDays = [], isLoading: isLoadingCalendar } =
+    useOperatingCalendar(effectiveRangeStartIso, effectiveRangeEndIso);
+  const { data: operatingRules = [], isLoading: isLoadingOperatingRules } =
+    useOperatingRules();
+  const {
+    data: operatingExceptions = [],
+    isLoading: isLoadingOperatingExceptions,
+  } = useOperatingExceptions();
+  const { data: holidays = [], isLoading: isLoadingHolidays } =
+    useHolidaysList();
+
+  const isOperatingLoading =
+    isLoadingCalendar ||
+    isLoadingOperatingRules ||
+    isLoadingOperatingExceptions ||
+    isLoadingHolidays;
+
+  const isDayLoading =
+    isOperatingLoading ||
+    isLoadingSchedules ||
+    isLoadingAssistants ||
+    isLoadingAbsences;
 
   const operatingSources = useMemo(
     () => ({
@@ -1007,71 +1024,87 @@ export default function MatrixGrid({
                     Modo de Edição
                   </Badge>
                 )}
-                {isPastDay && (
+                {isDayLoading ? (
                   <Badge
                     variant="outline"
-                    className="text-[#D97706] border-[#D97706]/30 bg-[#D97706]/10 text-[10px]"
+                    className="bg-muted text-muted-foreground border-border text-[10px] gap-1"
                   >
-                    Dia Passado · Apenas Consulta
+                    <Loader2 size={10} className="animate-spin text-primary" />
+                    A carregar...
                   </Badge>
-                )}
-                {schoolStatus.isOpen &&
-                  !hasScheduleForCurrentDay &&
-                  !editMode && (
-                    <Badge
-                      variant="outline"
-                      className="text-[#D97706] border-[#D97706]/30 bg-[#D97706]/10 text-[10px]"
-                    >
-                      Escala Não Gerada
-                    </Badge>
-                  )}
-                {schoolStatus.isOpen && hasScheduleForCurrentDay && (
-                  publishStatus.isPublished ? (
-                    <ActionTooltip
-                      content={
-                        publishStatus.publishedAt
-                          ? `Escala publicada em ${new Date(publishStatus.publishedAt).toLocaleString()}`
-                          : "Escala publicada e visível para os assistentes"
-                      }
-                    >
+                ) : (
+                  <>
+                    {isPastDay && (
                       <Badge
                         variant="outline"
-                        className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1 font-medium cursor-default"
+                        className="text-[#D97706] border-[#D97706]/30 bg-[#D97706]/10 text-[10px]"
                       >
-                        <CheckCircle2 size={11} className="text-emerald-600 dark:text-emerald-400" />
-                        Publicada
+                        Dia Passado · Apenas Consulta
                       </Badge>
-                    </ActionTooltip>
-                  ) : (
-                    <ActionTooltip content="Esta escala está em modo rascunho. Os assistentes não a podem ver até ser publicada.">
+                    )}
+                    {schoolStatus.isOpen &&
+                      !hasScheduleForCurrentDay &&
+                      !editMode && (
+                        <Badge
+                          variant="outline"
+                          className="text-[#D97706] border-[#D97706]/30 bg-[#D97706]/10 text-[10px]"
+                        >
+                          Escala Não Gerada
+                        </Badge>
+                      )}
+                    {schoolStatus.isOpen && hasScheduleForCurrentDay && (
+                      publishStatus.isPublished ? (
+                        <ActionTooltip
+                          content={
+                            publishStatus.publishedAt
+                              ? `Escala publicada em ${new Date(publishStatus.publishedAt).toLocaleString()}`
+                              : "Escala publicada e visível para os assistentes"
+                          }
+                        >
+                          <Badge
+                            variant="outline"
+                            className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1 font-medium cursor-default"
+                          >
+                            <CheckCircle2 size={11} className="text-emerald-600 dark:text-emerald-400" />
+                            Publicada
+                          </Badge>
+                        </ActionTooltip>
+                      ) : (
+                        <ActionTooltip content="Esta escala está em modo rascunho. Os assistentes não a podem ver até ser publicada.">
+                          <Badge
+                            variant="outline"
+                            className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[10px] gap-1 font-medium cursor-default"
+                          >
+                            <Clock size={11} className="text-amber-600 dark:text-amber-400" />
+                            Rascunho
+                          </Badge>
+                        </ActionTooltip>
+                      )
+                    )}
+                    {!schoolStatus.isOpen && (
                       <Badge
                         variant="outline"
-                        className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[10px] gap-1 font-medium cursor-default"
+                        className="text-muted-foreground border-border bg-muted/50 text-[10px]"
                       >
-                        <Clock size={11} className="text-amber-600 dark:text-amber-400" />
-                        Rascunho
+                        Encerrado
                       </Badge>
-                    </ActionTooltip>
-                  )
-                )}
-                {!schoolStatus.isOpen && (
-                  <Badge
-                    variant="outline"
-                    className="text-muted-foreground border-border bg-muted/50 text-[10px]"
-                  >
-                    Encerrado
-                  </Badge>
+                    )}
+                  </>
                 )}
               </div>
               <p className="text-xs text-muted-foreground font-mono mt-0.5">
                 {dateLabel ?? `${dayInfo.dayName}, ${dayInfo.dateStr}`}
-                {schoolStatus.isOpen
-                  ? ` · Funcionamento: ${operatingWindowStr}${
-                      schoolStatus.scheduleSourceLabel
-                        ? ` (${schoolStatus.scheduleSourceLabel})`
-                        : ""
-                    }`
-                  : ""}
+                {isDayLoading ? (
+                  " · A verificar regras e escalas..."
+                ) : schoolStatus.isOpen ? (
+                  ` · Funcionamento: ${operatingWindowStr}${
+                    schoolStatus.scheduleSourceLabel
+                      ? ` (${schoolStatus.scheduleSourceLabel})`
+                      : ""
+                  }`
+                ) : (
+                  ""
+                )}
               </p>
             </div>
 
@@ -1134,7 +1167,8 @@ export default function MatrixGrid({
               ))}
 
             {/* Copy Schedule button */}
-            {schoolStatus.isOpen &&
+            {!isDayLoading &&
+              schoolStatus.isOpen &&
               (hasScheduleForCurrentDay || canEditCurrentDay) && (
                 <button
                   type="button"
@@ -1153,7 +1187,8 @@ export default function MatrixGrid({
               )}
 
             {/* Publicar Este Dia (quando em rascunho) */}
-            {!editMode &&
+            {!isDayLoading &&
+              !editMode &&
               schoolStatus.isOpen &&
               hasScheduleForCurrentDay &&
               publishStatus.isDraft && (
@@ -1175,7 +1210,7 @@ export default function MatrixGrid({
               )}
 
             {/* Publicar Vários Dias em Rascunho */}
-            {!editMode && allDraftDays.length > 0 && (
+            {!isDayLoading && !editMode && allDraftDays.length > 0 && (
               <ActionTooltip content="Abrir modal para selecionar e publicar vários dias em rascunho">
                 <button
                   type="button"
@@ -1206,7 +1241,7 @@ export default function MatrixGrid({
               </ActionTooltip>
             )}
 
-            {(schoolStatus.isOpen || editMode) && (
+            {!isDayLoading && (schoolStatus.isOpen || editMode) && (
               <ActionTooltip
                 content={
                   !editMode && isPastDay
@@ -1241,9 +1276,27 @@ export default function MatrixGrid({
         </div>
 
         {/* =================================================================== */}
-        {/* CASE 1: SCHOOL IS CLOSED TODAY (Weekend, Holiday, or School Exception) */}
+        {/* CASE 0: LOADING STATE (F5 / Changing School / Initial Day Fetch)    */}
         {/* =================================================================== */}
-        {!schoolStatus.isOpen ? (
+        {isDayLoading ? (
+          <div className="p-16 text-center flex flex-col items-center justify-center space-y-3 bg-muted/5 min-h-[340px]">
+            <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+              <Loader2 size={24} className="animate-spin text-primary" />
+            </div>
+            <div className="max-w-md space-y-1">
+              <h4 className="text-sm font-semibold text-foreground">
+                A carregar dados do dia...
+              </h4>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                A verificar o estado do estabelecimento e as escalas para{" "}
+                {dayInfo.dayName}, {dayInfo.dateStr}.
+              </p>
+            </div>
+          </div>
+        ) : !schoolStatus.isOpen ? (
+          /* =================================================================== */
+          /* CASE 1: SCHOOL IS CLOSED TODAY (Weekend, Holiday, or School Exception) */
+          /* =================================================================== */
           <div className="p-12 text-center flex flex-col items-center justify-center space-y-3 bg-muted/10">
             <div className="w-12 h-12 rounded-2xl bg-muted border border-border flex items-center justify-center text-muted-foreground">
               {schoolStatus.reasonType === "holiday" ? (
@@ -1296,9 +1349,10 @@ export default function MatrixGrid({
                 A escala ainda não foi gerada para este dia
               </h4>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                {isLoadingSchedules
-                  ? "A verificar escalas na base de dados..."
-                  : `Ainda não existe nenhuma escala gerada para ${dayInfo.dayName}, ${dayInfo.dateStr} (horário da escola: ${operatingWindowStr}). Podes gerar automaticamente a escala para este período, copiar o horário de outro dia ou editar manualmente.`}
+                Ainda não existe nenhuma escala gerada para {dayInfo.dayName},{" "}
+                {dayInfo.dateStr} (horário da escola: {operatingWindowStr}).
+                Podes gerar automaticamente a escala para este período, copiar o
+                horário de outro dia ou editar manualmente.
               </p>
             </div>
 
