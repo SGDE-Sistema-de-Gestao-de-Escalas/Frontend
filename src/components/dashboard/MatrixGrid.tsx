@@ -177,6 +177,9 @@ export default function MatrixGrid({
   const [draftMatricesByDay, setDraftMatricesByDay] = useState<
     Record<number, ScheduleMatrix>
   >({});
+  const [draftSlotMetaByDay, setDraftSlotMetaByDay] = useState<
+    Record<number, Record<EntityId, Record<number, MergedScheduleBlockMeta>>>
+  >({});
   // Track if a day's schedule was copied from another day (also stores the full copied rows so absent assistants show their copied tasks!)
   const [copiedFromByDay, setCopiedFromByDay] = useState<
     Record<number, { sourceOffset: number; sourcePlannedMatrix: ScheduleMatrix }>
@@ -185,6 +188,7 @@ export default function MatrixGrid({
   // Resetar estados de edição e rascunhos quando o admin troca de escola
   useEffect(() => {
     setDraftMatricesByDay({});
+    setDraftSlotMetaByDay({});
     setSavedMatricesByDay({});
     setCopiedFromByDay({});
     setEditMode(false);
@@ -217,6 +221,7 @@ export default function MatrixGrid({
       setShowDiscardConfirmModal(true);
     } else {
       setDraftMatricesByDay({});
+      setDraftSlotMetaByDay({});
       setCopiedFromByDay({});
       setEditMode(false);
       setIsPainting(false);
@@ -533,6 +538,20 @@ const [publishModalState, setPublishModalState] = useState<{
 
   const slotMetaByAssistant = currentDayApiData.slotMetaByAssistant;
 
+  const effectiveSlotMetaByAssistant = useMemo(() => {
+    const draftDayMeta = draftSlotMetaByDay[dayOffset];
+    if (!draftDayMeta) return slotMetaByAssistant;
+
+    const merged: Record<EntityId, Record<number, MergedScheduleBlockMeta>> = {};
+    activeAssistants.forEach((a) => {
+      merged[a.id] = {
+        ...(slotMetaByAssistant[a.id] || {}),
+        ...(draftDayMeta[a.id] || {}),
+      };
+    });
+    return merged;
+  }, [activeAssistants, slotMetaByAssistant, draftSlotMetaByDay, dayOffset]);
+
   const dayLegendItems = useMemo(() => {
     const items: { key: string; name: string; color: string }[] = [];
     const seenNames = new Set<string>();
@@ -736,10 +755,55 @@ const [publishModalState, setPublishModalState] = useState<{
         [dayOffset]: nextDayMat,
       };
     });
+
+    setDraftSlotMetaByDay((prev) => {
+      const dayMeta = { ...(prev[dayOffset] ?? {}) };
+      const assistantMeta = { ...(dayMeta[aid] ?? slotMetaByAssistant[aid] ?? {}) };
+
+      if (paintType === "off") {
+        delete assistantMeta[slot];
+      } else {
+        const activeRule = highlightedRuleId
+          ? dayRulesCatalog.find(
+              (r) => r.id === highlightedRuleId && r.state === paintType
+            )
+          : null;
+
+        const defaultLabel = BLOCK_STYLES[paintType]?.label;
+        const matchedAct = activeRule
+          ? activityTypes.find(
+              (at) => at.name.toLowerCase() === activeRule.title.toLowerCase()
+            )
+          : activityTypes.find(
+              (at) =>
+                at.name.toLowerCase() === defaultLabel?.toLowerCase() ||
+                mapActivityToBlockState(at.name, at.is_fallback) === paintType
+            );
+
+        assistantMeta[slot] = {
+          activityName: activeRule?.title || matchedAct?.name || defaultLabel || "Atividade",
+          activityColor: matchedAct?.color,
+          activityTypeId: matchedAct?.id || null,
+          ruleId: activeRule?.id || null,
+          isFallback: Boolean(matchedAct?.is_fallback),
+        };
+      }
+
+      dayMeta[aid] = assistantMeta;
+      return {
+        ...prev,
+        [dayOffset]: dayMeta,
+      };
+    });
   }
 
   function discardDayDraft(offsetToDiscard: number) {
     setDraftMatricesByDay((prev) => {
+      const copy = { ...prev };
+      delete copy[offsetToDiscard];
+      return copy;
+    });
+    setDraftSlotMetaByDay((prev) => {
       const copy = { ...prev };
       delete copy[offsetToDiscard];
       return copy;
@@ -1402,7 +1466,11 @@ const [publishModalState, setPublishModalState] = useState<{
 
       activeAssistants.forEach((a) => {
         const slots = matrix[a.id] || [];
-        const meta = slotMetaByAssistant[a.id] || {};
+        const draftDayMeta = draftSlotMetaByDay[offset];
+        const meta = {
+          ...(slotMetaByAssistant[a.id] || {}),
+          ...(draftDayMeta?.[a.id] || {}),
+        };
         const blocks = slotsToBlocks(slots, meta).filter(
           (b) => b.state !== "off" && b.state !== "lunch" && b.state !== "absent"
         );
@@ -1436,6 +1504,7 @@ const [publishModalState, setPublishModalState] = useState<{
         ...draftMatricesByDay,
       }));
       setDraftMatricesByDay({});
+      setDraftSlotMetaByDay({});
       setShowFinishModal(false);
       setEditMode(false);
       setIsPainting(false);
@@ -1487,14 +1556,14 @@ const [publishModalState, setPublishModalState] = useState<{
           viewStartSlot,
           viewEndSlot
         );
-      const blocks = slotsToBlocks(rowSlots, slotMetaByAssistant[assistant.id]);
+      const blocks = slotsToBlocks(rowSlots, effectiveSlotMetaByAssistant[assistant.id]);
       return {
         assistant,
         shiftBounds,
         blocks,
       };
     });
-  }, [workingAssistants, fixedShiftBoundsByAssistant, effectiveMatrix, slotMetaByAssistant, viewStartSlot, viewEndSlot]);
+  }, [workingAssistants, fixedShiftBoundsByAssistant, effectiveMatrix, effectiveSlotMetaByAssistant, viewStartSlot, viewEndSlot]);
 
   const printableAbsentAssistants: PrintableAbsentAssistant[] = useMemo(() => {
     return absentAssistants.map((item) => ({
@@ -1531,7 +1600,7 @@ const [publishModalState, setPublishModalState] = useState<{
                   const shiftRangeStr = `${TIME_SLOTS[shiftBounds.startSlot]}–${
                     TIME_SLOTS[shiftBounds.endSlot]
                   }`;
-                  const blocks = slotsToBlocks(rowSlots, slotMetaByAssistant[assistant.id]);
+                  const blocks = slotsToBlocks(rowSlots, effectiveSlotMetaByAssistant[assistant.id]);
 
                   const hasOutOfBoundsPaint = rowSlots.some(
                     (st, sIdx) =>
@@ -3564,6 +3633,7 @@ const [publishModalState, setPublishModalState] = useState<{
               type="button"
               onClick={() => {
                 setDraftMatricesByDay({});
+                setDraftSlotMetaByDay({});
                 setCopiedFromByDay({});
                 setShowDiscardConfirmModal(false);
                 setEditMode(false);

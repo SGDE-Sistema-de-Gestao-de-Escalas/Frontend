@@ -77,6 +77,76 @@ export interface MergedScheduleBlock {
   meta?: MergedScheduleBlockMeta;
 }
 
+export function mapActivityToBlockState(
+  activityName?: string | null,
+  isFallback?: boolean
+): BlockState {
+  if (isFallback) return "work";
+  const norm = (activityName || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  // 1. TAREFAS DE VIGILÂNCIA
+  if (
+    norm.includes("vigilancia") ||
+    norm.includes("portaria") ||
+    norm.includes("recreio") ||
+    norm.includes("intervalo") ||
+    norm.includes("fecho") ||
+    norm.includes("refeitorio") ||
+    norm.includes("cantina")
+  ) {
+    return "surveillance";
+  }
+
+  // 2. ACOLHIMENTO E RECEÇÃO
+  if (
+    norm.includes("acolhimento") ||
+    norm.includes("recolha") ||
+    norm.includes("rececao") ||
+    norm.includes("entrada")
+  ) {
+    return "collection";
+  }
+
+  // 3. ENTREGA DE ALUNOS E SAÍDA
+  if (norm.includes("entrega") || norm.includes("saida")) {
+    return "delivery";
+  }
+
+  // 4. LIMPEZA E HIGIENIZAÇÃO
+  if (
+    norm.includes("limpeza") ||
+    norm.includes("pavilhao") ||
+    norm.includes("higien")
+  ) {
+    return "cleaning";
+  }
+
+  // 5. APOIO A TURMAS / ESCOLA
+  if (
+    norm.includes("apoio") ||
+    norm.includes("turma") ||
+    norm.includes("sala") ||
+    norm.includes("aula")
+  ) {
+    return "work";
+  }
+
+  // 6. PAUSA DE ALMOÇO DO FUNCIONÁRIO
+  if (norm.includes("almoco") || norm.includes("refeicao")) {
+    return "lunch";
+  }
+
+  // 7. AUSÊNCIA / FALTA
+  if (norm.includes("falta") || norm.includes("ausencia")) {
+    return "absent";
+  }
+
+  return "work";
+}
+
 export function slotsToBlocks(
   slots: BlockState[],
   meta?: Record<number, MergedScheduleBlockMeta>
@@ -96,7 +166,16 @@ export function slotsToBlocks(
 
   for (let i = 0; i < slots.length; i++) {
     const s = slots[i];
-    const m = meta?.[i];
+    let m = meta?.[i];
+
+    // Se os metadados pertencerem a uma atividade cujo estado não coincide com o estado atual do slot
+    // (ex: slot era Apoio Escola mas foi pintado para Limpeza), descartar metadados obsoletos
+    if (m?.activityName) {
+      const metaState = mapActivityToBlockState(m.activityName, m.isFallback);
+      if (metaState !== s && s !== "off") {
+        m = undefined;
+      }
+    }
 
     const sameState = cur !== null && cur.state === s;
     const sameEntry =
