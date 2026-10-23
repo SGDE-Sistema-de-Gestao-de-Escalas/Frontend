@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   Building2,
   Calendar,
+  CalendarClock,
   CalendarOff,
   Check,
   CheckCircle2,
@@ -15,25 +17,14 @@ import {
   Eye,
   Info,
   Lock,
+  RefreshCw,
   RotateCcw,
   ShieldAlert,
   Sparkles,
+  Send,
   Trash2,
   UserX,
 } from "lucide-react";
-import {
-  assistants as ASSISTANTS,
-  buildPlannedAssistantRow,
-  generateDayMatrix,
-  getAssistantShiftBounds,
-  getDateInfo,
-  getSchoolDayStatus,
-  isAssistantAbsentOnDay,
-  TIME_SLOTS,
-  VIEW_START,
-  VIEW_END,
-  VIEW_SLOTS,
-} from "../../api/mockData";
 import type { BlockState, EntityId, ScheduleMatrix } from "../../types";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
@@ -52,14 +43,56 @@ import {
   TooltipTrigger,
 } from "../ui/tooltip";
 import ActionTooltip from "../common/ActionTooltip";
-import CustomSelect from "../common/CustomSelect";
+import DatePicker from "../common/DatePicker";
 import { notify } from "../common/FeedbackNotification";
 import {
   BLOCK_STYLES,
   formatDurationSlots,
-  HOUR_LABELS,
   slotsToBlocks,
+  TIME_SLOTS,
 } from "./blockStyles";
+import { useQueries } from "@tanstack/react-query";
+import { useSchool } from "../../context/SchoolContext";
+import { schoolScopedKey } from "../../lib/queryClient";
+import { useAssistantsList } from "../../hooks/api/useAssistants";
+import { useSchedulesList } from "../../hooks/api/useSchedules";
+import { useAbsencesList } from "../../hooks/api/useAbsences";
+import { useScheduleRulesList } from "../../hooks/api/useScheduleRules";
+import { useActivityTypesList } from "../../hooks/api/useActivityTypes";
+import {
+  useOperatingCalendar,
+  useOperatingExceptions,
+  useOperatingRules,
+} from "../../hooks/api/useOperatingHours";
+import { useHolidaysList } from "../../hooks/api/useHolidays";
+import assistantSchedulesService from "../../api/services/assistantSchedules.service";
+import assistantExceptionsService from "../../api/services/assistantExceptions.service";
+import { ASSISTANT_SCHEDULES_KEY } from "../../hooks/api/useAssistantSchedules";
+import { ASSISTANT_EXCEPTIONS_KEY } from "../../hooks/api/useAssistantExceptions";
+import type {
+  AssistantScheduleProfileApi,
+  AssistantExceptionApi,
+} from "../../types/assistantSchedule.types";
+import type { LunchBlockApi } from "../../api/services/schedules.service";
+import PublishSchedulesModal from "./PublishSchedulesModal";
+import {
+  buildDayMatrixFromApi,
+  buildTimelineHourSegments,
+  checkAssistantAbsenceOnDate,
+  getAllDraftDaysFromSchedules,
+  getDateInfo,
+  getIsoDateFromOffset,
+  getOffsetFromIsoDate,
+  getSchedulePublishStatusForDate,
+  getShiftBoundsFromRow,
+  hasGeneratedScheduleForDate,
+  mapActivityToBlockState,
+  resolveAssistantShiftBounds,
+  resolveSchoolDayStatusByIsoDate,
+  timeToSlotIndex,
+  SlotEntryMetadata,
+  AssistantResolvedShiftBounds,
+} from "../../utils/scheduleMatrixUtils";
 
 interface DayRuleConfig {
   id: string;
@@ -73,70 +106,16 @@ interface DayRuleConfig {
   priorityNames: string[];
 }
 
-const DAY_RULES_CATALOG: DayRuleConfig[] = [
-  {
-    id: "R-ACOLH",
-    title: "Vigilância Portaria Manhã",
-    state: "surveillance",
-    startSlot: 28, // 07:00
-    endSlot: 32, // 08:00
-    min: 2,
-    type: "mandatory",
-    daysOfWeek: [0, 1, 2, 3, 4],
-    priorityNames: ["1º Elena R.", "2º Bruno M.", "3º Fábio L."],
-  },
-  {
-    id: "R-RECOLHA",
-    title: "Recolha de Alunos",
-    state: "collection",
-    startSlot: 28, // 07:00
-    endSlot: 32, // 08:00
-    min: 1,
-    type: "mandatory",
-    daysOfWeek: [0, 1, 2, 3, 4],
-    priorityNames: ["1º Daniel C.", "2º Kátia R."],
-  },
-  {
-    id: "R-RECREIO",
-    title: "Vigilância Intervalo Manhã",
-    state: "surveillance",
-    startSlot: 40, // 10:00
-    endSlot: 44, // 11:00
-    min: 2,
-    type: "mandatory",
-    daysOfWeek: [0, 1, 2, 3, 4],
-    priorityNames: ["1º Graça N.", "2º João A.", "3º Fábio L."],
-  },
-  {
-    id: "R-ENTREGA",
-    title: "Entrega de Alunos",
-    state: "delivery",
-    startSlot: 40, // 10:00
-    endSlot: 44, // 11:00
-    min: 1,
-    type: "mandatory",
-    daysOfWeek: [0, 2, 4], // Seg, Qua, Sex
-    priorityNames: ["1º Inês P.", "2º Carla S."],
-  },
-  {
-    id: "R-LIMP-TARDE",
-    title: "Limpeza Pavilhão / Salas",
-    state: "cleaning",
-    startSlot: 64, // 16:00
-    endSlot: 68, // 17:00
-    min: 1,
-    type: "optional",
-    daysOfWeek: [0, 1, 2, 3, 4],
-    priorityNames: ["1º Carla S.", "2º Hugo M.", "3º Luís S."],
-  },
-];
-
 interface MatrixGridProps {
   onSelectAssistant?: (id: EntityId) => void;
   matrix?: ScheduleMatrix;
   dayOffset?: number;
   onChangeDayOffset?: (offset: number) => void;
   dateLabel?: string;
+  lunchBlocksByDate?: Record<string, Record<string, LunchBlockApi>>;
+  queryStartDate?: string;
+  queryEndDate?: string;
+  onRequestRecalculate?: () => void;
 }
 
 function cloneMatrix(m: ScheduleMatrix): ScheduleMatrix {
@@ -152,7 +131,12 @@ export default function MatrixGrid({
   dayOffset = 0,
   onChangeDayOffset,
   dateLabel,
+  lunchBlocksByDate = {},
+  queryStartDate,
+  queryEndDate,
+  onRequestRecalculate,
 }: MatrixGridProps) {
+  const { selectedSchoolId } = useSchool();
   const [editMode, setEditMode] = useState(false);
   // Persisted/confirmed schedules per dayOffset
   const [savedMatricesByDay, setSavedMatricesByDay] = useState<
@@ -167,6 +151,16 @@ export default function MatrixGrid({
     Record<number, { sourceOffset: number; sourcePlannedMatrix: ScheduleMatrix }>
   >({});
 
+  // Resetar estados de edição e rascunhos quando o admin troca de escola
+  useEffect(() => {
+    setDraftMatricesByDay({});
+    setSavedMatricesByDay({});
+    setCopiedFromByDay({});
+    setEditMode(false);
+    setIsPainting(false);
+    setPaintAid(null);
+  }, [selectedSchoolId]);
+
   const [paintType, setPaintType] = useState<BlockState>("work");
   const [focusActiveActivity, setFocusActiveActivity] = useState(true);
   const [highlightedRuleId, setHighlightedRuleId] = useState<string | null>(
@@ -177,26 +171,262 @@ export default function MatrixGrid({
 
   // Modals: Copy Schedule & Finish Validation
   const [showCopyModal, setShowCopyModal] = useState(false);
-  const [copySourceOffset, setCopySourceOffset] = useState<number>(0);
+  // "to_future" = copy current day's schedule (even if past!) to a chosen future date
+  // "from_other" = copy another day's schedule (past or future) into current day
+  const [copyDirection, setCopyDirection] = useState<"to_future" | "from_other">(
+    "to_future"
+  );
+  const [copyPickerIsoDate, setCopyPickerIsoDate] = useState<string>("");
   const [showFinishModal, setShowFinishModal] = useState(false);
+  const [publishModalState, setPublishModalState] = useState<{
+    open: boolean;
+    preselectedDate?: string;
+  }>({ open: false });
 
+  const todayIso = useMemo(() => getIsoDateFromOffset(0), []);
   const dayInfo = getDateInfo(dayOffset);
-  const schoolStatus = getSchoolDayStatus(dayOffset);
+
+  // Ensure the query window covers the user's selected queryStartDate..queryEndDate AND the current dayOffset / copyPickerIsoDate
+  const effectiveRangeStartIso = useMemo(() => {
+    const defaultStart = queryStartDate || getIsoDateFromOffset(-30);
+    const candidates = [defaultStart, getIsoDateFromOffset(dayOffset - 7)];
+    if (copyPickerIsoDate) candidates.push(copyPickerIsoDate);
+    return candidates.sort()[0];
+  }, [queryStartDate, dayOffset, copyPickerIsoDate]);
+
+  const effectiveRangeEndIso = useMemo(() => {
+    const defaultEnd = queryEndDate || getIsoDateFromOffset(30);
+    const candidates = [defaultEnd, getIsoDateFromOffset(dayOffset + 14)];
+    if (copyPickerIsoDate) candidates.push(copyPickerIsoDate);
+    return candidates.sort()[candidates.length - 1];
+  }, [queryEndDate, dayOffset, copyPickerIsoDate]);
+
+  const { data: assistantsList = [] } = useAssistantsList();
+  const { data: schedulesList = [], isLoading: isLoadingSchedules } =
+    useSchedulesList({
+      start_date: effectiveRangeStartIso,
+      end_date: effectiveRangeEndIso,
+    });
+  const { data: absencesRes } = useAbsencesList({
+    start_date: effectiveRangeStartIso,
+    end_date: effectiveRangeEndIso,
+    per_page: 200,
+  });
+  const { data: scheduleRules = [] } = useScheduleRulesList();
+  const { data: activityTypes = [] } = useActivityTypesList();
+  const { data: calendarDays = [] } = useOperatingCalendar(
+    effectiveRangeStartIso,
+    effectiveRangeEndIso
+  );
+  const { data: operatingRules = [] } = useOperatingRules();
+  const { data: operatingExceptions = [] } = useOperatingExceptions();
+  const { data: holidays = [] } = useHolidaysList();
+
+  const operatingSources = useMemo(
+    () => ({
+      calendarDays,
+      operatingRules,
+      operatingExceptions,
+      holidays,
+    }),
+    [calendarDays, operatingRules, operatingExceptions, holidays]
+  );
+
+  function getStatusForIsoDate(isoDate: string) {
+    return resolveSchoolDayStatusByIsoDate(isoDate, operatingSources);
+  }
+
+  const activeAssistants = useMemo(
+    () =>
+      assistantsList.filter(
+        (a) => !a.deleted_at && (a.active ?? a.is_active ?? true)
+      ),
+    [assistantsList]
+  );
+
+  // Queries para perfis de horário contratual e exceções de cada assistente ativo com escopo da escola
+  const assistantScheduleQueries = useQueries({
+    queries: activeAssistants.map((a) => ({
+      queryKey: schoolScopedKey("assistant-schedules", selectedSchoolId, String(a.id)),
+      queryFn: () => assistantSchedulesService.getAll(String(a.id)),
+      enabled: !!selectedSchoolId,
+      staleTime: 5 * 60 * 1000,
+    })),
+  });
+
+  const assistantExceptionQueries = useQueries({
+    queries: activeAssistants.map((a) => ({
+      queryKey: schoolScopedKey("assistant-exceptions", selectedSchoolId, String(a.id)),
+      queryFn: () => assistantExceptionsService.getAll(String(a.id)),
+      enabled: !!selectedSchoolId,
+      staleTime: 5 * 60 * 1000,
+    })),
+  });
+
+  const profilesByAssistant = useMemo(() => {
+    const map: Record<string, AssistantScheduleProfileApi[]> = {};
+    activeAssistants.forEach((a, idx) => {
+      map[String(a.id)] = assistantScheduleQueries[idx]?.data || [];
+    });
+    return map;
+  }, [activeAssistants, assistantScheduleQueries]);
+
+  const exceptionsByAssistant = useMemo(() => {
+    const map: Record<string, AssistantExceptionApi[]> = {};
+    activeAssistants.forEach((a, idx) => {
+      map[String(a.id)] = assistantExceptionQueries[idx]?.data || [];
+    });
+    return map;
+  }, [activeAssistants, assistantExceptionQueries]);
+
+  const dayRulesCatalog: DayRuleConfig[] = useMemo(() => {
+    return scheduleRules.map((rule) => {
+      const actType = activityTypes.find(
+        (at) => String(at.id) === String(rule.activity_type_id)
+      );
+      const actName = actType?.name || "Regra de Cobertura";
+      return {
+        id: String(rule.id),
+        title: actName,
+        state: mapActivityToBlockState(actName, actType?.is_fallback),
+        startSlot: timeToSlotIndex(rule.period_start),
+        endSlot: timeToSlotIndex(rule.period_end),
+        min: rule.min,
+        type: rule.type,
+        daysOfWeek: rule.days_of_week || [],
+        priorityNames: (rule.assistants || [])
+          .sort((a, b) => a.priority - b.priority)
+          .map((a) => `${a.priority}º ${a.name.split(" ")[0]}`),
+      };
+    });
+  }, [scheduleRules, activityTypes]);
+
+  const schoolStatus = getStatusForIsoDate(dayInfo.isoDate);
   const isPastDay = dayOffset < 0;
   const canEditCurrentDay = editMode && schoolStatus.isOpen && !isPastDay;
+
+  // Dynamic Operating Window for the current day (taking into account fixed schedule, valid_from/valid_until versions, and exceptions)
+  const viewStartSlot = schoolStatus.viewStartSlot;
+  const viewEndSlot = schoolStatus.viewEndSlot;
+  const viewSlotsCount = Math.max(1, viewEndSlot - viewStartSlot);
+  const hourSegments = useMemo(
+    () => buildTimelineHourSegments(viewStartSlot, viewEndSlot),
+    [viewStartSlot, viewEndSlot]
+  );
+
+  // Check if a schedule exists for a given offset (from API, saved locally, or draft)
+  function checkHasScheduleForOffset(offset: number): boolean {
+    if (draftMatricesByDay[offset] || savedMatricesByDay[offset]) return true;
+    const info = getDateInfo(offset);
+    return hasGeneratedScheduleForDate(info.isoDate, schedulesList);
+  }
+
+  const hasScheduleForCurrentDay = useMemo(
+    () => checkHasScheduleForOffset(dayOffset),
+    [dayOffset, draftMatricesByDay, savedMatricesByDay, schedulesList]
+  );
+
+  const publishStatus = useMemo(
+    () => getSchedulePublishStatusForDate(dayInfo.isoDate, schedulesList),
+    [dayInfo.isoDate, schedulesList]
+  );
+
+  const allDraftDays = useMemo(
+    () => getAllDraftDaysFromSchedules(schedulesList),
+    [schedulesList]
+  );
+
+  const currentDayApiData = useMemo(() => {
+    const info = getDateInfo(dayOffset);
+    const status = getStatusForIsoDate(info.isoDate);
+    return buildDayMatrixFromApi({
+      isoDate: info.isoDate,
+      isOpen: status.isOpen,
+      assistants: activeAssistants,
+      schedules: schedulesList,
+      absences: absencesRes?.data || [],
+      lunchBlocksForDate: lunchBlocksByDate[info.isoDate],
+    });
+  }, [
+    dayOffset,
+    operatingSources,
+    activeAssistants,
+    schedulesList,
+    absencesRes,
+    lunchBlocksByDate,
+  ]);
+
+  const slotMetaByAssistant = currentDayApiData.slotMetaByAssistant;
+
+  function buildApiMatrixForOffset(offset: number): ScheduleMatrix {
+    if (offset === dayOffset) {
+      return currentDayApiData.matrix;
+    }
+    const info = getDateInfo(offset);
+    const status = getStatusForIsoDate(info.isoDate);
+    const { matrix } = buildDayMatrixFromApi({
+      isoDate: info.isoDate,
+      isOpen: status.isOpen,
+      assistants: activeAssistants,
+      schedules: schedulesList,
+      absences: absencesRes?.data || [],
+      lunchBlocksForDate: lunchBlocksByDate[info.isoDate],
+    });
+    return matrix;
+  }
 
   // Base matrix for any dayOffset (taking into account already saved changes)
   function getCommittedMatrixForDay(offset: number): ScheduleMatrix {
     if (savedMatricesByDay[offset]) {
       return savedMatricesByDay[offset];
     }
-    return generateDayMatrix(offset);
+    return buildApiMatrixForOffset(offset);
   }
 
   const baseDayMatrix = useMemo(
-    () => getCommittedMatrixForDay(dayOffset),
-    [savedMatricesByDay, dayOffset]
+    () => (savedMatricesByDay[dayOffset] ? savedMatricesByDay[dayOffset] : currentDayApiData.matrix),
+    [savedMatricesByDay, dayOffset, currentDayApiData]
   );
+
+  // Limites de horário fixos de cada assistente para a data atual (independentemente das tarefas pintadas em rascunho)
+  const fixedShiftBoundsByAssistant = useMemo(() => {
+    const map: Record<EntityId, ReturnType<typeof resolveAssistantShiftBounds>> = {};
+    const copiedInfo = copiedFromByDay[dayOffset];
+
+    activeAssistants.forEach((assistant) => {
+      const bounds = resolveAssistantShiftBounds({
+        assistantId: assistant.id,
+        isoDate: dayInfo.isoDate,
+        dow: dayInfo.dow,
+        viewStartSlot,
+        viewEndSlot,
+        profiles: profilesByAssistant[String(assistant.id)],
+        exceptions: exceptionsByAssistant[String(assistant.id)],
+        copiedSourceRow: copiedInfo?.sourcePlannedMatrix?.[assistant.id],
+        baseDayRow: baseDayMatrix[assistant.id],
+        schedulesList,
+        lunchBlocksForDate: lunchBlocksByDate[dayInfo.isoDate],
+        absences: absencesRes?.data || [],
+      });
+      map[assistant.id] = bounds;
+    });
+
+    return map;
+  }, [
+    activeAssistants,
+    dayInfo.isoDate,
+    dayInfo.dow,
+    viewStartSlot,
+    viewEndSlot,
+    profilesByAssistant,
+    exceptionsByAssistant,
+    copiedFromByDay,
+    dayOffset,
+    baseDayMatrix,
+    schedulesList,
+    lunchBlocksByDate,
+    absencesRes,
+  ]);
 
   const effectiveMatrix: ScheduleMatrix = useMemo(() => {
     if (editMode && draftMatricesByDay[dayOffset]) {
@@ -208,23 +438,23 @@ export default function MatrixGrid({
   // Active rules established for a given day of week
   function getRulesForDow(dow: number): DayRuleConfig[] {
     if (dow >= 5) return [];
-    return DAY_RULES_CATALOG.filter((r) => r.daysOfWeek.includes(dow));
+    return dayRulesCatalog.filter((r) => r.daysOfWeek.includes(dow));
   }
 
   const rulesForToday = useMemo(
     () => (schoolStatus.isOpen ? getRulesForDow(dayInfo.dow) : []),
-    [schoolStatus.isOpen, dayInfo.dow]
+    [schoolStatus.isOpen, dayInfo.dow, dayRulesCatalog]
   );
 
   // Activities that apply to this day
   const availablePaintTypes = useMemo(() => {
     const ruleStates = new Set<BlockState>();
     rulesForToday.forEach((r) => ruleStates.add(r.state));
-    const ordered: BlockState[] = ["work"];
+    const ordered: BlockState[] = [];
     (
-      ["surveillance", "collection", "delivery", "cleaning"] as BlockState[]
+      ["collection", "work", "surveillance", "cleaning", "delivery"] as BlockState[]
     ).forEach((s) => {
-      if (ruleStates.has(s)) ordered.push(s);
+      if (ruleStates.has(s) || s === "work" || s === "collection") ordered.push(s);
     });
     ordered.push("lunch", "off");
     return ordered;
@@ -274,32 +504,93 @@ export default function MatrixGrid({
     });
   }
 
-  // Handle copying a schedule from `copySourceOffset` onto current `dayOffset`
-  function handleConfirmCopySchedule() {
-    if (!canEditCurrentDay) return;
-    const sourceMatrix =
-      draftMatricesByDay[copySourceOffset] ??
-      getCommittedMatrixForDay(copySourceOffset);
+  // Find next open future day for default picker value
+  function findNextOpenFutureIso(excludeIso: string): string {
+    for (let off = Math.max(0, dayOffset + 1); off <= 120; off++) {
+      const iso = getIsoDateFromOffset(off);
+      if (iso !== excludeIso && getStatusForIsoDate(iso).isOpen) {
+        return iso;
+      }
+    }
+    return getIsoDateFromOffset(1);
+  }
 
-    // Build full planned rows from the source day (even if someone was absent on source day, take their planned tasks)
+  function findPreviousOpenIso(excludeIso: string): string {
+    for (let off = dayOffset - 1; off >= -90; off--) {
+      const iso = getIsoDateFromOffset(off);
+      if (iso !== excludeIso && getStatusForIsoDate(iso).isOpen) {
+        return iso;
+      }
+    }
+    return getIsoDateFromOffset(-1);
+  }
+
+  function openCopyScheduleModal(preferredDirection?: "to_future" | "from_other") {
+    const dir =
+      preferredDirection ??
+      (isPastDay || !editMode ? "to_future" : "from_other");
+    setCopyDirection(dir);
+    if (dir === "to_future") {
+      setCopyPickerIsoDate(findNextOpenFutureIso(dayInfo.isoDate));
+    } else {
+      setCopyPickerIsoDate(findPreviousOpenIso(dayInfo.isoDate));
+    }
+    setShowCopyModal(true);
+  }
+
+  // Handle copying a schedule between sourceOffset and targetOffset
+  function handleConfirmCopySchedule() {
+    if (!copyPickerIsoDate) return;
+    const pickedOffset = getOffsetFromIsoDate(copyPickerIsoDate);
+
+    const sourceOffset =
+      copyDirection === "to_future" ? dayOffset : pickedOffset;
+    const targetOffset =
+      copyDirection === "to_future" ? pickedOffset : dayOffset;
+
+    const targetInfo = getDateInfo(targetOffset);
+    const targetStatus = getStatusForIsoDate(targetInfo.isoDate);
+
+    if (targetOffset < 0) {
+      notify.error(
+        "Não é possível copiar uma escala para um dia no passado.",
+        "Data de Destino Inválida"
+      );
+      return;
+    }
+
+    if (!targetStatus.isOpen) {
+      notify.error(
+        "A escola encontra-se encerrada na data de destino selecionada.",
+        "Escola Encerrada"
+      );
+      return;
+    }
+
+    const sourceMatrix =
+      draftMatricesByDay[sourceOffset] ??
+      getCommittedMatrixForDay(sourceOffset);
+
     const sourceFullPlanned: ScheduleMatrix = {};
     const nextTargetDraft: ScheduleMatrix = {};
 
-    ASSISTANTS.forEach((a) => {
-      const sourceRow = sourceMatrix[a.id] || [];
-      const wasSourceAllAbsent = sourceRow.every(
-        (s) => s === "off" || s === "absent"
-      );
-      const effectiveSourceTasks = wasSourceAllAbsent
-        ? buildPlannedAssistantRow(a.id)
-        : [...sourceRow];
+    activeAssistants.forEach((a) => {
+      const sourceRow = sourceMatrix[a.id] || Array(96).fill("off");
+      const effectiveSourceTasks = [...sourceRow];
 
       sourceFullPlanned[a.id] = effectiveSourceTasks;
 
-      // On the target day: if assistant is absent on target day, keep them absent in matrix (and show their copied tasks in the disabled bottom section!)
-      const targetAbsent = isAssistantAbsentOnDay(a.id, dayOffset);
-      if (targetAbsent.absent) {
-        const bounds = getAssistantShiftBounds(a.id);
+      const targetAbsent = checkAssistantAbsenceOnDate(
+        a,
+        targetInfo.isoDate,
+        absencesRes?.data || []
+      );
+      if (targetAbsent.absent && targetAbsent.isFullDay) {
+        const bounds = getShiftBoundsFromRow(
+          effectiveSourceTasks,
+          targetStatus.viewStartSlot,
+          targetStatus.viewEndSlot
+        );
         const absRow: BlockState[] = Array(96).fill("off");
         for (let i = bounds.startSlot; i < bounds.endSlot; i++) {
           absRow[i] = "absent";
@@ -312,51 +603,72 @@ export default function MatrixGrid({
 
     setDraftMatricesByDay((prev) => ({
       ...prev,
-      [dayOffset]: nextTargetDraft,
+      [targetOffset]: nextTargetDraft,
     }));
     setCopiedFromByDay((prev) => ({
       ...prev,
-      [dayOffset]: {
-        sourceOffset: copySourceOffset,
+      [targetOffset]: {
+        sourceOffset,
         sourcePlannedMatrix: sourceFullPlanned,
       },
     }));
     setShowCopyModal(false);
 
-    const srcInfo = getDateInfo(copySourceOffset);
+    // Ensure Edit Mode is enabled and navigate to targetOffset if copying to a future day
+    setEditMode(true);
+    if (targetOffset !== dayOffset && onChangeDayOffset) {
+      onChangeDayOffset(targetOffset);
+    }
+
+    const srcInfo = getDateInfo(sourceOffset);
     notify.success(
-      `Escala de ${srcInfo.dayName} (${srcInfo.dateStr}) copiada para ${dayInfo.dayName} (${dayInfo.dateStr}).`,
-      "Escala Copiada"
+      `Horário de ${srcInfo.dayName} (${srcInfo.dateStr}) copiado para ${targetInfo.dayName} (${targetInfo.dateStr}). Revê e clica em "Concluir Edição" para guardar.`,
+      "Horário Copiado"
     );
   }
 
   // Split assistants into Working vs. Absent Today (at the bottom, disabled)
   const { workingAssistants, absentAssistants } = useMemo(() => {
-    const working: typeof ASSISTANTS = [];
+    const working: typeof activeAssistants = [];
     const copiedInfo = copiedFromByDay[dayOffset];
 
     const absent: {
-      assistant: (typeof ASSISTANTS)[0];
+      assistant: (typeof activeAssistants)[0];
       reason: string;
       plannedRow: BlockState[];
-      shiftBounds: ReturnType<typeof getAssistantShiftBounds>;
+      shiftBounds: AssistantResolvedShiftBounds;
       copiedFromLabel?: string;
     }[] = [];
 
-    ASSISTANTS.forEach((a) => {
-      const absInfo = isAssistantAbsentOnDay(a.id, dayOffset);
-      if (absInfo.absent) {
+    activeAssistants.forEach((a) => {
+      const absInfo = checkAssistantAbsenceOnDate(
+        a,
+        dayInfo.isoDate,
+        absencesRes?.data || []
+      );
+      if (absInfo.absent && absInfo.isFullDay) {
         const copiedRow = copiedInfo?.sourcePlannedMatrix?.[a.id];
+        const fallbackRow = baseDayMatrix[a.id] || Array(96).fill("off");
+        const plannedRow = copiedRow ?? fallbackRow;
         const srcDateInfo =
           copiedInfo !== undefined
             ? getDateInfo(copiedInfo.sourceOffset)
             : null;
 
+        const fixedBounds = fixedShiftBoundsByAssistant[a.id];
+        const resolvedBounds: AssistantResolvedShiftBounds =
+          fixedBounds ||
+          getShiftBoundsFromRow(
+            plannedRow,
+            viewStartSlot,
+            viewEndSlot
+          );
+
         absent.push({
           assistant: a,
           reason: absInfo.reason || "Ausência Registada",
-          plannedRow: copiedRow ?? buildPlannedAssistantRow(a.id),
-          shiftBounds: getAssistantShiftBounds(a.id),
+          plannedRow,
+          shiftBounds: resolvedBounds,
           copiedFromLabel: srcDateInfo
             ? `${srcDateInfo.dayShort} ${srcDateInfo.dateStr}`
             : undefined,
@@ -367,14 +679,27 @@ export default function MatrixGrid({
     });
 
     return { workingAssistants: working, absentAssistants: absent };
-  }, [dayOffset, copiedFromByDay]);
+  }, [
+    activeAssistants,
+    dayOffset,
+    dayInfo.isoDate,
+    absencesRes,
+    copiedFromByDay,
+    baseDayMatrix,
+    fixedShiftBoundsByAssistant,
+    viewStartSlot,
+    viewEndSlot,
+  ]);
 
   // Evaluate rules & warnings for any given dayOffset + matrix
   function evaluateDaySchedule(targetOffset: number, mat: ScheduleMatrix) {
     const info = getDateInfo(targetOffset);
+    const targetStatus = getStatusForIsoDate(info.isoDate);
     const rules = getRulesForDow(info.dow);
-    const workingOnDay = ASSISTANTS.filter(
-      (a) => !isAssistantAbsentOnDay(a.id, targetOffset).absent
+    const workingOnDay = activeAssistants.filter(
+      (a) =>
+        !checkAssistantAbsenceOnDate(a, info.isoDate, absencesRes?.data || [])
+          .absent
     );
 
     const evaluations = rules.map((rule) => {
@@ -430,7 +755,11 @@ export default function MatrixGrid({
 
     workingOnDay.forEach((a) => {
       const row = mat[a.id] || [];
-      const bounds = getAssistantShiftBounds(a.id);
+      const bounds = getShiftBoundsFromRow(
+        row,
+        targetStatus.viewStartSlot,
+        targetStatus.viewEndSlot
+      );
       const outOfBoundsSlots: number[] = [];
       let lunchSlotsCount = 0;
       let activeWorkSlots = 0;
@@ -439,7 +768,10 @@ export default function MatrixGrid({
         const st = row[s];
         if (st !== "off" && st !== "absent") {
           activeWorkSlots++;
-          if (s < bounds.startSlot || s >= bounds.endSlot) {
+          if (
+            s < targetStatus.viewStartSlot ||
+            s >= targetStatus.viewEndSlot
+          ) {
             outOfBoundsSlots.push(s);
           }
         }
@@ -454,16 +786,16 @@ export default function MatrixGrid({
           TIME_SLOTS[
             Math.min(outOfBoundsSlots[outOfBoundsSlots.length - 1] + 1, 95)
           ];
-        const shiftStr = `${TIME_SLOTS[bounds.startSlot]}–${
-          TIME_SLOTS[bounds.endSlot]
+        const openStr = `${TIME_SLOTS[targetStatus.viewStartSlot]}–${
+          TIME_SLOTS[targetStatus.viewEndSlot] ?? "24:00"
         }`;
         warnings.push({
           id: `oob-${a.id}`,
           severity: "warning",
-          title: `Fora do horário do turno: ${a.name}`,
+          title: `Fora do horário de funcionamento: ${a.name}`,
           detail: `Tem ${formatDurationSlots(
             outOfBoundsSlots.length
-          )} (${firstOut}–${lastOut}) pintados fora do seu horário (${shiftStr}).`,
+          )} (${firstOut}–${lastOut}) pintados fora do horário de funcionamento da escola (${openStr}).`,
         });
       }
 
@@ -479,13 +811,80 @@ export default function MatrixGrid({
       }
     });
 
+    // 3. Ausências previstas (faltas parciais ou registadas) e aviso de sobreposição
+    activeAssistants.forEach((a) => {
+      const absInfo = checkAssistantAbsenceOnDate(
+        a,
+        info.isoDate,
+        absencesRes?.data || []
+      );
+      if (absInfo.absent) {
+        const aStart = Math.max(absInfo.startSlot ?? 0, targetStatus.viewStartSlot);
+        const aEnd = Math.min(absInfo.endSlot ?? 96, targetStatus.viewEndSlot);
+        const row = mat[a.id] || [];
+        let conflictSlots = 0;
+
+        for (let s = aStart; s < aEnd && s < row.length; s++) {
+          if (row[s] !== "off" && row[s] !== "absent") {
+            conflictSlots++;
+          }
+        }
+
+        const absTimeStr = `${TIME_SLOTS[absInfo.startSlot ?? 0]}–${
+          TIME_SLOTS[absInfo.endSlot ?? 96]
+        }`;
+
+        if (conflictSlots > 0) {
+          warnings.push({
+            id: `absence-conflict-${a.id}`,
+            severity: "warning",
+            title: `Atividade atribuída durante falta prevista: ${a.name}`,
+            detail: `Tem ausência registada (${absInfo.reason}) das ${absTimeStr}, mas tem ${formatDurationSlots(
+              conflictSlots
+            )} com atividades atribuídas.`,
+          });
+        } else {
+          warnings.push({
+            id: `absence-info-${a.id}`,
+            severity: "info",
+            title: `Ausência registada: ${a.name}`,
+            detail: `Tem ausência prevista das ${absTimeStr} (${absInfo.reason}).`,
+          });
+        }
+      }
+    });
+
     return { ruleEvaluations: evaluations, liveWarnings: warnings };
   }
 
   const { ruleEvaluations, liveWarnings } = useMemo(
     () => evaluateDaySchedule(dayOffset, effectiveMatrix),
-    [dayOffset, effectiveMatrix]
+    [
+      dayOffset,
+      effectiveMatrix,
+      activeAssistants,
+      dayRulesCatalog,
+      absencesRes,
+      operatingSources,
+    ]
   );
+
+  // Altura sincronizada do painel de regras para ajustar o scroll dos avisos em tempo real
+  const rulesPanelRef = useRef<HTMLDivElement>(null);
+  const [rulesPanelHeight, setRulesPanelHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!rulesPanelRef.current) return;
+    const updateHeight = () => {
+      if (rulesPanelRef.current) {
+        setRulesPanelHeight(rulesPanelRef.current.offsetHeight);
+      }
+    };
+    updateHeight();
+    const ro = new ResizeObserver(updateHeight);
+    ro.observe(rulesPanelRef.current);
+    return () => ro.disconnect();
+  }, [ruleEvaluations.length, dayOffset]);
 
   const highlightedRule = useMemo(
     () => rulesForToday.find((r) => r.id === highlightedRuleId) ?? null,
@@ -505,7 +904,7 @@ export default function MatrixGrid({
         let changedAssistantsCount = 0;
         let changedSlotsCount = 0;
 
-        ASSISTANTS.forEach((a) => {
+        activeAssistants.forEach((a) => {
           const dRow = draft[a.id] || [];
           const bRow = base[a.id] || [];
           let diff = false;
@@ -536,7 +935,12 @@ export default function MatrixGrid({
         };
       })
       .filter((item) => item.changedSlotsCount > 0 || item.copiedFromLabel);
-  }, [draftMatricesByDay, savedMatricesByDay, copiedFromByDay]);
+  }, [
+    draftMatricesByDay,
+    savedMatricesByDay,
+    copiedFromByDay,
+    activeAssistants,
+  ]);
 
   function handleClickFinishButton() {
     if (!editMode) {
@@ -570,26 +974,20 @@ export default function MatrixGrid({
     );
   }
 
-  // Open days list for the "Copiar Escala" picker
-  const copyableOpenDays = useMemo(() => {
-    const list: { offset: number; label: string; isPast: boolean }[] = [];
-    for (let off = -7; off <= 21; off++) {
-      if (off === dayOffset) continue;
-      const st = getSchoolDayStatus(off);
-      if (!st.isOpen) continue;
-      const inf = getDateInfo(off);
-      list.push({
-        offset: off,
-        label: `${inf.dayName}, ${inf.dateStr}${off === 0 ? " (Hoje)" : ""}`,
-        isPast: off < 0,
-      });
-    }
-    return list;
-  }, [dayOffset]);
-
   // Is activity spotlight active?
   const isSpotlightActive =
     editMode && focusActiveActivity && paintType !== "off";
+
+  const copyPickerStatus = copyPickerIsoDate
+    ? getStatusForIsoDate(copyPickerIsoDate)
+    : null;
+  const copyPickerDateInfo = copyPickerIsoDate
+    ? getDateInfo(getOffsetFromIsoDate(copyPickerIsoDate))
+    : null;
+
+  const operatingWindowStr = `${TIME_SLOTS[viewStartSlot] ?? "06:00"}–${
+    TIME_SLOTS[viewEndSlot] ?? "21:00"
+  }`;
 
   return (
     <TooltipProvider delayDuration={60}>
@@ -617,6 +1015,45 @@ export default function MatrixGrid({
                     Dia Passado · Apenas Consulta
                   </Badge>
                 )}
+                {schoolStatus.isOpen &&
+                  !hasScheduleForCurrentDay &&
+                  !editMode && (
+                    <Badge
+                      variant="outline"
+                      className="text-[#D97706] border-[#D97706]/30 bg-[#D97706]/10 text-[10px]"
+                    >
+                      Escala Não Gerada
+                    </Badge>
+                  )}
+                {schoolStatus.isOpen && hasScheduleForCurrentDay && (
+                  publishStatus.isPublished ? (
+                    <ActionTooltip
+                      content={
+                        publishStatus.publishedAt
+                          ? `Escala publicada em ${new Date(publishStatus.publishedAt).toLocaleString()}`
+                          : "Escala publicada e visível para os assistentes"
+                      }
+                    >
+                      <Badge
+                        variant="outline"
+                        className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1 font-medium cursor-default"
+                      >
+                        <CheckCircle2 size={11} className="text-emerald-600 dark:text-emerald-400" />
+                        Publicada
+                      </Badge>
+                    </ActionTooltip>
+                  ) : (
+                    <ActionTooltip content="Esta escala está em modo rascunho. Os assistentes não a podem ver até ser publicada.">
+                      <Badge
+                        variant="outline"
+                        className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[10px] gap-1 font-medium cursor-default"
+                      >
+                        <Clock size={11} className="text-amber-600 dark:text-amber-400" />
+                        Rascunho
+                      </Badge>
+                    </ActionTooltip>
+                  )
+                )}
                 {!schoolStatus.isOpen && (
                   <Badge
                     variant="outline"
@@ -628,32 +1065,41 @@ export default function MatrixGrid({
               </div>
               <p className="text-xs text-muted-foreground font-mono mt-0.5">
                 {dateLabel ?? `${dayInfo.dayName}, ${dayInfo.dateStr}`}
+                {schoolStatus.isOpen
+                  ? ` · Funcionamento: ${operatingWindowStr}${
+                      schoolStatus.scheduleSourceLabel
+                        ? ` (${schoolStatus.scheduleSourceLabel})`
+                        : ""
+                    }`
+                  : ""}
               </p>
             </div>
 
             {/* Day navigation inside Edit Mode so Admin can browse days */}
             {editMode && onChangeDayOffset && (
               <div className="flex items-center border border-primary/30 rounded-lg overflow-hidden bg-primary/5 ml-1">
-                <button
-                  type="button"
-                  onClick={() => onChangeDayOffset(dayOffset - 1)}
-                  className="px-2 py-1 hover:bg-primary/15 transition-colors border-r border-primary/20 text-primary"
-                  title="Dia anterior"
-                >
-                  <ChevronLeft size={13} />
-                </button>
+                <ActionTooltip content="Dia anterior">
+                  <button
+                    type="button"
+                    onClick={() => onChangeDayOffset(dayOffset - 1)}
+                    className="px-2 py-1 hover:bg-primary/15 transition-colors border-r border-primary/20 text-primary cursor-pointer"
+                  >
+                    <ChevronLeft size={13} />
+                  </button>
+                </ActionTooltip>
                 <span className="px-2.5 py-1 text-[11px] font-mono font-semibold text-primary flex items-center gap-1.5">
                   <Calendar size={11} />
                   {dayInfo.dayShort}, {dayInfo.dateStr}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => onChangeDayOffset(dayOffset + 1)}
-                  className="px-2 py-1 hover:bg-primary/15 transition-colors border-l border-primary/20 text-primary"
-                  title="Dia seguinte"
-                >
-                  <ChevronRight size={13} />
-                </button>
+                <ActionTooltip content="Dia seguinte">
+                  <button
+                    type="button"
+                    onClick={() => onChangeDayOffset(dayOffset + 1)}
+                    className="px-2 py-1 hover:bg-primary/15 transition-colors border-l border-primary/20 text-primary cursor-pointer"
+                  >
+                    <ChevronRight size={13} />
+                  </button>
+                </ActionTooltip>
               </div>
             )}
           </div>
@@ -661,12 +1107,13 @@ export default function MatrixGrid({
           <div className="flex items-center gap-2.5 flex-wrap">
             {!editMode &&
               schoolStatus.isOpen &&
+              hasScheduleForCurrentDay &&
               (
                 [
+                  "collection",
                   "work",
                   "surveillance",
                   "cleaning",
-                  "collection",
                   "delivery",
                   "lunch",
                   "absent",
@@ -686,71 +1133,115 @@ export default function MatrixGrid({
                 </div>
               ))}
 
-            {/* Copy Schedule button inside Edit Mode */}
-            {canEditCurrentDay && (
-              <button
-                type="button"
-                onClick={() => {
-                  const defaultSrc =
-                    copyableOpenDays.find((d) => d.offset === dayOffset - 1)
-                      ?.offset ??
-                    copyableOpenDays[0]?.offset ??
-                    0;
-                  setCopySourceOffset(defaultSrc);
-                  setShowCopyModal(true);
-                }}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-primary/30 bg-primary/5 text-primary hover:bg-primary/15 transition-colors"
-              >
-                <Copy size={11} />
-                Copiar Escala de Outro Dia
-              </button>
+            {/* Copy Schedule button */}
+            {schoolStatus.isOpen &&
+              (hasScheduleForCurrentDay || canEditCurrentDay) && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    openCopyScheduleModal(
+                      isPastDay || !editMode ? "to_future" : "from_other"
+                    )
+                  }
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-primary/30 bg-primary/5 text-primary hover:bg-primary/15 transition-colors"
+                >
+                  <Copy size={11} />
+                  {isPastDay || !editMode
+                    ? "Copiar Horário para Dia Futuro"
+                    : "Copiar Horário"}
+                </button>
+              )}
+
+            {/* Publicar Este Dia (quando em rascunho) */}
+            {!editMode &&
+              schoolStatus.isOpen &&
+              hasScheduleForCurrentDay &&
+              publishStatus.isDraft && (
+                <ActionTooltip content="Publicar a escala deste dia para ficar visível aos assistentes">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPublishModalState({
+                        open: true,
+                        preselectedDate: dayInfo.isoDate,
+                      })
+                    }
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Send size={11} />
+                    Publicar Dia
+                  </button>
+                </ActionTooltip>
+              )}
+
+            {/* Publicar Vários Dias em Rascunho */}
+            {!editMode && allDraftDays.length > 0 && (
+              <ActionTooltip content="Abrir modal para selecionar e publicar vários dias em rascunho">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPublishModalState({
+                      open: true,
+                      preselectedDate: undefined,
+                    })
+                  }
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15 transition-colors cursor-pointer"
+                >
+                  <Send size={11} />
+                  Publicar Escalas ({allDraftDays.length})
+                </button>
+              </ActionTooltip>
             )}
 
             {editMode && draftMatricesByDay[dayOffset] && (
-              <button
-                type="button"
-                onClick={() => discardDayDraft(dayOffset)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              >
-                <RotateCcw size={11} />
-                Repor Dia
-              </button>
+              <ActionTooltip content="Anular alterações não guardadas deste dia">
+                <button
+                  type="button"
+                  onClick={() => discardDayDraft(dayOffset)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                >
+                  <RotateCcw size={11} />
+                  Repor Dia
+                </button>
+              </ActionTooltip>
             )}
 
             {(schoolStatus.isOpen || editMode) && (
-              <button
-                type="button"
-                disabled={!editMode && isPastDay}
-                onClick={handleClickFinishButton}
-                title={
+              <ActionTooltip
+                content={
                   !editMode && isPastDay
-                    ? "Não é possível editar escalas de dias passados"
-                    : undefined
+                    ? "Não é possível editar escalas de dias passados (mas podes copiar este horário para um dia futuro)"
+                    : null
                 }
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                  editMode
-                    ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                    : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
-                }`}
               >
-                <Edit2 size={11} />
-                {editMode
-                  ? modifiedDaysSummary.length > 0
-                    ? `Concluir Edição (${modifiedDaysSummary.length} ${
-                        modifiedDaysSummary.length === 1
-                          ? "dia alterado"
-                          : "dias alterados"
-                      })`
-                    : "Sair da Edição"
-                  : "Editar Escala"}
-              </button>
+                <button
+                  type="button"
+                  disabled={!editMode && isPastDay}
+                  onClick={handleClickFinishButton}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                    editMode
+                      ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                      : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
+                  }`}
+                >
+                  <Edit2 size={11} />
+                  {editMode
+                    ? modifiedDaysSummary.length > 0
+                      ? `Concluir Edição (${modifiedDaysSummary.length} ${
+                          modifiedDaysSummary.length === 1
+                            ? "dia alterado"
+                            : "dias alterados"
+                        })`
+                      : "Sair da Edição"
+                    : "Editar Escala"}
+                </button>
+              </ActionTooltip>
             )}
           </div>
         </div>
 
         {/* =================================================================== */}
         {/* CASE 1: SCHOOL IS CLOSED TODAY (Weekend, Holiday, or School Exception) */}
-        {/* Show ONLY the closed message without any assistant rows!            */}
         {/* =================================================================== */}
         {!schoolStatus.isOpen ? (
           <div className="p-12 text-center flex flex-col items-center justify-center space-y-3 bg-muted/10">
@@ -792,31 +1283,92 @@ export default function MatrixGrid({
               </div>
             )}
           </div>
+        ) : !hasScheduleForCurrentDay && !editMode ? (
+          /* =================================================================== */
+          /* CASE 2: SCHOOL IS OPEN, BUT NO SCHEDULE HAS BEEN GENERATED YET      */
+          /* =================================================================== */
+          <div className="p-12 text-center flex flex-col items-center justify-center space-y-4 bg-muted/10">
+            <div className="w-12 h-12 rounded-2xl bg-[#D97706]/10 border border-[#D97706]/25 flex items-center justify-center text-[#D97706]">
+              <CalendarClock size={22} />
+            </div>
+            <div className="max-w-lg space-y-1.5">
+              <h4 className="text-base font-semibold text-foreground">
+                A escala ainda não foi gerada para este dia
+              </h4>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {isLoadingSchedules
+                  ? "A verificar escalas na base de dados..."
+                  : `Ainda não existe nenhuma escala gerada para ${dayInfo.dayName}, ${dayInfo.dateStr} (horário da escola: ${operatingWindowStr}). Podes gerar automaticamente a escala para este período, copiar o horário de outro dia ou editar manualmente.`}
+              </p>
+            </div>
+
+            {!isPastDay && (
+              <div className="pt-1 flex items-center justify-center gap-2.5 flex-wrap">
+                {onRequestRecalculate && (
+                  <button
+                    type="button"
+                    onClick={onRequestRecalculate}
+                    className="px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors flex items-center gap-1.5 shadow-xs"
+                  >
+                    <RefreshCw size={13} />
+                    Gerar / Recalcular Escala
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => openCopyScheduleModal("from_other")}
+                  className="px-3.5 py-2 rounded-lg border border-primary/30 bg-primary/5 text-primary text-xs font-medium hover:bg-primary/15 transition-colors flex items-center gap-1.5"
+                >
+                  <Copy size={13} />
+                  Copiar Horário de Outro Dia
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditMode(true)}
+                  className="px-3.5 py-2 rounded-lg border border-border bg-card text-foreground text-xs font-medium hover:bg-muted transition-colors flex items-center gap-1.5"
+                >
+                  <Edit2 size={13} />
+                  Criar Manualmente
+                </button>
+              </div>
+            )}
+          </div>
         ) : (
           /* =================================================================== */
-          /* CASE 2: SCHOOL IS OPEN TODAY                                        */
+          /* CASE 3: SCHOOL IS OPEN AND SCHEDULE EXISTS (OR IN EDIT MODE)        */
           /* =================================================================== */
           <>
-            {/* Past day read-only notice inside Edit Mode */}
-            {editMode && isPastDay && (
-              <div className="px-4 py-2.5 bg-[#FEF9EC] dark:bg-amber-950/30 border-b border-[#D97706]/30 flex items-center justify-between gap-3">
+            {/* Past day read-only notice */}
+            {isPastDay && (
+              <div className="px-4 py-2.5 bg-[#FEF9EC] dark:bg-amber-950/30 border-b border-[#D97706]/30 flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2 text-xs text-[#D97706] font-medium">
                   <Eye size={14} />
                   <span>
-                    Está a visualizar um <strong>dia passado</strong> (
-                    {dayInfo.dayName}, {dayInfo.dateStr}). Dias passados estão
-                    bloqueados para alteração, mas pode consultar o horário.
+                    Estás a visualizar um <strong>dia passado</strong> (
+                    {dayInfo.dayName}, {dayInfo.dateStr}). Podes consultar o
+                    horário ou{" "}
+                    <strong>copiá-lo para um dia futuro</strong>.
                   </span>
                 </div>
-                {onChangeDayOffset && (
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => onChangeDayOffset(0)}
-                    className="px-2.5 py-1 rounded-md bg-[#D97706] text-white text-xs font-medium hover:opacity-90 transition-opacity flex-shrink-0"
+                    onClick={() => openCopyScheduleModal("to_future")}
+                    className="px-2.5 py-1 rounded-md border border-[#D97706]/40 bg-card text-[#D97706] text-xs font-medium hover:bg-[#D97706]/10 transition-colors flex items-center gap-1.5"
                   >
-                    Voltar a Hoje
+                    <Copy size={11} />
+                    Copiar para Dia Futuro
                   </button>
-                )}
+                  {onChangeDayOffset && (
+                    <button
+                      type="button"
+                      onClick={() => onChangeDayOffset(0)}
+                      className="px-2.5 py-1 rounded-md bg-[#D97706] text-white text-xs font-medium hover:opacity-90 transition-opacity flex-shrink-0"
+                    >
+                      Voltar a Hoje
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -883,7 +1435,7 @@ export default function MatrixGrid({
                 {/* 2. Day Rules + Live Engine Feedback Panel */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-border/60">
                   {/* Left: Rules established for this day */}
-                  <div className="lg:col-span-7 p-3.5 space-y-2">
+                  <div ref={rulesPanelRef} className="lg:col-span-7 p-3.5 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                         <Clock size={12} className="text-primary" />
@@ -984,8 +1536,8 @@ export default function MatrixGrid({
                   </div>
 
                   {/* Right: Live Validation & Warnings Panel */}
-                  <div className="lg:col-span-5 p-3.5 space-y-2 bg-card/50">
-                    <div className="flex items-center justify-between">
+                  <div className="lg:col-span-5 p-3.5 space-y-2 bg-card/50 flex flex-col justify-start">
+                    <div className="flex items-center justify-between flex-shrink-0">
                       <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                         <ShieldAlert size={13} className="text-[#D97706]" />
                         Feedback & Avisos em Tempo Real ({liveWarnings.length})
@@ -1005,12 +1557,20 @@ export default function MatrixGrid({
                           className="text-[#0E7C59] flex-shrink-0"
                         />
                         <p className="text-xs text-muted-foreground">
-                          Todas as regras obrigatórias estão cumpridas e nenhum
-                          assistente tem blocos fora do seu horário de turno.
+                          Todas as regras obrigatórias estão cumpridas e todos os
+                          blocos estão dentro do horário da escola (
+                          {operatingWindowStr}).
                         </p>
                       </div>
                     ) : (
-                      <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                      <div
+                        className="space-y-1.5 overflow-y-auto pr-1.5"
+                        style={{
+                          maxHeight: rulesPanelHeight
+                            ? `${Math.max(220, rulesPanelHeight - 56)}px`
+                            : "380px",
+                        }}
+                      >
                         {liveWarnings.map((w) => (
                           <div
                             key={w.id}
@@ -1056,21 +1616,24 @@ export default function MatrixGrid({
             )}
 
             <div className="overflow-x-auto">
-              <div className="min-w-[920px]">
-                {/* Hour header — 06h to 20h */}
+              <div className="min-w-[820px]">
+                {/* Dynamic Hour Header based on the day's Operating Hours */}
                 <div className="flex border-b border-border bg-muted/30">
-                  <div className="w-44 flex-shrink-0 px-3 py-2 text-xs text-muted-foreground font-medium border-r border-border">
-                    Assistente / Turno do Dia
+                  <div className="w-44 flex-shrink-0 px-3 py-2 text-xs text-muted-foreground font-medium border-r border-border flex items-center justify-between">
+                    <span>Assistente / Turno</span>
+                    <span className="text-[10px] font-mono text-primary font-semibold">
+                      {operatingWindowStr}
+                    </span>
                   </div>
                   <div className="flex flex-1 relative">
-                    {HOUR_LABELS.slice(6, 21).map((h, i) => (
+                    {hourSegments.map((seg) => (
                       <div
-                        key={i}
-                        className="flex-none border-r border-border/50 text-center last:border-r-0"
-                        style={{ width: `calc(100% / 15)` }}
+                        key={seg.startSlot}
+                        className="flex-none border-r border-border/50 text-center last:border-r-0 overflow-hidden"
+                        style={{ width: `${seg.widthPct}%` }}
                       >
-                        <span className="text-[10px] font-mono text-muted-foreground px-1 py-1.5 block font-medium">
-                          {h}
+                        <span className="text-[10px] font-mono text-muted-foreground px-0.5 py-1.5 block font-medium truncate">
+                          {seg.label}
                         </span>
                       </div>
                     ))}
@@ -1080,18 +1643,76 @@ export default function MatrixGrid({
                 {/* 1. WORKING ASSISTANTS ROWS */}
                 {workingAssistants.map((assistant) => {
                   const rowSlots = effectiveMatrix[assistant.id] || [];
-                  const bounds = getAssistantShiftBounds(assistant.id);
-                  const shiftRangeStr = `${TIME_SLOTS[bounds.startSlot]}–${
-                    TIME_SLOTS[bounds.endSlot]
+                  const shiftBounds: AssistantResolvedShiftBounds =
+                    fixedShiftBoundsByAssistant[assistant.id] ||
+                    getShiftBoundsFromRow(
+                      rowSlots,
+                      viewStartSlot,
+                      viewEndSlot
+                    );
+                  const shiftRangeStr = `${TIME_SLOTS[shiftBounds.startSlot]}–${
+                    TIME_SLOTS[shiftBounds.endSlot]
                   }`;
-                  const blocks = slotsToBlocks(rowSlots);
+                  const blocks = slotsToBlocks(rowSlots, slotMetaByAssistant[assistant.id]);
 
                   const hasOutOfBoundsPaint = rowSlots.some(
                     (st, sIdx) =>
                       st !== "off" &&
                       st !== "absent" &&
-                      (sIdx < bounds.startSlot || sIdx >= bounds.endSlot)
+                      (sIdx < viewStartSlot || sIdx >= viewEndSlot)
                   );
+
+                  const clampedShiftStart = Math.max(
+                    shiftBounds.startSlot,
+                    viewStartSlot
+                  );
+                  const clampedShiftEnd = Math.min(shiftBounds.endSlot, viewEndSlot);
+
+                  const clampedLunchStart =
+                    shiftBounds.lunchStartSlot !== null &&
+                    shiftBounds.lunchStartSlot !== undefined
+                      ? Math.max(shiftBounds.lunchStartSlot, viewStartSlot)
+                      : 0;
+                  const clampedLunchEnd =
+                    shiftBounds.lunchEndSlot !== null &&
+                    shiftBounds.lunchEndSlot !== undefined
+                      ? Math.min(shiftBounds.lunchEndSlot, viewEndSlot)
+                      : 0;
+                  const hasLunchBounds =
+                    shiftBounds.lunchStartSlot !== null &&
+                    shiftBounds.lunchEndSlot !== null &&
+                    shiftBounds.lunchStartSlot !== undefined &&
+                    shiftBounds.lunchEndSlot !== undefined &&
+                    shiftBounds.lunchEndSlot > shiftBounds.lunchStartSlot &&
+                    clampedLunchEnd > clampedLunchStart;
+                  const lunchRangeStr = hasLunchBounds
+                    ? `${TIME_SLOTS[shiftBounds.lunchStartSlot!]}-${
+                        TIME_SLOTS[shiftBounds.lunchEndSlot!]
+                      }`
+                    : "";
+
+                  const clampedAbsenceStart =
+                    shiftBounds.absenceStartSlot !== null &&
+                    shiftBounds.absenceStartSlot !== undefined
+                      ? Math.max(shiftBounds.absenceStartSlot, viewStartSlot)
+                      : 0;
+                  const clampedAbsenceEnd =
+                    shiftBounds.absenceEndSlot !== null &&
+                    shiftBounds.absenceEndSlot !== undefined
+                      ? Math.min(shiftBounds.absenceEndSlot, viewEndSlot)
+                      : 0;
+                  const hasAbsenceBounds =
+                    shiftBounds.absenceStartSlot !== null &&
+                    shiftBounds.absenceEndSlot !== null &&
+                    shiftBounds.absenceStartSlot !== undefined &&
+                    shiftBounds.absenceEndSlot !== undefined &&
+                    shiftBounds.absenceEndSlot > shiftBounds.absenceStartSlot &&
+                    clampedAbsenceEnd > clampedAbsenceStart;
+                  const absenceRangeStr = hasAbsenceBounds
+                    ? `${TIME_SLOTS[shiftBounds.absenceStartSlot!]}-${
+                        TIME_SLOTS[shiftBounds.absenceEndSlot!]
+                      }`
+                    : "";
 
                   return (
                     <div
@@ -1122,11 +1743,30 @@ export default function MatrixGrid({
                                 : ""}
                             </p>
                             {hasOutOfBoundsPaint && (
-                              <AlertTriangle
-                                size={11}
-                                className="text-[#D97706] flex-shrink-0"
-                                title="Tem blocos pintados fora do seu horário de turno"
-                              />
+                              <ActionTooltip content="Tem blocos pintados fora do horário de funcionamento da escola">
+                                <span className="inline-flex items-center">
+                                  <AlertTriangle
+                                    size={11}
+                                    className="text-[#D97706] flex-shrink-0"
+                                  />
+                                </span>
+                              </ActionTooltip>
+                            )}
+                            {hasAbsenceBounds && (
+                              <ActionTooltip
+                                content={`Falta prevista registada: ${absenceRangeStr}${
+                                  shiftBounds.absenceReason
+                                    ? ` (${shiftBounds.absenceReason})`
+                                    : ""
+                                }`}
+                              >
+                                <span className="inline-flex items-center">
+                                  <UserX
+                                    size={11}
+                                    className="text-destructive flex-shrink-0"
+                                  />
+                                </span>
+                              </ActionTooltip>
                             )}
                           </div>
                           <p className="text-[9px] font-mono text-muted-foreground/85 truncate">
@@ -1138,7 +1778,7 @@ export default function MatrixGrid({
                         </div>
                       </button>
 
-                      {/* Timeline Row (Works in both Normal View and Edit Mode using smooth rounded capsules!) */}
+                      {/* Timeline Row */}
                       <div
                         className={`relative flex-1 ${
                           canEditCurrentDay
@@ -1146,86 +1786,150 @@ export default function MatrixGrid({
                             : "h-11 bg-muted/10"
                         }`}
                       >
-                        {/* Background subtle hour gridlines */}
+                        {/* Background dynamic hour gridlines aligned with header */}
                         <div className="absolute inset-0 flex pointer-events-none">
-                          {Array.from({ length: 15 }, (_, hi) => (
+                          {hourSegments.map((seg) => (
                             <div
-                              key={hi}
+                              key={seg.startSlot}
                               className="flex-none h-full border-r border-border/35 last:border-r-0"
-                              style={{ width: `calc(100% / 15)` }}
+                              style={{ width: `${seg.widthPct}%` }}
                             />
                           ))}
                         </div>
 
-                        {/* In Edit Mode: Shift Background Container Frame with generous padding around the inner capsule bars */}
-                        {canEditCurrentDay && (
+                        {/* In Edit Mode: Shift Background Container Frame (Verde) */}
+                        {canEditCurrentDay &&
+                          clampedShiftEnd > clampedShiftStart && (
+                            <div
+                              className="absolute inset-y-1 bg-primary/6 border-2 border-dashed border-primary/45 rounded-xl pointer-events-none z-0"
+                              style={{
+                                left: `${
+                                  ((clampedShiftStart - viewStartSlot) /
+                                    viewSlotsCount) *
+                                  100
+                                }%`,
+                                width: `${
+                                  ((clampedShiftEnd - clampedShiftStart) /
+                                    viewSlotsCount) *
+                                  100
+                                }%`,
+                              }}
+                            >
+                              <span className="absolute -top-0.5 left-2 px-1 bg-card text-[8px] font-mono font-semibold text-primary rounded shadow-2xs">
+                                Horário {shiftRangeStr}
+                              </span>
+                            </div>
+                          )}
+
+                        {/* In Edit Mode: Lunch Break Dashed Frame (Laranja) */}
+                        {canEditCurrentDay && hasLunchBounds && (
                           <div
-                            className="absolute inset-y-1 bg-primary/6 border-2 border-dashed border-primary/40 rounded-xl pointer-events-none z-0"
+                            className="absolute inset-y-1.5 bg-orange-500/12 border-2 border-dashed border-orange-500/70 rounded-lg pointer-events-none z-0 overflow-hidden"
                             style={{
                               left: `${
-                                ((Math.max(bounds.startSlot, VIEW_START) -
-                                  VIEW_START) /
-                                  VIEW_SLOTS) *
+                                ((clampedLunchStart - viewStartSlot) /
+                                  viewSlotsCount) *
                                 100
                               }%`,
                               width: `${
-                                ((Math.min(bounds.endSlot, VIEW_END) -
-                                  Math.max(bounds.startSlot, VIEW_START)) /
-                                  VIEW_SLOTS) *
+                                ((clampedLunchEnd - clampedLunchStart) /
+                                  viewSlotsCount) *
                                 100
                               }%`,
                             }}
                           >
-                            <span className="absolute -top-0.5 left-2 px-1 bg-card text-[8px] font-mono font-semibold text-primary rounded">
-                              Horário {shiftRangeStr}
+                            <span className="absolute -top-0.5 left-1.5 px-1 bg-card text-[8px] font-mono font-semibold text-orange-600 dark:text-orange-400 rounded border border-orange-500/30 shadow-2xs">
+                              Almoço {lunchRangeStr}
                             </span>
                           </div>
                         )}
 
-                        {/* Highlighted Rule Window (if Admin clicked a rule card above) */}
-                        {canEditCurrentDay && highlightedRule && (
+                        {/* In Edit Mode: Scheduled Absence Dashed Frame (Vermelho) */}
+                        {canEditCurrentDay && hasAbsenceBounds && (
                           <div
-                            className="absolute inset-y-0 bg-primary/12 border-x-2 border-primary pointer-events-none z-10"
+                            className="absolute inset-y-1.5 bg-destructive/12 border-2 border-dashed border-destructive/75 rounded-lg pointer-events-none z-0 overflow-hidden"
                             style={{
                               left: `${
-                                ((highlightedRule.startSlot - VIEW_START) /
-                                  VIEW_SLOTS) *
+                                ((clampedAbsenceStart - viewStartSlot) /
+                                  viewSlotsCount) *
                                 100
                               }%`,
                               width: `${
-                                ((highlightedRule.endSlot -
-                                  highlightedRule.startSlot) /
-                                  VIEW_SLOTS) *
+                                ((clampedAbsenceEnd - clampedAbsenceStart) /
+                                  viewSlotsCount) *
                                 100
                               }%`,
                             }}
-                          />
+                          >
+                            <span className="absolute -top-0.5 left-1.5 px-1 bg-card text-[8px] font-mono font-semibold text-destructive rounded border border-destructive/30 shadow-2xs truncate max-w-[90%]">
+                              Falta Prevista {absenceRangeStr}
+                              {shiftBounds.absenceReason
+                                ? ` (${shiftBounds.absenceReason})`
+                                : ""}
+                            </span>
+                          </div>
                         )}
 
-                        {/* Smooth Merged Capsule Activity Bars (with 4px inner margin inside the Shift Frame in Edit Mode so they never poke out!) */}
+                        {/* Highlighted Rule Window */}
+                        {canEditCurrentDay &&
+                          highlightedRule &&
+                          Math.min(highlightedRule.endSlot, viewEndSlot) >
+                            Math.max(
+                              highlightedRule.startSlot,
+                              viewStartSlot
+                            ) && (
+                            <div
+                              className="absolute inset-y-0 bg-primary/12 border-x-2 border-primary pointer-events-none z-10"
+                              style={{
+                                left: `${
+                                  ((Math.max(
+                                    highlightedRule.startSlot,
+                                    viewStartSlot
+                                  ) -
+                                    viewStartSlot) /
+                                    viewSlotsCount) *
+                                  100
+                                }%`,
+                                width: `${
+                                  ((Math.min(
+                                    highlightedRule.endSlot,
+                                    viewEndSlot
+                                  ) -
+                                    Math.max(
+                                      highlightedRule.startSlot,
+                                      viewStartSlot
+                                    )) /
+                                    viewSlotsCount) *
+                                  100
+                                }%`,
+                              }}
+                            />
+                          )}
+
+                        {/* Smooth Merged Capsule Activity Bars */}
                         {blocks.map((b, bi) => {
-                          const clipStart = Math.max(b.start, VIEW_START);
+                          const clipStart = Math.max(b.start, viewStartSlot);
                           const clipEnd = Math.min(
                             b.start + b.count,
-                            VIEW_END
+                            viewEndSlot
                           );
                           if (b.state === "off" || clipEnd <= clipStart)
                             return null;
 
                           const visibleSlots = clipEnd - clipStart;
                           const styleConfig = BLOCK_STYLES[b.state];
+                          const displayLabel = b.activityName || styleConfig.label;
+                          const isLocked = b.isLocked ?? styleConfig.locked;
                           const startTimeStr = TIME_SLOTS[b.start] ?? "";
                           const endTimeStr =
                             TIME_SLOTS[Math.min(b.start + b.count, 95)] ??
                             "24:00";
                           const durationStr = formatDurationSlots(b.count);
 
-                          // Check if any part of this block is outside the assistant's shift
                           const isBlockOutOfShift =
-                            b.start < bounds.startSlot ||
-                            b.start + b.count > bounds.endSlot;
+                            b.start < viewStartSlot ||
+                            b.start + b.count > viewEndSlot;
 
-                          // Spotlight opacity logic when an activity is selected in Edit Mode
                           const isMatchesSpotlight = b.state === paintType;
                           const spotlightClass = isSpotlightActive
                             ? isMatchesSpotlight
@@ -1233,7 +1937,6 @@ export default function MatrixGrid({
                               : "opacity-30"
                             : "opacity-95 hover:opacity-100";
 
-                          // Capsule corners: rounded on outer ends, straight where adjacent activities touch
                           const radiusClass =
                             b.hasPrevAdjacent && b.hasNextAdjacent
                               ? "rounded-none"
@@ -1247,17 +1950,15 @@ export default function MatrixGrid({
                             ? "border-l-[1.5px] border-card/90"
                             : "";
 
-                          const showFullLabel = visibleSlots >= 5;
-                          const showShortIcon =
-                            visibleSlots >= 2 && visibleSlots < 5;
-                          const showDurationChip = visibleSlots >= 10;
+                          const showLabel = visibleSlots >= 2;
+                          const showDurationChip = visibleSlots >= 8;
 
                           const leftPct =
-                            ((clipStart - VIEW_START) / VIEW_SLOTS) * 100;
+                            ((clipStart - viewStartSlot) / viewSlotsCount) *
+                            100;
                           const widthPct =
-                            ((clipEnd - clipStart) / VIEW_SLOTS) * 100;
+                            ((clipEnd - clipStart) / viewSlotsCount) * 100;
 
-                          // In Edit Mode, inset the outer left/right edges by 4px so the capsule sits cleanly inside the dashed shift border!
                           const padLeftPx =
                             canEditCurrentDay && !b.hasPrevAdjacent ? 4 : 0;
                           const padRightPx =
@@ -1275,7 +1976,7 @@ export default function MatrixGrid({
                                   ? "inset-y-3 pointer-events-none"
                                   : "inset-y-1.5 cursor-pointer hover:brightness-110 hover:z-10 hover:ring-2 hover:ring-white/40"
                               } ${radiusClass} ${separatorClass} ${
-                                styleConfig.bg
+                                b.activityColor ? "" : styleConfig.bg
                               } ${spotlightClass} ${
                                 isBlockOutOfShift && canEditCurrentDay
                                   ? "ring-2 ring-[#D97706]"
@@ -1286,22 +1987,22 @@ export default function MatrixGrid({
                                 width: `calc(${widthPct}% - ${
                                   padLeftPx + padRightPx
                                 }px)`,
+                                ...(b.activityColor
+                                  ? { backgroundColor: b.activityColor }
+                                  : {}),
                               }}
                             >
-                              {showFullLabel && (
+                              {showLabel && (
                                 <>
-                                  <span className="flex-shrink-0 opacity-90">
-                                    {styleConfig.icon}
-                                  </span>
                                   <span className="text-[11px] font-semibold leading-none tracking-tight truncate drop-shadow-2xs">
-                                    {styleConfig.label}
+                                    {displayLabel}
                                   </span>
                                   {showDurationChip && (
                                     <span className="ml-auto text-[9px] font-mono bg-black/15 px-1.5 py-0.5 rounded text-white/90 flex-shrink-0">
                                       {durationStr}
                                     </span>
                                   )}
-                                  {styleConfig.locked && (
+                                  {isLocked && (
                                     <Lock
                                       size={10}
                                       className={`${
@@ -1312,14 +2013,9 @@ export default function MatrixGrid({
                                 </>
                               )}
 
-                              {showShortIcon && (
-                                <div className="w-full flex items-center justify-center gap-0.5">
-                                  <span className="opacity-95">
-                                    {styleConfig.icon}
-                                  </span>
-                                  {styleConfig.locked && (
-                                    <Lock size={8} className="text-white/80" />
-                                  )}
+                              {!showLabel && isLocked && (
+                                <div className="w-full flex items-center justify-center">
+                                  <Lock size={8} className="text-white/80" />
                                 </div>
                               )}
                             </div>
@@ -1342,13 +2038,26 @@ export default function MatrixGrid({
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="flex items-center gap-2">
                                     <span
-                                      className={`w-2.5 h-2.5 rounded-full ${styleConfig.bg}`}
+                                      className={`w-2.5 h-2.5 rounded-full ${
+                                        b.activityColor ? "" : styleConfig.bg
+                                      }`}
+                                      style={
+                                        b.activityColor
+                                          ? { backgroundColor: b.activityColor }
+                                          : undefined
+                                      }
                                     />
                                     <span className="font-semibold text-xs text-foreground">
-                                      {styleConfig.label}
+                                      {displayLabel}
                                     </span>
+                                    {b.activityName &&
+                                      b.activityName !== styleConfig.label && (
+                                        <span className="text-[10px] text-muted-foreground">
+                                          ({styleConfig.label})
+                                        </span>
+                                      )}
                                   </div>
-                                  {styleConfig.locked && (
+                                  {isLocked && (
                                     <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                                       <Lock size={9} />
                                       Fixo
@@ -1374,12 +2083,12 @@ export default function MatrixGrid({
                         {/* Interactive 15-min Paint Overlay in Edit Mode */}
                         {canEditCurrentDay && (
                           <div className="absolute inset-0 flex z-20">
-                            {Array.from({ length: VIEW_SLOTS }, (_, i) => {
-                              const slot = VIEW_START + i;
+                            {Array.from({ length: viewSlotsCount }, (_, i) => {
+                              const slot = viewStartSlot + i;
                               const state = rowSlots[slot];
                               const isInsideShift =
-                                slot >= bounds.startSlot &&
-                                slot < bounds.endSlot;
+                                slot >= shiftBounds.startSlot &&
+                                slot < shiftBounds.endSlot;
                               const nextTime =
                                 TIME_SLOTS[Math.min(slot + 1, 95)] ?? "24:00";
 
@@ -1389,7 +2098,7 @@ export default function MatrixGrid({
                                     <div
                                       className="flex-none h-full cursor-crosshair group/slot flex items-center justify-center px-[1px]"
                                       style={{
-                                        width: `${(1 / VIEW_SLOTS) * 100}%`,
+                                        width: `${(1 / viewSlotsCount) * 100}%`,
                                       }}
                                       onMouseDown={(e) => {
                                         e.preventDefault();
@@ -1453,7 +2162,7 @@ export default function MatrixGrid({
                   );
                 })}
 
-                {/* 2. ABSENT ASSISTANTS SECTION (AT THE BOTTOM, DISABLED, SHOWING PLANNED OR COPIED TASKS) */}
+                {/* 2. ABSENT ASSISTANTS SECTION */}
                 {absentAssistants.length > 0 && (
                   <>
                     <div className="px-3 py-1.5 bg-destructive/5 border-b border-border/60 flex items-center justify-between">
@@ -1478,7 +2187,18 @@ export default function MatrixGrid({
                         const shiftRangeStr = `${
                           TIME_SLOTS[shiftBounds.startSlot]
                         }–${TIME_SLOTS[shiftBounds.endSlot]}`;
-                        const plannedBlocks = slotsToBlocks(plannedRow);
+                        const plannedBlocks = slotsToBlocks(
+                          plannedRow,
+                          slotMetaByAssistant[assistant.id]
+                        );
+                        const clampedAbsStart = Math.max(
+                          shiftBounds.startSlot,
+                          viewStartSlot
+                        );
+                        const clampedAbsEnd = Math.min(
+                          shiftBounds.endSlot,
+                          viewEndSlot
+                        );
 
                         return (
                           <div
@@ -1526,30 +2246,50 @@ export default function MatrixGrid({
                               </div>
                             </button>
 
-                            {/* Timeline showing ONLY their planned/copied shift hours and tasks */}
                             <div className="relative flex-1 h-11 bg-muted/25 cursor-not-allowed">
-                              {/* Background subtle hour gridlines */}
                               <div className="absolute inset-0 flex pointer-events-none">
-                                {Array.from({ length: 15 }, (_, hi) => (
+                                {hourSegments.map((seg) => (
                                   <div
-                                    key={hi}
+                                    key={seg.startSlot}
                                     className="flex-none h-full border-r border-border/30 last:border-r-0"
-                                    style={{ width: `calc(100% / 15)` }}
+                                    style={{ width: `${seg.widthPct}%` }}
                                   />
                                 ))}
                               </div>
 
+                              {clampedAbsEnd > clampedAbsStart && (
+                                <div
+                                  className="absolute inset-y-1 bg-destructive/8 border border-dashed border-destructive/30 rounded-lg pointer-events-none"
+                                  style={{
+                                    left: `${
+                                      ((clampedAbsStart - viewStartSlot) /
+                                        viewSlotsCount) *
+                                      100
+                                    }%`,
+                                    width: `${
+                                      ((clampedAbsEnd - clampedAbsStart) /
+                                        viewSlotsCount) *
+                                      100
+                                    }%`,
+                                  }}
+                                />
+                              )}
+
                               {plannedBlocks.map((b, bi) => {
-                                const clipStart = Math.max(b.start, VIEW_START);
+                                const clipStart = Math.max(
+                                  b.start,
+                                  viewStartSlot
+                                );
                                 const clipEnd = Math.min(
                                   b.start + b.count,
-                                  VIEW_END
+                                  viewEndSlot
                                 );
                                 if (b.state === "off" || clipEnd <= clipStart)
                                   return null;
 
                                 const visibleSlots = clipEnd - clipStart;
                                 const styleConfig = BLOCK_STYLES[b.state];
+                                const displayLabel = b.activityName || styleConfig.label;
                                 const startTimeStr = TIME_SLOTS[b.start] ?? "";
                                 const endTimeStr =
                                   TIME_SLOTS[
@@ -1583,13 +2323,13 @@ export default function MatrixGrid({
                                         className={`absolute inset-y-1.5 ${radiusClass} border border-dashed border-destructive/60 ${styleConfig.bg} ${spotlightClass} text-white overflow-hidden flex items-center px-2 gap-1.5 transition-all`}
                                         style={{
                                           left: `${
-                                            ((clipStart - VIEW_START) /
-                                              VIEW_SLOTS) *
+                                            ((clipStart - viewStartSlot) /
+                                              viewSlotsCount) *
                                             100
                                           }%`,
                                           width: `${
                                             ((clipEnd - clipStart) /
-                                              VIEW_SLOTS) *
+                                              viewSlotsCount) *
                                             100
                                           }%`,
                                         }}
@@ -1601,7 +2341,7 @@ export default function MatrixGrid({
                                               className="flex-shrink-0 text-white"
                                             />
                                             <span className="text-[10px] font-medium truncate">
-                                              {styleConfig.label}
+                                              {displayLabel}
                                             </span>
                                           </>
                                         )}
@@ -1623,7 +2363,13 @@ export default function MatrixGrid({
                                       </div>
                                       <div className="mt-1.5 pt-1.5 border-t border-border/60 space-y-0.5">
                                         <p className="text-xs font-semibold text-foreground">
-                                          Teria a cargo: {styleConfig.label}
+                                          Teria a cargo: {displayLabel}
+                                          {b.activityName &&
+                                            b.activityName !== styleConfig.label && (
+                                              <span className="text-[10px] text-muted-foreground font-normal ml-1">
+                                                ({styleConfig.label})
+                                              </span>
+                                            )}
                                         </p>
                                         <p className="text-[11px] font-mono text-muted-foreground">
                                           {startTimeStr} – {endTimeStr} (
@@ -1649,51 +2395,180 @@ export default function MatrixGrid({
                 )}
               </div>
             </div>
+
+            {/* Legenda dos elementos visuais da grelha de planeamento (apenas no modo de edição) */}
+            {canEditCurrentDay && (
+              <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between flex-wrap gap-4 text-xs animate-in fade-in-50 duration-200">
+                <div className="flex items-center gap-2 text-foreground font-semibold">
+                  <Info size={14} className="text-primary" />
+                  <span>Legenda do Planeamento:</span>
+                </div>
+                <div className="flex items-center gap-5 flex-wrap text-xs">
+                  {/* Tracejado Verde */}
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-3.5 rounded border-2 border-dashed border-primary/60 bg-primary/10 shadow-2xs" />
+                    <span className="text-foreground/90 font-medium">Horário Previsto do Assistente</span>
+                  </div>
+
+                  {/* Tracejado Laranja */}
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-3.5 rounded border-2 border-dashed border-orange-500/70 bg-orange-500/15 shadow-2xs" />
+                    <span className="text-foreground/90 font-medium">Pausa de Almoço Prevista</span>
+                  </div>
+
+                  {/* Tracejado Vermelho */}
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-3.5 rounded border-2 border-dashed border-destructive/80 bg-destructive/15 shadow-2xs" />
+                    <span className="text-foreground/90 font-medium">Ausência / Falta Registada</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </Card>
 
       {/* ===================================================================== */}
-      {/* MODAL 1: COPIAR ESCALA DE OUTRO DIA                                   */}
+      {/* MODAL 1: COPIAR HORÁRIO ENTRE DIAS (COM DATEPICKER & DIAS FECHADOS)   */}
       {/* ===================================================================== */}
       <Dialog open={showCopyModal} onOpenChange={setShowCopyModal}>
-        <DialogContent className="w-full max-w-md p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+        <DialogContent className="w-full max-w-md p-0 overflow-visible rounded-xl border border-border bg-card shadow-2xl">
           <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10">
             <DialogTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Copy size={15} className="text-primary" />
-              Copiar Escala de Outro Dia
+              Copiar Horário entre Dias
             </DialogTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Copia as tarefas e horários de outra data para{" "}
-              <strong className="text-foreground">
-                {dayInfo.dayName}, {dayInfo.dateStr}
-              </strong>
+              Os dias em que a escola está encerrada (horário fixo, futuras
+              versões em vigor, feriados ou exceções) estão desativados no
+              calendário.
             </p>
           </DialogHeader>
 
           <div className="p-5 space-y-4">
+            {/* Mode Switcher */}
+            {!isPastDay && (
+              <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-muted/40 border border-border">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCopyDirection("to_future");
+                    setCopyPickerIsoDate(findNextOpenFutureIso(dayInfo.isoDate));
+                  }}
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    copyDirection === "to_future"
+                      ? "bg-card text-foreground shadow-xs font-semibold"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Copiar deste dia para outro
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCopyDirection("from_other");
+                    setCopyPickerIsoDate(findPreviousOpenIso(dayInfo.isoDate));
+                  }}
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    copyDirection === "from_other"
+                      ? "bg-card text-foreground shadow-xs font-semibold"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Trazer de outro dia para aqui
+                </button>
+              </div>
+            )}
+
+            {/* Visual Origin -> Target summary */}
+            <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-muted/20 border border-border text-xs">
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">
+                  Origem
+                </span>
+                <span className="font-mono font-semibold text-foreground truncate block mt-0.5">
+                  {copyDirection === "to_future"
+                    ? `${dayInfo.dayShort}, ${dayInfo.dateStr}`
+                    : copyPickerDateInfo
+                    ? `${copyPickerDateInfo.dayShort}, ${copyPickerDateInfo.dateStr}`
+                    : "Selecionar..."}
+                </span>
+              </div>
+              <ArrowRight size={15} className="text-primary flex-shrink-0" />
+              <div className="min-w-0 flex-1 text-right">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">
+                  Destino
+                </span>
+                <span className="font-mono font-semibold text-primary truncate block mt-0.5">
+                  {copyDirection === "to_future"
+                    ? copyPickerDateInfo
+                      ? `${copyPickerDateInfo.dayShort}, ${copyPickerDateInfo.dateStr}`
+                      : "Selecionar..."
+                    : `${dayInfo.dayShort}, ${dayInfo.dateStr}`}
+                </span>
+              </div>
+            </div>
+
+            {/* DatePicker with closed school days disabled */}
             <div>
               <label className="text-xs font-medium text-muted-foreground block mb-1.5">
-                Seleciona a data de origem a copiar
+                {copyDirection === "to_future"
+                  ? "Escolher dia de destino (futuro) no calendário *"
+                  : "Escolher dia de origem (passado ou futuro) no calendário *"}
               </label>
-              <CustomSelect
-                value={String(copySourceOffset)}
-                onValueChange={(val) => setCopySourceOffset(Number(val))}
-                options={copyableOpenDays.map((item) => ({
-                  value: String(item.offset),
-                  label: `${item.label}${item.isPast ? " · Dia Passado" : ""}`,
-                }))}
+              <DatePicker
+                value={copyPickerIsoDate}
+                onChange={(iso) => setCopyPickerIsoDate(iso)}
+                allowClear={false}
+                minDate={copyDirection === "to_future" ? todayIso : undefined}
+                isDateDisabled={(iso) => {
+                  if (iso === dayInfo.isoDate) return true;
+                  if (copyDirection === "to_future" && iso < todayIso) {
+                    return true;
+                  }
+                  const st = getStatusForIsoDate(iso);
+                  return !st.isOpen;
+                }}
+                getDayTooltip={(iso) => {
+                  if (iso === dayInfo.isoDate) {
+                    return "Este é o próprio dia selecionado";
+                  }
+                  if (copyDirection === "to_future" && iso < todayIso) {
+                    return "Não é possível copiar um horário para um dia passado";
+                  }
+                  const st = getStatusForIsoDate(iso);
+                  if (!st.isOpen) {
+                    return st.title || "Estabelecimento Encerrado";
+                  }
+                  return st.openingTime && st.closingTime
+                    ? `Escola aberta (${st.openingTime.slice(
+                        0,
+                        5
+                      )}–${st.closingTime.slice(0, 5)})`
+                    : "Escola aberta";
+                }}
               />
+              {copyPickerStatus?.isOpen &&
+                copyPickerStatus.openingTime &&
+                copyPickerStatus.closingTime && (
+                  <p className="text-[11px] text-muted-foreground font-mono mt-1.5">
+                    Horário de funcionamento nesse dia:{" "}
+                    <span className="text-foreground font-semibold">
+                      {copyPickerStatus.openingTime.slice(0, 5)} –{" "}
+                      {copyPickerStatus.closingTime.slice(0, 5)}
+                    </span>
+                    {copyPickerStatus.scheduleSourceLabel
+                      ? ` (${copyPickerStatus.scheduleSourceLabel})`
+                      : ""}
+                  </p>
+                )}
             </div>
 
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground leading-relaxed">
-              Os assistentes que estão <strong>com falta</strong> em{" "}
-              <span className="text-foreground font-medium">
-                {dayInfo.dayName}, {dayInfo.dateStr}
-              </span>{" "}
-              continuarão desativados (<em>disabled</em>) no fim da lista, mas
-              mostrarão as tarefas que tinham atribuídas na escala copiada para
-              facilitar a redistribuição.
+              Os assistentes com <strong>falta registada</strong> no dia de
+              destino continuarão desativados (<em>disabled</em>) no fim da
+              lista, mas mostrarão as tarefas que tinham atribuídas na escala
+              copiada para facilitar a redistribuição.
             </div>
           </div>
 
@@ -1707,11 +2582,14 @@ export default function MatrixGrid({
             </button>
             <button
               type="button"
+              disabled={!copyPickerIsoDate || !copyPickerStatus?.isOpen}
               onClick={handleConfirmCopySchedule}
-              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors flex items-center gap-1.5"
+              className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors flex items-center gap-1.5"
             >
               <Copy size={12} />
-              Copiar Escala
+              {copyDirection === "to_future"
+                ? "Copiar para Dia Selecionado"
+                : "Copiar para Este Dia"}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -1758,15 +2636,16 @@ export default function MatrixGrid({
                       </Badge>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => discardDayDraft(item.offset)}
-                      className="text-[11px] text-destructive hover:underline flex items-center gap-1"
-                      title="Anular alterações feitas neste dia"
-                    >
-                      <Trash2 size={11} />
-                      Descartar este dia
-                    </button>
+                    <ActionTooltip content="Anular alterações feitas neste dia">
+                      <button
+                        type="button"
+                        onClick={() => discardDayDraft(item.offset)}
+                        className="text-[11px] text-destructive hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Trash2 size={11} />
+                        Descartar este dia
+                      </button>
+                    </ActionTooltip>
                   </div>
 
                   {item.copiedFromLabel && (
@@ -1837,6 +2716,15 @@ export default function MatrixGrid({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Publicação de Escalas (Rascunho -> Publicada) */}
+      <PublishSchedulesModal
+        open={publishModalState.open}
+        onClose={() => setPublishModalState({ open: false })}
+        schedules={schedulesList}
+        assistants={activeAssistants}
+        initialSelectedDate={publishModalState.preselectedDate}
+      />
     </TooltipProvider>
   );
 }

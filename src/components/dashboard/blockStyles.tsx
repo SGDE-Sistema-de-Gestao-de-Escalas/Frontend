@@ -1,32 +1,29 @@
 import React from "react";
-import {
-  Clock,
-  Coffee,
-  Eye,
-  ShoppingBag,
-  Sparkles,
-  Truck,
-  UserX,
-} from "lucide-react";
 import type { BlockState } from "../../types";
 
 export interface BlockStyleConfig {
   bg: string;
   label: string;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   locked?: boolean;
 }
 
 export const BLOCK_STYLES: Record<BlockState, BlockStyleConfig> = {
-  work: { bg: "bg-[#6366F1]", label: "Trabalho", icon: <Clock size={11} /> },
-  surveillance: { bg: "bg-[#A855F7]", label: "Vigilância", icon: <Eye size={11} /> },
-  lunch: { bg: "bg-[#F59E0B]", label: "Pausa Almoço", icon: <Coffee size={11} /> },
-  absent: { bg: "bg-[#EF4444]", label: "Ausente", icon: <UserX size={11} /> },
-  off: { bg: "bg-transparent border border-border/40", label: "Inativo", icon: null },
-  cleaning: { bg: "bg-[#06B6D4]", label: "Limpeza", icon: <Sparkles size={11} /> },
-  collection: { bg: "bg-[#EC4899]", label: "Recolha", icon: <Truck size={11} />, locked: true },
-  delivery: { bg: "bg-[#10B981]", label: "Entrega", icon: <ShoppingBag size={11} />, locked: true },
+  work: { bg: "bg-[#3B82F6]", label: "Apoio Turmas/escola" },
+  collection: { bg: "bg-[#F59E0B]", label: "Acolhimento" },
+  surveillance: { bg: "bg-[#A855F7]", label: "Vigilância / Intervalos" },
+  lunch: { bg: "bg-[#F97316]", label: "Pausa Almoço" },
+  cleaning: { bg: "bg-[#8B5CF6]", label: "Limpeza" },
+  delivery: { bg: "bg-[#14B8A6]", label: "Entrega de alunos" },
+  absent: { bg: "bg-[#EF4444]", label: "Ausência" },
+  off: { bg: "bg-transparent border border-border/40", label: "Inativo / Folga" },
 };
+
+export const TIME_SLOTS = Array.from({ length: 96 }, (_, index) => {
+  const hour = Math.floor(index / 4).toString().padStart(2, "0");
+  const minute = ((index % 4) * 15).toString().padStart(2, "0");
+  return `${hour}:${minute}`;
+});
 
 export const HOUR_LABELS = Array.from(
   { length: 25 },
@@ -38,12 +35,12 @@ export const VIEW_END = 84; // slot 84 = 21:00 (exclusive)
 export const VIEW_SLOTS = VIEW_END - VIEW_START; // 60 slots = 15 hours
 
 export const EDIT_TYPES: BlockState[] = [
+  "collection",
   "work",
   "surveillance",
-  "cleaning",
-  "collection",
-  "delivery",
   "lunch",
+  "cleaning",
+  "delivery",
   "absent",
   "off",
 ];
@@ -60,18 +57,67 @@ export interface MergedScheduleBlock {
   count: number;
   hasPrevAdjacent: boolean;
   hasNextAdjacent: boolean;
+  activityName?: string;
+  activityColor?: string | null;
+  entryId?: string;
+  isFallback?: boolean;
+  isLocked?: boolean;
 }
 
-export function slotsToBlocks(slots: BlockState[]): MergedScheduleBlock[] {
-  const raw: { state: BlockState; start: number; count: number }[] = [];
-  let cur: { state: BlockState; start: number; count: number } | null = null;
+export function slotsToBlocks(
+  slots: BlockState[],
+  meta?: Record<
+    number,
+    {
+      entryId?: string;
+      activityName?: string;
+      activityColor?: string | null;
+      isFallback?: boolean;
+      isLocked?: boolean;
+    }
+  >
+): MergedScheduleBlock[] {
+  const raw: {
+    state: BlockState;
+    start: number;
+    count: number;
+    meta?: {
+      entryId?: string;
+      activityName?: string;
+      activityColor?: string | null;
+      isFallback?: boolean;
+      isLocked?: boolean;
+    };
+  }[] = [];
+  let cur: {
+    state: BlockState;
+    start: number;
+    count: number;
+    meta?: {
+      entryId?: string;
+      activityName?: string;
+      activityColor?: string | null;
+      isFallback?: boolean;
+      isLocked?: boolean;
+    };
+  } | null = null;
+
   for (let i = 0; i < slots.length; i++) {
     const s = slots[i];
-    if (cur && cur.state === s) {
+    const m = meta?.[i];
+
+    const sameState = cur !== null && cur.state === s;
+    const sameEntry =
+      sameState &&
+      (m?.entryId && cur?.meta?.entryId
+        ? m.entryId === cur.meta.entryId
+        : m?.activityName === cur?.meta?.activityName);
+
+    if (cur && sameState && (!meta || sameEntry)) {
       cur.count++;
     } else {
       if (cur) raw.push(cur);
-      cur = { state: s, start: i, count: 1 };
+      cur = { state: s, start: i, count: 1, meta: m };
     }
   }
   if (cur) raw.push(cur);
@@ -91,9 +137,16 @@ export function slotsToBlocks(slots: BlockState[]): MergedScheduleBlock[] {
       b.start + b.count === next.start;
 
     return {
-      ...b,
+      state: b.state,
+      start: b.start,
+      count: b.count,
       hasPrevAdjacent,
       hasNextAdjacent,
+      activityName: b.meta?.activityName,
+      activityColor: b.meta?.activityColor,
+      entryId: b.meta?.entryId,
+      isFallback: b.meta?.isFallback,
+      isLocked: b.meta?.isLocked,
     };
   });
 }
