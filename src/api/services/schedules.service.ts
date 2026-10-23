@@ -24,6 +24,9 @@ export interface BackendScheduleResource {
   school_id: string;
   assistant_id: string;
   assistant_name: string | null;
+  is_temporary_transfer?: boolean;
+  origin_school_id?: string | null;
+  origin_school_name?: string | null;
   assistant_schedule_profile_id: string | null;
   week_start: string;
   week_end: string;

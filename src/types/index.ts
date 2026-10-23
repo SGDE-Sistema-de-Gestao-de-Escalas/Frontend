@@ -96,6 +96,11 @@ export interface Assistant {
   emergency_contact_kinship?: string;
   available_for_transfer?: boolean;
   availableForTransfer?: boolean;
+  is_temporary_transfer?: boolean;
+  origin_school_id?: EntityId | null;
+  origin_school_name?: string | null;
+  destination_school_id?: EntityId | null;
+  destination_school_name?: string | null;
   exception?: string | null;
   school?: AssistantSchool;
   created_at?: string;

@@ -26,7 +26,7 @@ import {
   Trash2,
   UserX,
 } from "lucide-react";
-import type { BlockState, EntityId, ScheduleMatrix } from "../../types";
+import type { Assistant, BlockState, EntityId, ScheduleMatrix } from "../../types";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { Checkbox } from "../ui/checkbox";
@@ -66,6 +66,7 @@ import {
   useOperatingRules,
 } from "../../hooks/api/useOperatingHours";
 import { useHolidaysList } from "../../hooks/api/useHolidays";
+import { useAssistantTemporaryAssignmentsList } from "../../hooks/api/useAssistantTemporaryAssignments";
 import assistantSchedulesService from "../../api/services/assistantSchedules.service";
 import assistantExceptionsService from "../../api/services/assistantExceptions.service";
 import { ASSISTANT_SCHEDULES_KEY } from "../../hooks/api/useAssistantSchedules";
@@ -226,6 +227,11 @@ export default function MatrixGrid({
   } = useOperatingExceptions();
   const { data: holidays = [], isLoading: isLoadingHolidays } =
     useHolidaysList();
+  const { data: temporaryAssignments = [] } =
+    useAssistantTemporaryAssignmentsList({
+      start_date: effectiveRangeStartIso,
+      end_date: effectiveRangeEndIso,
+    });
 
   const isOperatingLoading =
     isLoadingCalendar ||
@@ -253,13 +259,72 @@ export default function MatrixGrid({
     return resolveSchoolDayStatusByIsoDate(isoDate, operatingSources);
   }
 
-  const activeAssistants = useMemo(
-    () =>
-      assistantsList.filter(
-        (a) => !a.deleted_at && (a.active ?? a.is_active ?? true)
-      ),
-    [assistantsList]
-  );
+  const activeAssistants = useMemo(() => {
+    const list: Assistant[] = assistantsList.filter(
+      (a) => !a.deleted_at && (a.active ?? a.is_active ?? true)
+    );
+    const existingIds = new Set(list.map((a) => String(a.id)));
+
+    // 1. Procurar nas transferências temporárias ativas para esta escola (incoming)
+    temporaryAssignments.forEach((tr) => {
+      if (
+        String(tr.destination_school_id) === String(selectedSchoolId) &&
+        !existingIds.has(String(tr.assistant_id))
+      ) {
+        existingIds.add(String(tr.assistant_id));
+        const asstUser = tr.assistant?.user;
+        const fullName = asstUser
+          ? `${asstUser.first_name} ${asstUser.last_name}`.trim()
+          : `Assistente #${tr.assistant_id.slice(0, 6)}`;
+        list.push({
+          id: tr.assistant_id,
+          name: fullName,
+          initials: fullName
+            .split(" ")
+            .map((p) => p[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase(),
+          school_id: selectedSchoolId,
+          is_temporary_transfer: true,
+          origin_school_id: tr.origin_school_id,
+          origin_school_name: tr.origin_school?.name || "Outra Escola",
+          active: true,
+          is_active: true,
+        });
+      }
+    });
+
+    // 2. Procurar em escalas geradas para esta escola de assistentes externos
+    schedulesList.forEach((sc) => {
+      if (
+        String(sc.school_id) === String(selectedSchoolId) &&
+        !existingIds.has(String(sc.assistant_id))
+      ) {
+        existingIds.add(String(sc.assistant_id));
+        const fullName =
+          sc.assistant_name || `Assistente #${sc.assistant_id.slice(0, 6)}`;
+        list.push({
+          id: sc.assistant_id,
+          name: fullName,
+          initials: fullName
+            .split(" ")
+            .map((p) => p[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase(),
+          school_id: selectedSchoolId,
+          is_temporary_transfer: true,
+          origin_school_id: sc.origin_school_id,
+          origin_school_name: sc.origin_school_name || "Outra Escola",
+          active: true,
+          is_active: true,
+        });
+      }
+    });
+
+    return list;
+  }, [assistantsList, temporaryAssignments, schedulesList, selectedSchoolId]);
 
   // Queries para perfis de horário contratual e exceções de cada assistente ativo com escopo da escola
   const assistantScheduleQueries = useQueries({
@@ -670,9 +735,72 @@ export default function MatrixGrid({
       plannedRow: BlockState[];
       shiftBounds: AssistantResolvedShiftBounds;
       copiedFromLabel?: string;
+      isTransfer?: boolean;
+      transferDestName?: string;
     }[] = [];
 
     activeAssistants.forEach((a) => {
+      // 1. Se for um assistente externo cedido (transferência de entrada),
+      // só deve constar neste dia se tiver transferência ativa hoje ou tarefas geradas hoje
+      if (a.is_temporary_transfer) {
+        const hasTransferToday = temporaryAssignments.some(
+          (tr) =>
+            String(tr.assistant_id) === String(a.id) &&
+            String(tr.destination_school_id) === String(selectedSchoolId) &&
+            tr.valid_from <= dayInfo.isoDate &&
+            (!tr.valid_until || tr.valid_until >= dayInfo.isoDate)
+        );
+        const hasEntriesToday = (schedulesList || []).some(
+          (sc) =>
+            String(sc.assistant_id) === String(a.id) &&
+            String(sc.school_id) === String(selectedSchoolId) &&
+            (sc.entries || []).some(
+              (e) => e.date?.slice(0, 10) === dayInfo.isoDate
+            )
+        );
+
+        if (!hasTransferToday && !hasEntriesToday) {
+          return;
+        }
+      }
+
+      // 2. Se for um assistente desta escola mas tiver transferência de saída hoje para outra escola:
+      const outgoingTransfer = temporaryAssignments.find(
+        (tr) =>
+          String(tr.assistant_id) === String(a.id) &&
+          String(tr.origin_school_id) === String(selectedSchoolId) &&
+          tr.valid_from <= dayInfo.isoDate &&
+          (!tr.valid_until || tr.valid_until >= dayInfo.isoDate)
+      );
+
+      if (outgoingTransfer) {
+        const destName =
+          outgoingTransfer.destination_school?.name || "outra escola";
+        const reason = `Transferido(a) temporariamente para ${destName}`;
+        const fixedBounds = fixedShiftBoundsByAssistant[a.id];
+        const resolvedBounds: AssistantResolvedShiftBounds =
+          fixedBounds ||
+          getShiftBoundsFromRow(
+            baseDayMatrix[a.id] || Array(96).fill("off"),
+            viewStartSlot,
+            viewEndSlot
+          );
+
+        absent.push({
+          assistant: {
+            ...a,
+            destination_school_name: destName,
+          },
+          reason,
+          isTransfer: true,
+          transferDestName: destName,
+          plannedRow: Array(96).fill("off"),
+          shiftBounds: resolvedBounds,
+        });
+        return;
+      }
+
+      // 3. Verificação normal de faltas/ausências
       const absInfo = checkAssistantAbsenceOnDate(
         a,
         dayInfo.isoDate,
@@ -730,6 +858,9 @@ export default function MatrixGrid({
     fixedShiftBoundsByAssistant,
     viewStartSlot,
     viewEndSlot,
+    temporaryAssignments,
+    selectedSchoolId,
+    schedulesList,
   ]);
 
   // Evaluate rules & warnings for any given dayOffset + matrix
@@ -1811,7 +1942,7 @@ export default function MatrixGrid({
                           </span>
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-wrap">
                             <p className="text-xs font-medium text-foreground group-hover/name:text-primary truncate transition-colors">
                               {assistant.name.split(" ")[0]}{" "}
                               {assistant.name.split(" ").slice(-1)[0]?.[0]
@@ -1820,6 +1951,13 @@ export default function MatrixGrid({
                                   }.`
                                 : ""}
                             </p>
+                            {assistant.is_temporary_transfer && (
+                              <ActionTooltip content={`Transferência temporária de ${assistant.origin_school_name || "outra escola"}`}>
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
+                                  Transferência ({assistant.origin_school_name || "Outra Escola"})
+                                </span>
+                              </ActionTooltip>
+                            )}
                             {hasOutOfBoundsPaint && (
                               <ActionTooltip content="Tem blocos pintados fora do horário de funcionamento da escola">
                                 <span className="inline-flex items-center">
@@ -2243,14 +2381,14 @@ export default function MatrixGrid({
                 {/* 2. ABSENT ASSISTANTS SECTION */}
                 {absentAssistants.length > 0 && (
                   <>
-                    <div className="px-3 py-1.5 bg-destructive/5 border-b border-border/60 flex items-center justify-between">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-destructive flex items-center gap-1.5">
-                        <UserX size={11} />
-                        Assistentes Ausentes Hoje ({absentAssistants.length}) —
-                        Horário Previsto e Tarefas a seu Cargo
+                    <div className="px-3 py-1.5 bg-muted/30 border-b border-border/60 flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <UserX size={11} className="text-destructive" />
+                        Assistentes Ausentes / Cedidos Hoje ({absentAssistants.length}) —
+                        Horário Previsto e Tarefas
                       </span>
                       <span className="text-[10px] text-muted-foreground">
-                        Linhas desativadas (disabled) · Tarefas originais/copiadas visíveis para redistribuição
+                        Linhas desativadas (disabled) · Faltas e transferências inter-escolares
                       </span>
                     </div>
 
@@ -2261,6 +2399,8 @@ export default function MatrixGrid({
                         plannedRow,
                         shiftBounds,
                         copiedFromLabel,
+                        isTransfer,
+                        transferDestName,
                       }) => {
                         const shiftRangeStr = `${
                           TIME_SLOTS[shiftBounds.startSlot]
@@ -2292,14 +2432,14 @@ export default function MatrixGrid({
                               disabled={canEditCurrentDay}
                               className="w-44 flex-shrink-0 px-3 py-2 border-r border-border flex items-center gap-2.5 text-left disabled:cursor-not-allowed"
                             >
-                              <div className="w-7 h-7 rounded-full bg-destructive/15 flex items-center justify-center flex-shrink-0">
-                                <span className="text-[10px] font-bold text-destructive font-mono">
+                              <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${isTransfer ? "bg-blue-500/15" : "bg-destructive/15"}`}>
+                                <span className={`text-[10px] font-bold font-mono ${isTransfer ? "text-blue-700 dark:text-blue-300" : "text-destructive"}`}>
                                   {assistant.initials}
                                 </span>
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1 flex-wrap">
-                                  <p className="text-xs font-medium text-muted-foreground line-through truncate">
+                                  <p className={`text-xs font-medium truncate ${isTransfer ? "text-foreground" : "text-muted-foreground line-through"}`}>
                                     {assistant.name.split(" ")[0]}{" "}
                                     {assistant.name.split(" ").slice(-1)[0]?.[0]
                                       ? `${
@@ -2309,11 +2449,17 @@ export default function MatrixGrid({
                                         }.`
                                       : ""}
                                   </p>
-                                  <span className="text-[8px] font-semibold uppercase px-1 py-0.2 rounded bg-destructive/15 text-destructive">
-                                    Falta
-                                  </span>
+                                  {isTransfer ? (
+                                    <span className="text-[8px] font-semibold uppercase px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
+                                      Transferência
+                                    </span>
+                                  ) : (
+                                    <span className="text-[8px] font-semibold uppercase px-1 py-0.2 rounded bg-destructive/15 text-destructive">
+                                      Falta
+                                    </span>
+                                  )}
                                 </div>
-                                <p className="text-[9px] font-mono text-destructive/80 truncate">
+                                <p className={`text-[9px] font-mono truncate ${isTransfer ? "text-blue-700 dark:text-blue-300" : "text-destructive/80"}`}>
                                   {shiftRangeStr} · {reason}
                                 </p>
                                 {copiedFromLabel && (
@@ -2336,21 +2482,43 @@ export default function MatrixGrid({
                               </div>
 
                               {clampedAbsEnd > clampedAbsStart && (
-                                <div
-                                  className="absolute inset-y-1 bg-destructive/8 border border-dashed border-destructive/30 rounded-lg pointer-events-none"
-                                  style={{
-                                    left: `${
-                                      ((clampedAbsStart - viewStartSlot) /
-                                        viewSlotsCount) *
-                                      100
-                                    }%`,
-                                    width: `${
-                                      ((clampedAbsEnd - clampedAbsStart) /
-                                        viewSlotsCount) *
-                                      100
-                                    }%`,
-                                  }}
-                                />
+                                isTransfer ? (
+                                  <div
+                                    className="absolute inset-y-1 bg-blue-500/10 border border-dashed border-blue-500/40 rounded-lg flex items-center justify-center px-3 pointer-events-none"
+                                    style={{
+                                      left: `${
+                                        ((clampedAbsStart - viewStartSlot) /
+                                          viewSlotsCount) *
+                                        100
+                                      }%`,
+                                      width: `${
+                                        ((clampedAbsEnd - clampedAbsStart) /
+                                          viewSlotsCount) *
+                                        100
+                                      }%`,
+                                    }}
+                                  >
+                                    <span className="text-[11px] font-medium text-blue-700 dark:text-blue-300 truncate">
+                                      Cedência temporária para {transferDestName || "outra escola"}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div
+                                    className="absolute inset-y-1 bg-destructive/8 border border-dashed border-destructive/30 rounded-lg pointer-events-none"
+                                    style={{
+                                      left: `${
+                                        ((clampedAbsStart - viewStartSlot) /
+                                          viewSlotsCount) *
+                                        100
+                                      }%`,
+                                      width: `${
+                                        ((clampedAbsEnd - clampedAbsStart) /
+                                          viewSlotsCount) *
+                                        100
+                                      }%`,
+                                    }}
+                                  />
+                                )
                               )}
 
                               {plannedBlocks.map((b, bi) => {

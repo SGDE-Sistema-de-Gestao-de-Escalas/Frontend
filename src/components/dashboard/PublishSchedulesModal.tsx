@@ -69,6 +69,8 @@ interface AssistantDaySchedule {
   initials: string;
   shiftStart: string;
   shiftEnd: string;
+  isTemporaryTransfer?: boolean;
+  originSchoolName?: string | null;
   entries: {
     id: string;
     activityName: string;
@@ -227,12 +229,20 @@ function getDayScheduleDetails(
       }
     }
 
+    const isTemporaryTransfer = Boolean(
+      sc.is_temporary_transfer || matchedAssistant?.is_temporary_transfer
+    );
+    const originSchoolName =
+      sc.origin_school_name || matchedAssistant?.origin_school_name || null;
+
     assistantsMap.set(String(sc.assistant_id), {
       assistantId: String(sc.assistant_id),
       assistantName,
       initials,
       shiftStart,
       shiftEnd,
+      isTemporaryTransfer,
+      originSchoolName,
       entries: entriesWithLunch,
     });
 
@@ -679,11 +689,18 @@ export default function PublishSchedulesModal({
                                     {ast.initials}
                                   </div>
                                   <div className="min-w-0">
-                                    <p
-                                      className="text-xs font-semibold text-foreground truncate"
-                                    >
-                                      {ast.assistantName}
-                                    </p>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <p
+                                        className="text-xs font-semibold text-foreground truncate"
+                                      >
+                                        {ast.assistantName}
+                                      </p>
+                                      {ast.isTemporaryTransfer && (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
+                                          Transferência ({ast.originSchoolName || "Outra Escola"})
+                                        </span>
+                                      )}
+                                    </div>
                                     <p className="text-[10px] font-mono text-muted-foreground flex items-center gap-1 mt-0.5">
                                       <Clock size={9} className="text-primary/70 flex-shrink-0" />
                                       <span>Turno {ast.shiftStart}–{ast.shiftEnd}</span>
