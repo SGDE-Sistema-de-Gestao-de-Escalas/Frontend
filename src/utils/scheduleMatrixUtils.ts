@@ -674,6 +674,9 @@ export interface DraftDaySummary {
 export function getAllDraftDaysFromSchedules(
   schedules: BackendScheduleResource[] = []
 ): DraftDaySummary[] {
+  const now = new Date();
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
   const daysMap = new Map<
     string,
     { assistants: Set<string>; entriesCount: number }
@@ -684,6 +687,7 @@ export function getAllDraftDaysFromSchedules(
     (sc.entries || []).forEach((entry) => {
       if (!entry.date) return;
       const cleanIso = entry.date.slice(0, 10);
+      if (cleanIso < todayIso) return;
       if (!daysMap.has(cleanIso)) {
         daysMap.set(cleanIso, {
           assistants: new Set(),
