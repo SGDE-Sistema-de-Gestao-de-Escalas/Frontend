@@ -188,20 +188,56 @@ export default function MatrixGrid({
   const todayIso = useMemo(() => getIsoDateFromOffset(0), []);
   const dayInfo = getDateInfo(dayOffset);
 
-  // Ensure the query window covers the user's selected queryStartDate..queryEndDate AND the current dayOffset / copyPickerIsoDate
-  const effectiveRangeStartIso = useMemo(() => {
-    const defaultStart = queryStartDate || getIsoDateFromOffset(-7);
-    const candidates = [defaultStart, getIsoDateFromOffset(dayOffset - 7)];
-    if (copyPickerIsoDate) candidates.push(copyPickerIsoDate);
-    return candidates.sort()[0];
-  }, [queryStartDate, dayOffset, copyPickerIsoDate]);
+  // Janela de datas mantida em cache. Não altera as chaves de query enquanto a navegação
+  // ocorrer dentro do intervalo já carregado (-7 dias a +14 dias), tornando a navegação de dias instantânea (0 pedidos).
+  const [loadedRange, setLoadedRange] = useState<{ start: string; end: string }>(() => ({
+    start: queryStartDate || getIsoDateFromOffset(-7),
+    end: queryEndDate || getIsoDateFromOffset(14),
+  }));
 
-  const effectiveRangeEndIso = useMemo(() => {
-    const defaultEnd = queryEndDate || getIsoDateFromOffset(14);
-    const candidates = [defaultEnd, getIsoDateFromOffset(dayOffset + 14)];
-    if (copyPickerIsoDate) candidates.push(copyPickerIsoDate);
-    return candidates.sort()[candidates.length - 1];
-  }, [queryEndDate, dayOffset, copyPickerIsoDate]);
+  // Sincronizar quando o utilizador definir um intervalo explícito no header
+  useEffect(() => {
+    if (queryStartDate && queryEndDate) {
+      setLoadedRange((prev) => {
+        if (prev.start === queryStartDate && prev.end === queryEndDate) return prev;
+        return { start: queryStartDate, end: queryEndDate };
+      });
+    }
+  }, [queryStartDate, queryEndDate]);
+
+  // Se o utilizador navegar para uma data fora do intervalo já carregado, expandir a janela
+  useEffect(() => {
+    const targetIso = dayInfo.isoDate;
+    const copyIso = copyPickerIsoDate;
+
+    setLoadedRange((prev) => {
+      let newStart = prev.start;
+      let newEnd = prev.end;
+
+      if (targetIso < newStart) {
+        const targetOffset = getOffsetFromIsoDate(targetIso);
+        newStart = getIsoDateFromOffset(targetOffset - 7);
+      }
+      if (targetIso > newEnd) {
+        const targetOffset = getOffsetFromIsoDate(targetIso);
+        newEnd = getIsoDateFromOffset(targetOffset + 14);
+      }
+
+      if (copyIso) {
+        if (copyIso < newStart) newStart = copyIso;
+        if (copyIso > newEnd) newEnd = copyIso;
+      }
+
+      if (newStart === prev.start && newEnd === prev.end) {
+        return prev;
+      }
+
+      return { start: newStart, end: newEnd };
+    });
+  }, [dayInfo.isoDate, copyPickerIsoDate]);
+
+  const effectiveRangeStartIso = loadedRange.start;
+  const effectiveRangeEndIso = loadedRange.end;
 
   const { data: assistantsList = [], isLoading: isLoadingAssistants } =
     useAssistantsList();
