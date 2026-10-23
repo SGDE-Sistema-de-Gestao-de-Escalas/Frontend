@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   Building2,
   Calendar,
@@ -361,6 +361,12 @@ export default function PrintScheduleModal({
   const [activeTab, setActiveTab] = useState<"wall" | "individual">(initialTab);
   const [selectedAssistantFilter, setSelectedAssistantFilter] = useState<string>("all");
 
+  useEffect(() => {
+    if (open && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [open, initialTab]);
+
   const totalAssistants = workingAssistants.length;
   const totalAbsent = absentAssistants.length;
 
@@ -592,9 +598,9 @@ export default function PrintScheduleModal({
               variant="outline"
               size="sm"
               onClick={handleExportCsv}
-              className="hidden sm:flex items-center gap-1.5 text-xs font-medium border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
+              className="hidden sm:flex items-center gap-1.5 text-xs font-medium border-border text-foreground hover:bg-muted hover:text-foreground cursor-pointer"
             >
-              <FileSpreadsheet size={13} />
+              <FileSpreadsheet size={13} className="text-muted-foreground" />
               Descarregar CSV / Excel
             </Button>
           </div>
@@ -911,3 +917,4 @@ export default function PrintScheduleModal({
     </Dialog>
   );
 }
+

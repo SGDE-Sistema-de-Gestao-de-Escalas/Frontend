@@ -2163,7 +2163,7 @@ const [publishModalState, setPublishModalState] = useState<{
                       }
                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
                     >
-                      <Copy size={12} className="text-primary" />
+                      <Copy size={12} />
                       <span>
                         {isPastDay ? "Copiar para Futuro" : "Copiar Horário"}
                       </span>
@@ -2179,9 +2179,9 @@ const [publishModalState, setPublishModalState] = useState<{
                         type="button"
                         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
                       >
-                        <Printer size={12} className="text-primary" />
+                        <Printer size={12} />
                         <span>Imprimir / Exportar</span>
-                        <ChevronDown size={11} className="text-muted-foreground ml-0.5" />
+                        <ChevronDown size={11} className="opacity-70 ml-0.5" />
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56 p-1.5">
@@ -2197,7 +2197,7 @@ const [publishModalState, setPublishModalState] = useState<{
                         }
                         className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
                       >
-                        <Printer size={13} className="text-primary" />
+                        <Printer size={13} />
                         <div>
                           <div className="font-medium">Escala do Dia (Afixação)</div>
                           <div className="text-[10px] text-muted-foreground">Formato oficial para o placard</div>
@@ -2212,7 +2212,7 @@ const [publishModalState, setPublishModalState] = useState<{
                         }
                         className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
                       >
-                        <UserCheck size={13} className="text-blue-600" />
+                        <UserCheck size={13} />
                         <div>
                           <div className="font-medium">Horários Individuais</div>
                           <div className="text-[10px] text-muted-foreground">Fichas para entrega e assinatura</div>
@@ -2228,7 +2228,7 @@ const [publishModalState, setPublishModalState] = useState<{
                         onClick={handleExportDayCsv}
                         className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
                       >
-                        <FileSpreadsheet size={13} className="text-emerald-600" />
+                        <FileSpreadsheet size={13} />
                         <div>
                           <div className="font-medium">Descarregar Excel / CSV</div>
                           <div className="text-[10px] text-muted-foreground">Tabela com horários e postos</div>
@@ -2243,7 +2243,7 @@ const [publishModalState, setPublishModalState] = useState<{
                         }
                         className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
                       >
-                        <Eye size={13} className="text-muted-foreground" />
+                        <Eye size={13} />
                         <div>
                           <div className="font-medium">Pré-visualizar Tudo...</div>
                           <div className="text-[10px] text-muted-foreground">Abrir central de documentos</div>
@@ -2259,7 +2259,7 @@ const [publishModalState, setPublishModalState] = useState<{
               <>
                 {publishStatus.isDraft ? (
                   // Caso A: Dia atual está em rascunho -> Split Button
-                  <div className="inline-flex rounded-lg shadow-xs overflow-hidden border border-emerald-600/40 bg-emerald-600 text-white">
+                  <div className="inline-flex rounded-lg shadow-xs overflow-hidden border border-primary bg-primary text-primary-foreground">
                     <ActionTooltip content="Publicar a escala deste dia para ficar visível aos assistentes">
                       <button
                         type="button"
@@ -2269,7 +2269,7 @@ const [publishModalState, setPublishModalState] = useState<{
                             preselectedDate: dayInfo.isoDate,
                           })
                         }
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold hover:bg-emerald-700 transition-colors cursor-pointer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold hover:brightness-110 transition-all cursor-pointer"
                       >
                         <Send size={11} />
                         Publicar Dia
@@ -2280,7 +2280,7 @@ const [publishModalState, setPublishModalState] = useState<{
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
-                          className="px-1.5 py-1.5 border-l border-emerald-500 hover:bg-emerald-700 transition-colors cursor-pointer flex items-center justify-center"
+                          className="px-1.5 py-1.5 border-l border-primary-foreground/20 hover:brightness-110 transition-all cursor-pointer flex items-center justify-center"
                         >
                           <ChevronDown size={12} />
                         </button>
@@ -2295,7 +2295,7 @@ const [publishModalState, setPublishModalState] = useState<{
                           }
                           className="flex items-center gap-2 text-xs py-2 cursor-pointer"
                         >
-                          <Send size={12} className="text-emerald-600" />
+                          <Send size={12} />
                           <div>
                             <div className="font-semibold">Publicar Este Dia</div>
                             <div className="text-[10px] text-muted-foreground">{dayInfo.dayShort}, {dayInfo.dateStr}</div>
@@ -2311,7 +2311,7 @@ const [publishModalState, setPublishModalState] = useState<{
                             }
                             className="flex items-center gap-2 text-xs py-2 cursor-pointer"
                           >
-                            <Calendar size={12} className="text-primary" />
+                            <Calendar size={12} />
                             <div>
                               <div className="font-semibold">Publicar Vários Dias em Rascunho...</div>
                               <div className="text-[10px] text-muted-foreground">{allDraftDays.length} {allDraftDays.length === 1 ? "dia pendente" : "dias pendentes"}</div>
@@ -2332,7 +2332,7 @@ const [publishModalState, setPublishModalState] = useState<{
                           preselectedDate: undefined,
                         })
                       }
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition-colors cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-border bg-card text-foreground hover:bg-muted hover:border-primary/40 transition-colors cursor-pointer"
                     >
                       <Send size={11} />
                       Publicar Escalas ({allDraftDays.length})
