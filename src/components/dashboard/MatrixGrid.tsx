@@ -1033,11 +1033,56 @@ const [publishModalState, setPublishModalState] = useState<{
     const info = getDateInfo(targetOffset);
     const targetStatus = getStatusForIsoDate(info.isoDate);
     const rules = getRulesForDow(info.dow);
-    const workingOnDay = activeAssistants.filter(
-      (a) =>
-        !checkAssistantAbsenceOnDate(a, info.isoDate, absencesRes?.data || [])
-          .absent
-    );
+    const workingOnDay = activeAssistants.filter((a) => {
+      // 1. Assistente externo cedido temporariamente a esta escola
+      if (a.is_temporary_transfer) {
+        const hasTransfer = temporaryAssignments.some(
+          (tr) =>
+            String(tr.assistant_id) === String(a.id) &&
+            String(tr.destination_school_id) === String(selectedSchoolId) &&
+            tr.valid_from <= info.isoDate &&
+            (!tr.valid_until || tr.valid_until >= info.isoDate)
+        );
+        const hasEntries = (schedulesList || []).some(
+          (sc) =>
+            String(sc.assistant_id) === String(a.id) &&
+            String(sc.school_id) === String(selectedSchoolId) &&
+            (sc.entries || []).some((e) => e.date?.slice(0, 10) === info.isoDate)
+        );
+        if (!hasTransfer && !hasEntries) return false;
+      }
+
+      // 2. Assistente desta escola com transferência de saída hoje para outra escola
+      const isTransferredOut = temporaryAssignments.some(
+        (tr) =>
+          String(tr.assistant_id) === String(a.id) &&
+          String(tr.origin_school_id) === String(selectedSchoolId) &&
+          tr.valid_from <= info.isoDate &&
+          (!tr.valid_until || tr.valid_until >= info.isoDate)
+      );
+      if (isTransferredOut) return false;
+
+      // 3. Ausência de dia completo (ou turno completo coberto pela ausência)
+      const absInfo = checkAssistantAbsenceOnDate(
+        a,
+        info.isoDate,
+        absencesRes?.data || []
+      );
+      const fixedBounds = fixedShiftBoundsByAssistant[a.id];
+      const isShiftCovered =
+        absInfo.absent &&
+        fixedBounds &&
+        absInfo.startSlot !== undefined &&
+        absInfo.endSlot !== undefined &&
+        absInfo.startSlot <= fixedBounds.startSlot &&
+        absInfo.endSlot >= fixedBounds.endSlot;
+
+      if (absInfo.absent && (absInfo.isFullDay || isShiftCovered)) {
+        return false;
+      }
+
+      return true;
+    });
 
     const evaluations = rules.map((rule) => {
       let minAssignedInWindow = Infinity;
@@ -1083,9 +1128,7 @@ const [publishModalState, setPublishModalState] = useState<{
             ev.type === "mandatory"
               ? `Regra Obrigatória abaixo do mínimo: ${ev.title}`
               : `Regra Facultativa por preencher: ${ev.title}`,
-          detail: `Horário ${rangeStr}: ${ev.assigned}/${ev.min} assistentes com «${
-            BLOCK_STYLES[ev.state].label
-          }».`,
+          detail: `Horário ${rangeStr}: ${ev.assigned}/${ev.min} assistentes com «${ev.title}».`,
         });
       }
     });
@@ -1158,12 +1201,16 @@ const [publishModalState, setPublishModalState] = useState<{
         targetStatus.viewEndSlot
       );
 
-      const startSlot = fixedBounds?.startSlot ?? bounds.startSlot;
-      const endSlot = fixedBounds?.endSlot ?? bounds.endSlot;
+      const rawStartSlot = fixedBounds?.startSlot ?? bounds.startSlot;
+      const rawEndSlot = fixedBounds?.endSlot ?? bounds.endSlot;
 
-      if (startSlot !== null && endSlot !== null && endSlot > startSlot) {
-        const gapSlots: number[] = [];
-        for (let s = startSlot; s < endSlot; s++) {
+      if (rawStartSlot !== null && rawEndSlot !== null && rawEndSlot > rawStartSlot) {
+        const startSlot = Math.max(rawStartSlot, targetStatus.viewStartSlot);
+        const endSlot = Math.min(rawEndSlot, targetStatus.viewEndSlot);
+
+        if (endSlot > startSlot) {
+          const gapSlots: number[] = [];
+          for (let s = startSlot; s < endSlot; s++) {
           if (row[s] === "off") {
             gapSlots.push(s);
           }
@@ -1178,7 +1225,8 @@ const [publishModalState, setPublishModalState] = useState<{
           });
         }
       }
-    });
+    }
+  });
 
     // 3. Ausências previstas (faltas parciais ou registadas) e aviso de sobreposição
     activeAssistants.forEach((a) => {
@@ -2699,7 +2747,7 @@ const [publishModalState, setPublishModalState] = useState<{
 
                             <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                               <span className="font-mono font-medium text-foreground/80">
-                                {rangeStr} · {BLOCK_STYLES[rule.state].label}
+                                {rangeStr} · {rule.title}
                               </span>
                               <span
                                 className={`uppercase tracking-wider font-semibold text-[9px] ${
