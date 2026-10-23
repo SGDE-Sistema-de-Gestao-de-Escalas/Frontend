@@ -43,8 +43,8 @@ export default function DashboardSection({
 
   const monthsList = useMemo(() => getRealMonthsRange(3, 6), []);
 
-  const defaultStartIso = useMemo(() => getIsoDateFromOffset(-30), []);
-  const defaultEndIso = useMemo(() => getIsoDateFromOffset(30), []);
+  const defaultStartIso = useMemo(() => getIsoDateFromOffset(-7), []);
+  const defaultEndIso = useMemo(() => getIsoDateFromOffset(14), []);
 
   const [queryStartDate, setQueryStartDate] = useState<string>(defaultStartIso);
   const [queryEndDate, setQueryEndDate] = useState<string>(defaultEndIso);

@@ -69,8 +69,8 @@ import { useHolidaysList } from "../../hooks/api/useHolidays";
 import { useAssistantTemporaryAssignmentsList } from "../../hooks/api/useAssistantTemporaryAssignments";
 import assistantSchedulesService from "../../api/services/assistantSchedules.service";
 import assistantExceptionsService from "../../api/services/assistantExceptions.service";
-import { ASSISTANT_SCHEDULES_KEY } from "../../hooks/api/useAssistantSchedules";
-import { ASSISTANT_EXCEPTIONS_KEY } from "../../hooks/api/useAssistantExceptions";
+import { ASSISTANT_SCHEDULES_KEY, useAllAssistantSchedules } from "../../hooks/api/useAssistantSchedules";
+import { ASSISTANT_EXCEPTIONS_KEY, useAllAssistantExceptions } from "../../hooks/api/useAssistantExceptions";
 import type {
   AssistantScheduleProfileApi,
   AssistantExceptionApi,
@@ -190,14 +190,14 @@ export default function MatrixGrid({
 
   // Ensure the query window covers the user's selected queryStartDate..queryEndDate AND the current dayOffset / copyPickerIsoDate
   const effectiveRangeStartIso = useMemo(() => {
-    const defaultStart = queryStartDate || getIsoDateFromOffset(-30);
+    const defaultStart = queryStartDate || getIsoDateFromOffset(-7);
     const candidates = [defaultStart, getIsoDateFromOffset(dayOffset - 7)];
     if (copyPickerIsoDate) candidates.push(copyPickerIsoDate);
     return candidates.sort()[0];
   }, [queryStartDate, dayOffset, copyPickerIsoDate]);
 
   const effectiveRangeEndIso = useMemo(() => {
-    const defaultEnd = queryEndDate || getIsoDateFromOffset(30);
+    const defaultEnd = queryEndDate || getIsoDateFromOffset(14);
     const candidates = [defaultEnd, getIsoDateFromOffset(dayOffset + 14)];
     if (copyPickerIsoDate) candidates.push(copyPickerIsoDate);
     return candidates.sort()[candidates.length - 1];
@@ -209,6 +209,7 @@ export default function MatrixGrid({
     useSchedulesList({
       start_date: effectiveRangeStartIso,
       end_date: effectiveRangeEndIso,
+      per_page: 200,
     });
   const { data: absencesRes, isLoading: isLoadingAbsences } = useAbsencesList({
     start_date: effectiveRangeStartIso,
@@ -326,40 +327,41 @@ export default function MatrixGrid({
     return list;
   }, [assistantsList, temporaryAssignments, schedulesList, selectedSchoolId]);
 
-  // Queries para perfis de horário contratual e exceções de cada assistente ativo com escopo da escola
-  const assistantScheduleQueries = useQueries({
-    queries: activeAssistants.map((a) => ({
-      queryKey: schoolScopedKey("assistant-schedules", selectedSchoolId, String(a.id)),
-      queryFn: () => assistantSchedulesService.getAll(String(a.id)),
-      enabled: !!selectedSchoolId,
-      staleTime: 5 * 60 * 1000,
-    })),
-  });
-
-  const assistantExceptionQueries = useQueries({
-    queries: activeAssistants.map((a) => ({
-      queryKey: schoolScopedKey("assistant-exceptions", selectedSchoolId, String(a.id)),
-      queryFn: () => assistantExceptionsService.getAll(String(a.id)),
-      enabled: !!selectedSchoolId,
-      staleTime: 5 * 60 * 1000,
-    })),
-  });
+  // Consulta otimizada em lote de todos os horários e exceções da escola ativa (evita N pedidos HTTP)
+  const { data: allAssistantSchedules = [] } = useAllAssistantSchedules();
+  const { data: allAssistantExceptions = [] } = useAllAssistantExceptions();
 
   const profilesByAssistant = useMemo(() => {
     const map: Record<string, AssistantScheduleProfileApi[]> = {};
-    activeAssistants.forEach((a, idx) => {
-      map[String(a.id)] = assistantScheduleQueries[idx]?.data || [];
+    activeAssistants.forEach((a) => {
+      map[String(a.id)] = [];
+    });
+    allAssistantSchedules.forEach((p) => {
+      const aid = String(p.assistant_id);
+      if (map[aid]) {
+        map[aid].push(p);
+      } else {
+        map[aid] = [p];
+      }
     });
     return map;
-  }, [activeAssistants, assistantScheduleQueries]);
+  }, [activeAssistants, allAssistantSchedules]);
 
   const exceptionsByAssistant = useMemo(() => {
     const map: Record<string, AssistantExceptionApi[]> = {};
-    activeAssistants.forEach((a, idx) => {
-      map[String(a.id)] = assistantExceptionQueries[idx]?.data || [];
+    activeAssistants.forEach((a) => {
+      map[String(a.id)] = [];
+    });
+    allAssistantExceptions.forEach((e) => {
+      const aid = String(e.assistant_id);
+      if (map[aid]) {
+        map[aid].push(e);
+      } else {
+        map[aid] = [e];
+      }
     });
     return map;
-  }, [activeAssistants, assistantExceptionQueries]);
+  }, [activeAssistants, allAssistantExceptions]);
 
   const dayRulesCatalog: DayRuleConfig[] = useMemo(() => {
     return scheduleRules.map((rule) => {

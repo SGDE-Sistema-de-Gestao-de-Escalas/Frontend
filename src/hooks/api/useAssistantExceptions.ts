@@ -22,6 +22,17 @@ export function useAssistantExceptions(assistantId?: EntityId) {
   });
 }
 
+export function useAllAssistantExceptions() {
+  const { selectedSchoolId } = useSchool();
+
+  return useQuery({
+    queryKey: schoolScopedKey("assistant-exceptions", selectedSchoolId, "all"),
+    queryFn: () => assistantExceptionsService.getAll(),
+    enabled: !!selectedSchoolId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useCreateAssistantException() {
   const queryClient = useQueryClient();
 

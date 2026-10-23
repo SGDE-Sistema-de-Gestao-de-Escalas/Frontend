@@ -189,13 +189,13 @@ export const assistantSchedulesService = {
    * Listar perfis de horário do assistente
    * GET /api/assistant-schedule-profiles?assistant_id={assistantId}
    */
-  async getAll(assistantId: string | number): Promise<AssistantScheduleProfileApi[]> {
-    const aid = String(assistantId);
+  async getAll(assistantId?: string | number): Promise<AssistantScheduleProfileApi[]> {
+    const aid = assistantId !== undefined && assistantId !== null && assistantId !== "" ? String(assistantId) : undefined;
     try {
       const response = await apiClient.get<any>(
         "/assistant-schedule-profiles",
         {
-          params: { assistant_id: aid },
+          params: aid ? { assistant_id: aid } : {},
         }
       );
       const data = Array.isArray(response.data?.data)

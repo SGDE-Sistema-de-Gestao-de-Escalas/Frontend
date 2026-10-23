@@ -22,6 +22,17 @@ export function useAssistantSchedules(assistantId?: EntityId) {
   });
 }
 
+export function useAllAssistantSchedules() {
+  const { selectedSchoolId } = useSchool();
+
+  return useQuery({
+    queryKey: schoolScopedKey("assistant-schedules", selectedSchoolId, "all"),
+    queryFn: () => assistantSchedulesService.getAll(),
+    enabled: !!selectedSchoolId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useCreateAssistantSchedule() {
   const queryClient = useQueryClient();
 
