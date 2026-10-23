@@ -21,12 +21,12 @@ import ActionTooltip from "../common/ActionTooltip";
 import { notify } from "../common/FeedbackNotification";
 import {
   BLOCK_STYLES,
+  HOUR_LABELS,
   slotsToBlocks,
   VIEW_START,
   VIEW_END,
   VIEW_SLOTS,
 } from "../dashboard/blockStyles";
-import { HOUR_LABELS } from "../../api/mockData";
 import type { BlockState, EntityId } from "../../types";
 import {
   useAssistantSchedules,

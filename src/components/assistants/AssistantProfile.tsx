@@ -605,19 +605,7 @@ export default function AssistantProfile({
         <div className="flex items-center gap-2 flex-wrap">
           {!isDeletedOrAnonymized && (
             <>
-              <button
-                type="button"
-                onClick={() => setShowStatusModal(true)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                  currentIsActive
-                    ? "border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
-                    : "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
-                }`}
-                title={currentIsActive ? "Inativar Assistente" : "Reativar Assistente"}
-              >
-                {currentIsActive ? <UserX size={14} /> : <UserCheck size={14} />}
-                {currentIsActive ? "Inativar" : "Reativar"}
-              </button>
+              <ActionTooltip content={currentIsActive ? "Inativar Assistente" : "Reativar Assistente"}><button type="button" onClick={() => setShowStatusModal(true)} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors cursor-pointer ${currentIsActive ? "border-amber-500/30 text-amber-600 hover:bg-amber-500/10" : "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"}`}>{currentIsActive ? <UserX size={14} /> : <UserCheck size={14} />}{currentIsActive ? "Inativar" : "Reativar"}</button></ActionTooltip>
 
               <button
                 type="button"
@@ -968,20 +956,14 @@ export default function AssistantProfile({
                         {assistant.criminal_record_name || "Certificado_Registo_Criminal.pdf"}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleDownloadCriminalRecord}
-                      disabled={isDownloadingCriminalRecord}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-background hover:bg-muted text-foreground border border-border text-xs font-medium transition-colors shrink-0 disabled:opacity-50"
-                      title="Descarregar ficheiro"
-                    >
+                    <ActionTooltip content="Descarregar registo criminal"><button type="button" onClick={handleDownloadCriminalRecord} disabled={isDownloadingCriminalRecord} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-background hover:bg-muted text-foreground border border-border text-xs font-medium transition-colors shrink-0 disabled:opacity-50 cursor-pointer">
                       {isDownloadingCriminalRecord ? (
                         <Loader2 size={12} className="animate-spin" />
                       ) : (
                         <Download size={12} />
                       )}
                       <span>Ver</span>
-                    </button>
+                    </button></ActionTooltip>
                   </div>
                 ) : (
                   <span className="text-xs text-muted-foreground italic">
@@ -1485,7 +1467,7 @@ export default function AssistantProfile({
             </button>
           </div>
 
-          <ProfileScheduleHistory />
+          <ProfileScheduleHistory assistantId={assistantId} />
         </div>
       )}
 

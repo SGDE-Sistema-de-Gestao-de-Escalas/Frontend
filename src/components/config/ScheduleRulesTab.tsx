@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import {
   AlertTriangle,
   ArrowUpDown,
@@ -37,7 +37,7 @@ import { useAssistantsList } from "../../hooks/api/useAssistants";
 import type { BackendScheduleRuleResource } from "../../api/services/scheduleRules.service";
 import { isFallbackActivityType } from "./ActivityTypesTab";
 
-const DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+const DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "SÃ¡b", "Dom"];
 
 export default function ScheduleRulesTab() {
   const { data: rules = [], isLoading: isLoadingRules } = useScheduleRulesList();
@@ -103,7 +103,7 @@ export default function ScheduleRulesTab() {
     setFormValidityEnd("");
     const initialAssistants = assistants.map((a) => a.id);
     setOrderedAssistantIds(initialAssistants);
-    // Selecionamos os primeiros N correspondentes à dotação mínima
+    // Selecionamos os primeiros N correspondentes Ã  dotaÃ§Ã£o mÃ­nima
     const initialSelected = initialAssistants.slice(0, 2);
     setFormAssistantIds(initialSelected);
     setFormError(null);
@@ -214,13 +214,13 @@ export default function ScheduleRulesTab() {
 
     if (finalAssistantIds.length < minCount) {
       setFormError(
-        `Selecione pelo menos ${minCount} ${minCount === 1 ? "assistente" : "assistentes"} para cumprir a dotação mínima de ${minCount}.`
+        `Selecione pelo menos ${minCount} ${minCount === 1 ? "assistente" : "assistentes"} para cumprir a dotaÃ§Ã£o mÃ­nima de ${minCount}.`
       );
       return;
     }
 
     if (formPeriodEnd <= formPeriodStart) {
-      setFormError("A hora de fim tem de ser posterior à hora de início.");
+      setFormError("A hora de fim tem de ser posterior Ã  hora de inÃ­cio.");
       return;
     }
 
@@ -235,11 +235,11 @@ export default function ScheduleRulesTab() {
     }
 
     if (formValidityEnd && formValidityEnd < formValidityStart) {
-      setFormError("A data de fim da vigência deve ser posterior ou igual à data de início.");
+      setFormError("A data de fim da vigÃªncia deve ser posterior ou igual Ã  data de inÃ­cio.");
       return;
     }
 
-    // Regra obrigatória sem suplentes adicionais: solicitar confirmação amigável
+    // Regra obrigatÃ³ria sem suplentes adicionais: solicitar confirmaÃ§Ã£o amigÃ¡vel
     if (!force && formRuleType === "mandatory" && finalAssistantIds.length === minCount) {
       setShowMissingSubstitutesWarning(true);
       return;
@@ -271,7 +271,7 @@ export default function ScheduleRulesTab() {
       }
       setShowAdd(false);
     } catch {
-      // O erro já é tratado no onError do hook com toast de feedback
+      // O erro jÃ¡ Ã© tratado no onError do hook com toast de feedback
     }
   }
 
@@ -281,10 +281,10 @@ export default function ScheduleRulesTab() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h3 className="text-sm font-semibold text-foreground">
-            Regras de Horário
+            Regras de HorÃ¡rio
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Define que atividade é obrigatória, em que período e com quantas
+            Define que atividade Ã© obrigatÃ³ria, em que perÃ­odo e com quantas
             pessoas
           </p>
         </div>
@@ -306,12 +306,12 @@ export default function ScheduleRulesTab() {
                 {[
                   "Atividade",
                   "Dias",
-                  "Período",
-                  "Mín. pessoas",
-                  "Funcionários (Prioridade)",
+                  "PerÃ­odo",
+                  "MÃ­n. pessoas",
+                  "FuncionÃ¡rios (Prioridade)",
                   "Obrigatoriedade",
-                  "Vigência Início",
-                  "Vigência Fim",
+                  "VigÃªncia InÃ­cio",
+                  "VigÃªncia Fim",
                   "",
                 ].map((h) => (
                   <th
@@ -329,14 +329,14 @@ export default function ScheduleRulesTab() {
                   <td colSpan={9} className="px-4 py-8 text-center text-xs text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 size={16} className="animate-spin text-primary" />
-                      <span>A carregar regras de horário...</span>
+                      <span>A carregar regras de horÃ¡rio...</span>
                     </div>
                   </td>
                 </tr>
               ) : rules.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-8 text-center text-xs text-muted-foreground">
-                    Nenhuma regra de horário configurada para esta escola.
+                    Nenhuma regra de horÃ¡rio configurada para esta escola.
                   </td>
                 </tr>
               ) : (
@@ -380,7 +380,7 @@ export default function ScheduleRulesTab() {
                           {isAllDays ? (
                             <span className="text-xs text-muted-foreground font-medium">Todos</span>
                           ) : isWeekdays ? (
-                            <span className="text-xs text-muted-foreground font-medium">Seg–Sex</span>
+                            <span className="text-xs text-muted-foreground font-medium">Segâ€“Sex</span>
                           ) : (
                             DAYS.map((d, idx) => {
                               const isActive = daysOfWeek.includes(idx);
@@ -402,7 +402,7 @@ export default function ScheduleRulesTab() {
                         </div>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">
-                        {rule.period_start}–{rule.period_end}
+                        {rule.period_start}â€“{rule.period_end}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs font-semibold">
                         {rule.min}
@@ -432,7 +432,7 @@ export default function ScheduleRulesTab() {
                                   key={ast.id}
                                   content={
                                     <div className="text-center font-medium whitespace-nowrap">
-                                      {ast.priority ? `${ast.priority}º ` : ""}{ast.name}
+                                      {ast.priority ? `${ast.priority}Âº ` : ""}{ast.name}
                                     </div>
                                   }
                                 >
@@ -456,7 +456,7 @@ export default function ScheduleRulesTab() {
                                           key={ast.id}
                                           className="text-[11px] text-center whitespace-nowrap"
                                         >
-                                          {ast.priority ? `${ast.priority}º ` : ""}{ast.name}
+                                          {ast.priority ? `${ast.priority}Âº ` : ""}{ast.name}
                                         </p>
                                       ))}
                                     </div>
@@ -474,7 +474,7 @@ export default function ScheduleRulesTab() {
                       <td className="px-4 py-3">
                         {rule.type === "mandatory" ? (
                           <span className="inline-flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
-                            Obrigatório
+                            ObrigatÃ³rio
                           </span>
                         ) : (
                           <Badge variant="secondary" className="text-[10px]">
@@ -540,7 +540,7 @@ export default function ScheduleRulesTab() {
         >
           <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10 rounded-t-xl shrink-0">
             <DialogTitle className="font-semibold text-foreground text-sm">
-              {isEditing ? "Editar Regra de Horário" : "Nova Regra de Horário"}
+              {isEditing ? "Editar Regra de HorÃ¡rio" : "Nova Regra de HorÃ¡rio"}
             </DialogTitle>
           </DialogHeader>
 
@@ -562,7 +562,7 @@ export default function ScheduleRulesTab() {
                   }))}
                   placeholder="Selecionar tipo de atividade..."
                   searchPlaceholder="Pesquisar tipo de atividade..."
-                  emptyMessage="Nenhuma atividade elegível encontrada (a atividade base é atribuída automaticamente)."
+                  emptyMessage="Nenhuma atividade elegÃ­vel encontrada (a atividade base Ã© atribuÃ­da automaticamente)."
                 />
               </div>
 
@@ -591,7 +591,7 @@ export default function ScheduleRulesTab() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                    Hora Início
+                    Hora InÃ­cio
                   </label>
                   <TimePicker
                     value={formPeriodStart}
@@ -614,7 +614,7 @@ export default function ScheduleRulesTab() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                    Mínimo de Pessoas *
+                    MÃ­nimo de Pessoas *
                   </label>
                   <input
                     type="number"
@@ -639,23 +639,23 @@ export default function ScheduleRulesTab() {
                       setFormError(null);
                     }}
                     options={[
-                      { value: "mandatory", label: "Obrigatório" },
+                      { value: "mandatory", label: "ObrigatÃ³rio" },
                       { value: "optional", label: "Facultativo" },
                     ]}
                   />
                 </div>
               </div>
 
-              {/* Assistentes Afetos e Ordem de Prioridade (Lista Única Intuitiva) */}
+              {/* Assistentes Afetos e Ordem de Prioridade (Lista Ãšnica Intuitiva) */}
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div>
                     <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                       <Users size={14} className="text-primary" />
-                      Funcionários Afetos & Ordem de Prioridade
+                      FuncionÃ¡rios Afetos & Ordem de Prioridade
                     </label>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Marque para afetar à regra e arraste na pega para definir a prioridade ({formAssistantIds.length}/{assistants.length} selecionados)
+                      Marque para afetar Ã  regra e arraste na pega para definir a prioridade ({formAssistantIds.length}/{assistants.length} selecionados)
                     </p>
                   </div>
                   <button
@@ -669,7 +669,7 @@ export default function ScheduleRulesTab() {
                   </button>
                 </div>
 
-                {/* Requisito de dotação antes da listagem */}
+                {/* Requisito de dotaÃ§Ã£o antes da listagem */}
                 {(() => {
                   const parsedMin = Math.max(1, parseInt(formMinStaff, 10) || 1);
                   const count = formAssistantIds.length;
@@ -707,19 +707,19 @@ export default function ScheduleRulesTab() {
                         <span>
                           {isBelowMin ? (
                             <>
-                              Dotação mínima: <strong>{parsedMin} {parsedMin === 1 ? "assistente" : "assistentes"}</strong>. Faltam {parsedMin - count}.
+                              DotaÃ§Ã£o mÃ­nima: <strong>{parsedMin} {parsedMin === 1 ? "assistente" : "assistentes"}</strong>. Faltam {parsedMin - count}.
                             </>
                           ) : isExactlyMinMandatory ? (
                             <>
-                              Dotação mínima atingida ({parsedMin}). <em>Sem suplentes</em> selecionados para salvaguarda.
+                              DotaÃ§Ã£o mÃ­nima atingida ({parsedMin}). <em>Sem suplentes</em> selecionados para salvaguarda.
                             </>
                           ) : hasSubstitutes ? (
                             <>
-                              Dotação cumprida: <strong>{parsedMin} efetivos</strong> + <strong>{count - parsedMin} {count - parsedMin === 1 ? "suplente" : "suplentes"}</strong> por ordem de prioridade.
+                              DotaÃ§Ã£o cumprida: <strong>{parsedMin} efetivos</strong> + <strong>{count - parsedMin} {count - parsedMin === 1 ? "suplente" : "suplentes"}</strong> por ordem de prioridade.
                             </>
                           ) : (
                             <>
-                              Dotação mínima cumprida: <strong>{parsedMin} {parsedMin === 1 ? "assistente" : "assistentes"}</strong>.
+                              DotaÃ§Ã£o mÃ­nima cumprida: <strong>{parsedMin} {parsedMin === 1 ? "assistente" : "assistentes"}</strong>.
                             </>
                           )}
                         </span>
@@ -748,9 +748,9 @@ export default function ScheduleRulesTab() {
                   <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b border-border text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                     <span className="flex items-center gap-2">
                       <span>Ordem</span>
-                      <span>Funcionário</span>
+                      <span>FuncionÃ¡rio</span>
                     </span>
-                    <span>Afeto à Regra</span>
+                    <span>Afeto Ã  Regra</span>
                   </div>
 
                   <div className="max-h-64 overflow-y-auto divide-y divide-border/50 p-1 space-y-1">
@@ -804,21 +804,21 @@ export default function ScheduleRulesTab() {
                                       ? "bg-slate-500/20 text-slate-700 dark:text-slate-300 border border-slate-500/40"
                                       : "bg-primary/15 text-primary border border-primary/30"
                                   }`}
-                                  title={`${selectedPriority}ª Prioridade na regra`}
+                                  title={`${selectedPriority}Âª Prioridade na regra`}
                                 >
-                                  {selectedPriority}º
+                                  {selectedPriority}Âº
                                 </span>
                               ) : (
                                 <span
                                   className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-muted-foreground/40 font-mono"
-                                  title="Não afeto à regra"
+                                  title="NÃ£o afeto Ã  regra"
                                 >
-                                  —
+                                  â€”
                                 </span>
                               )}
                             </div>
 
-                            {/* Nome e Mecanográfico */}
+                            {/* Nome e MecanogrÃ¡fico */}
                             <div className="truncate">
                               <span
                                 className={`text-xs ${
@@ -837,27 +837,11 @@ export default function ScheduleRulesTab() {
                             </div>
                           </div>
 
-                          {/* Lado direito: Botões subir/descer discretos + Checkbox de seleção */}
+                          {/* Lado direito: BotÃµes subir/descer discretos + Checkbox de seleÃ§Ã£o */}
                           <div className="flex items-center gap-2 shrink-0">
                             <div className="flex items-center gap-0.5">
-                              <button
-                                type="button"
-                                disabled={index === 0}
-                                onClick={() => moveAssistant(index, "up")}
-                                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
-                                title="Subir na lista"
-                              >
-                                <ChevronUp size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                disabled={index === orderedAssistantIds.length - 1}
-                                onClick={() => moveAssistant(index, "down")}
-                                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
-                                title="Descer na lista"
-                              >
-                                <ChevronDown size={13} />
-                              </button>
+                              <ActionTooltip content="Subir prioridade"><button type="button" disabled={index === 0} onClick={() => moveAssistant(index, "up")} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:hover:bg-transparent transition-colors cursor-pointer"><ChevronUp size={13} /></button></ActionTooltip>
+                              <ActionTooltip content="Descer prioridade"><button type="button" disabled={index === orderedAssistantIds.length - 1} onClick={() => moveAssistant(index, "down")} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:hover:bg-transparent transition-colors cursor-pointer"><ChevronDown size={13} /></button></ActionTooltip>
                             </div>
 
                             {/* Checkbox com check branco */}
@@ -882,15 +866,15 @@ export default function ScheduleRulesTab() {
                 )}
               </div>
 
-              {/* Vigência */}
+              {/* VigÃªncia */}
               <div className="border-t border-border/60 pt-4">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                  Vigência
+                  VigÃªncia
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                      Data de Início *
+                      Data de InÃ­cio *
                     </label>
                     <DatePicker
                       value={formValidityStart}
@@ -916,7 +900,7 @@ export default function ScheduleRulesTab() {
                       placeholder="AAAA-MM-DD"
                     />
                     <p className="text-[10px] text-muted-foreground/70 mt-1">
-                      Em branco = vigência em aberto
+                      Em branco = vigÃªncia em aberto
                     </p>
                   </div>
                 </div>
@@ -937,7 +921,7 @@ export default function ScheduleRulesTab() {
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs disabled:opacity-50"
                 >
                   {isSaving && <Loader2 size={13} className="animate-spin" />}
-                  <span>{isEditing ? "Guardar Alterações" : "Criar Regra"}</span>
+                  <span>{isEditing ? "Guardar AlteraÃ§Ãµes" : "Criar Regra"}</span>
                 </button>
               </div>
             </div>
@@ -967,11 +951,11 @@ export default function ScheduleRulesTab() {
                 {activityTypes.find((t) => t.id === deleteRuleTarget.activity_type_id)?.name ??
                   deleteRuleTarget.activity_type_id}
               </strong>{" "}
-              (Vigência: {deleteRuleTarget.valid_from}
+              (VigÃªncia: {deleteRuleTarget.valid_from}
               {deleteRuleTarget.valid_until
                 ? ` a ${deleteRuleTarget.valid_until}`
-                : " — Em aberto"})?
-              Esta ação removerá esta restrição no cálculo de escalas do motor.
+                : " â€” Em aberto"})?
+              Esta aÃ§Ã£o removerÃ¡ esta restriÃ§Ã£o no cÃ¡lculo de escalas do motor.
             </>
           ) : ""
         }
@@ -985,18 +969,18 @@ export default function ScheduleRulesTab() {
         open={showMissingSubstitutesWarning}
         onClose={() => setShowMissingSubstitutesWarning(false)}
         onConfirm={() => submitRule(true)}
-        title="Regra Obrigatória sem Assistentes Suplentes"
+        title="Regra ObrigatÃ³ria sem Assistentes Suplentes"
         description={
           <>
-            Não foram selecionados assistentes suplentes para esta regra.
+            NÃ£o foram selecionados assistentes suplentes para esta regra.
             <br />
             <br />
-            No caso de um assistente não estar disponível (por motivo de falta, sobreposição ou exceção), a regra{" "}
-            <strong className="text-foreground">não vai cumprir os requisitos de dotação mínima</strong> ({formMinStaff}{" "}
+            No caso de um assistente nÃ£o estar disponÃ­vel (por motivo de falta, sobreposiÃ§Ã£o ou exceÃ§Ã£o), a regra{" "}
+            <strong className="text-foreground">nÃ£o vai cumprir os requisitos de dotaÃ§Ã£o mÃ­nima</strong> ({formMinStaff}{" "}
             {parseInt(formMinStaff, 10) === 1 ? "pessoa" : "pessoas"}).
             <br />
             <br />
-            Deseja voltar atrás para adicionar mais assistentes por ordem de prioridade ou prefere prosseguir mesmo assim?
+            Deseja voltar atrÃ¡s para adicionar mais assistentes por ordem de prioridade ou prefere prosseguir mesmo assim?
           </>
         }
         confirmLabel="Prosseguir"
@@ -1006,3 +990,4 @@ export default function ScheduleRulesTab() {
     </div>
   );
 }
+

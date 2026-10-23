@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Building2, ChevronDown, Check, MapPin, Settings, Plus, Loader2 } from "lucide-react";
 import { useSchool } from "../../context/SchoolContext";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import ActionTooltip from "../common/ActionTooltip";
 
 interface SchoolSwitcherProps {
   onPlatformSettings?: () => void;
@@ -13,20 +14,19 @@ export default function SchoolSwitcher({ onPlatformSettings }: SchoolSwitcherPro
   const activeSchools = schools.filter((s) => s.active);
   const inactiveSchools = schools.filter((s) => !s.active);
 
-  // Assistentes pertencem a uma escola atribuída e visualizam apenas o badge sem dropdown de seleção
+  // Assistentes pertencem a uma escola atribuÃ­da e visualizam apenas o badge sem dropdown de seleÃ§Ã£o
   if (!canSwitchSchool) {
     return (
-      <div
-        className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-full border border-border bg-card max-w-[220px] select-none cursor-default"
-        title={selectedSchool ? `Escola atribuída: ${selectedSchool.name}` : undefined}
-      >
-        <span className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 bg-primary/12 text-primary">
-          <Building2 size={13} />
-        </span>
-        <span className="text-xs font-medium text-foreground truncate hidden sm:block">
-          {selectedSchool ? selectedSchool.name : "A sua escola"}
-        </span>
-      </div>
+      <ActionTooltip content={selectedSchool ? `Escola atribuída: ${selectedSchool.name}` : null}>
+        <div className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-full border border-border bg-card max-w-[220px] select-none cursor-default">
+          <span className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 bg-primary/12 text-primary">
+            <Building2 size={13} />
+          </span>
+          <span className="text-xs font-medium text-foreground truncate hidden sm:block">
+            {selectedSchool ? selectedSchool.name : "A sua escola"}
+          </span>
+        </div>
+      </ActionTooltip>
     );
   }
 
@@ -149,7 +149,7 @@ export default function SchoolSwitcher({ onPlatformSettings }: SchoolSwitcherPro
                 Nenhuma escola registada
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5 mb-3">
-                Crie a primeira escola para começar a utilizar a plataforma.
+                Crie a primeira escola para comeÃ§ar a utilizar a plataforma.
               </p>
               {onPlatformSettings && (
                 <button
@@ -202,4 +202,5 @@ export default function SchoolSwitcher({ onPlatformSettings }: SchoolSwitcherPro
     </Popover>
   );
 }
+
 

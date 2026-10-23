@@ -43,11 +43,11 @@ import {
 
 const DAY_NAMES: Record<DayOfWeekNumber, { short: string; full: string }> = {
   0: { short: "Seg", full: "Segunda-feira" },
-  1: { short: "Ter", full: "Terça-feira" },
+  1: { short: "Ter", full: "TerÃ§a-feira" },
   2: { short: "Qua", full: "Quarta-feira" },
   3: { short: "Qui", full: "Quinta-feira" },
   4: { short: "Sex", full: "Sexta-feira" },
-  5: { short: "Sáb", full: "Sábado" },
+  5: { short: "SÃ¡b", full: "SÃ¡bado" },
   6: { short: "Dom", full: "Domingo" },
 };
 
@@ -62,7 +62,7 @@ export default function WindowsTab() {
   const { data: rawRules, isLoading: isLoadingRules } = useOperatingRules();
   const { data: rawExceptions, isLoading: isLoadingExceptions } = useOperatingExceptions();
 
-  // Normalização defensiva
+  // NormalizaÃ§Ã£o defensiva
   const rules: OperatingRule[] = useMemo(() => {
     if (Array.isArray(rawRules)) return rawRules;
     if (Array.isArray((rawRules as any)?.data)) return (rawRules as any).data;
@@ -75,7 +75,7 @@ export default function WindowsTab() {
     return [];
   }, [rawExceptions]);
 
-  // Separação de versões
+  // SeparaÃ§Ã£o de versÃµes
   const currentRule = useMemo(() => {
     return rules.find((r) => r.status === "current") || rules[0] || null;
   }, [rules]);
@@ -88,10 +88,10 @@ export default function WindowsTab() {
     return rules.filter((r) => r.status === "superseded");
   }, [rules]);
 
-  // Controlo de exibição de versões futuras/histórico
+  // Controlo de exibiÃ§Ã£o de versÃµes futuras/histÃ³rico
   const [showOtherVersions, setShowOtherVersions] = useState(false);
 
-  // Mutações
+  // MutaÃ§Ãµes
   const createRuleMutation = useCreateOperatingRule();
   const updateRuleMutation = useUpdateOperatingRule();
   const deleteRuleMutation = useDeleteOperatingRule();
@@ -111,7 +111,7 @@ export default function WindowsTab() {
   const [deleteExceptionTarget, setDeleteExceptionTarget] = useState<OperatingException | null>(null);
 
   // ==========================================
-  // FORMULÁRIO: HORÁRIO FIXO
+  // FORMULÃRIO: HORÃRIO FIXO
   // ==========================================
   interface DayFormState {
     enabled: boolean;
@@ -245,7 +245,7 @@ export default function WindowsTab() {
       setRuleModalOpen(false);
     } catch (err: any) {
       if (err?.response?.status === 409) {
-        setRuleConflictError(err.response.data?.message || "Esta versão entra em conflito com o histórico da escola.");
+        setRuleConflictError(err.response.data?.message || "Esta versÃ£o entra em conflito com o histÃ³rico da escola.");
       } else if (err?.response?.status === 422 && err.response.data?.errors) {
         setRuleFormErrors(err.response.data.errors);
       }
@@ -253,7 +253,7 @@ export default function WindowsTab() {
   }
 
   // ==========================================
-  // FORMULÁRIO: EXCEÇÕES
+  // FORMULÃRIO: EXCEÃ‡Ã•ES
   // ==========================================
   const todayStr = new Date().toISOString().split("T")[0];
   const [excName, setExcName] = useState("");
@@ -328,7 +328,7 @@ export default function WindowsTab() {
       setExceptionModalOpen(false);
     } catch (err: any) {
       if (err?.response?.status === 409) {
-        setExcConflictError(err.response.data?.message || "Ação não permitida pelo estado da exceção.");
+        setExcConflictError(err.response.data?.message || "AÃ§Ã£o nÃ£o permitida pelo estado da exceÃ§Ã£o.");
       } else if (err?.response?.status === 422 && err.response.data?.errors) {
         setExcFormErrors(err.response.data.errors);
       }
@@ -337,14 +337,14 @@ export default function WindowsTab() {
 
   return (
     <div className="space-y-7">
-      {/* ── CABEÇALHO UNIFICADO DA PÁGINA ────────────────────────────────────────── */}
+      {/* â”€â”€ CABEÃ‡ALHO UNIFICADO DA PÃGINA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h3 className="text-sm font-semibold text-foreground">
-            Horário de Funcionamento
+            HorÃ¡rio de Funcionamento
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Define os horários de abertura, fecho e intervalos de almoço habitual da escola, bem como períodos de exceção
+            Define os horÃ¡rios de abertura, fecho e intervalos de almoÃ§o habitual da escola, bem como perÃ­odos de exceÃ§Ã£o
           </p>
         </div>
 
@@ -356,7 +356,7 @@ export default function WindowsTab() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-foreground hover:bg-muted text-xs font-medium transition-colors"
             >
               <Plus size={13} />
-              Nova Exceção
+              Nova ExceÃ§Ã£o
             </button>
             <button
               type="button"
@@ -364,29 +364,29 @@ export default function WindowsTab() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
             >
               <Plus size={13} />
-              Nova Versão de Horário
+              Nova VersÃ£o de HorÃ¡rio
             </button>
           </div>
         )}
       </div>
 
-      {/* ── SECÇÃO 1: HORÁRIO REGULAR SEMANAL (VERSÃO EM VIGOR) ──────────────────── */}
+      {/* â”€â”€ SECÃ‡ÃƒO 1: HORÃRIO REGULAR SEMANAL (VERSÃƒO EM VIGOR) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <section className="space-y-3">
         {isLoadingRules ? (
           <div className="py-12 text-center text-xs text-muted-foreground animate-pulse">
-            A carregar horário semanal...
+            A carregar horÃ¡rio semanal...
           </div>
         ) : !currentRule ? (
           <div className="py-10 text-center border border-dashed border-border rounded-xl bg-card">
             <Clock size={28} className="mx-auto text-muted-foreground/40 mb-2" />
-            <p className="text-xs font-medium text-foreground">Sem horário regular configurado</p>
+            <p className="text-xs font-medium text-foreground">Sem horÃ¡rio regular configurado</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Clique em "Nova Versão de Horário" no topo para definir os dias e horários de funcionamento.
+              Clique em "Nova VersÃ£o de HorÃ¡rio" no topo para definir os dias e horÃ¡rios de funcionamento.
             </p>
           </div>
         ) : (
           <Card className="p-5 rounded-xl border border-border bg-card shadow-xs space-y-4">
-            {/* Topo do Card da Versão Ativa */}
+            {/* Topo do Card da VersÃ£o Ativa */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/60">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
@@ -394,11 +394,11 @@ export default function WindowsTab() {
                 </span>
 
                 <span className="text-xs text-muted-foreground">
-                  Início a <strong className="text-foreground font-mono">{currentRule.valid_from}</strong>
+                  InÃ­cio a <strong className="text-foreground font-mono">{currentRule.valid_from}</strong>
                   {currentRule.valid_until ? (
-                    <> até <strong className="text-foreground font-mono">{currentRule.valid_until}</strong></>
+                    <> atÃ© <strong className="text-foreground font-mono">{currentRule.valid_until}</strong></>
                   ) : (
-                    <span className="italic ml-1">(vigência em aberto)</span>
+                    <span className="italic ml-1">(vigÃªncia em aberto)</span>
                   )}
                 </span>
               </div>
@@ -412,7 +412,7 @@ export default function WindowsTab() {
                   >
                     <History size={12} />
                     <span>
-                      {showOtherVersions ? "Ocultar outras versões" : `Outras versões (${upcomingRules.length + pastRules.length})`}
+                      {showOtherVersions ? "Ocultar outras versÃµes" : `Outras versÃµes (${upcomingRules.length + pastRules.length})`}
                     </span>
                     {showOtherVersions ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                   </button>
@@ -422,8 +422,8 @@ export default function WindowsTab() {
                   <ActionTooltip
                     content={
                       currentRule.can_edit === false
-                        ? currentRule.cannot_edit_reason || "Esta regra não pode ser editada"
-                        : "Editar horário base"
+                        ? currentRule.cannot_edit_reason || "Esta regra nÃ£o pode ser editada"
+                        : "Editar horÃ¡rio base"
                     }
                   >
                     <button
@@ -444,7 +444,7 @@ export default function WindowsTab() {
               </div>
             </div>
 
-            {/* Grelha dos 7 Dias da Semana da Versão Ativa */}
+            {/* Grelha dos 7 Dias da Semana da VersÃ£o Ativa */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5">
               {ALL_DAYS.map((d) => {
                 const dayConfig = currentRule.days.find((item) => item.day_of_week === d);
@@ -479,7 +479,7 @@ export default function WindowsTab() {
                             </span>
                           </div>
                           <div>
-                            <span className="text-[10px] text-muted-foreground block">Almoço</span>
+                            <span className="text-[10px] text-muted-foreground block">AlmoÃ§o</span>
                             <span className="text-muted-foreground font-mono">
                               {dayConfig.lunch_start} - {dayConfig.lunch_end}
                             </span>
@@ -499,27 +499,27 @@ export default function WindowsTab() {
           </Card>
         )}
 
-        {/* ── BLOCO DE OUTRAS VERSÕES (FUTURAS E HISTÓRICO COM JANELINHAS COMPACTAS) ── */}
+        {/* â”€â”€ BLOCO DE OUTRAS VERSÃ•ES (FUTURAS E HISTÃ“RICO COM JANELINHAS COMPACTAS) â”€â”€ */}
         {showOtherVersions && (upcomingRules.length > 0 || pastRules.length > 0) && (
           <div className="space-y-3 pt-1">
             {upcomingRules.length > 0 && (
               <div className="space-y-2.5">
                 <span className="text-[11px] font-semibold text-foreground uppercase tracking-wider block">
-                  Próximas Versões Agendadas ({upcomingRules.length})
+                  PrÃ³ximas VersÃµes Agendadas ({upcomingRules.length})
                 </span>
 
                 <div className="space-y-2.5">
                   {upcomingRules.map((r) => (
                     <Card key={r.id} className="p-3.5 rounded-xl border border-border bg-card shadow-2xs space-y-2.5">
-                      {/* Topo da versão futura */}
+                      {/* Topo da versÃ£o futura */}
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-2">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/15 text-blue-700 dark:text-blue-400">
-                            {r.status_message || "Versão Futura"}
+                            {r.status_message || "VersÃ£o Futura"}
                           </span>
                           <span className="text-xs text-muted-foreground">
                             Entra em vigor a <strong className="text-foreground font-mono">{r.valid_from}</strong>
-                            {r.valid_until ? <> até <strong className="text-foreground font-mono">{r.valid_until}</strong></> : ""}
+                            {r.valid_until ? <> atÃ© <strong className="text-foreground font-mono">{r.valid_until}</strong></> : ""}
                           </span>
                         </div>
 
@@ -528,8 +528,8 @@ export default function WindowsTab() {
                             <ActionTooltip
                               content={
                                 r.can_edit === false
-                                  ? r.cannot_edit_reason || "Esta versão não pode ser editada"
-                                  : "Editar versão futura"
+                                  ? r.cannot_edit_reason || "Esta versÃ£o nÃ£o pode ser editada"
+                                  : "Editar versÃ£o futura"
                               }
                             >
                               <button
@@ -550,8 +550,8 @@ export default function WindowsTab() {
                             <ActionTooltip
                               content={
                                 r.can_delete === false
-                                  ? r.cannot_delete_reason || "Esta versão não pode ser eliminada"
-                                  : "Eliminar versão futura"
+                                  ? r.cannot_delete_reason || "Esta versÃ£o nÃ£o pode ser eliminada"
+                                  : "Eliminar versÃ£o futura"
                               }
                             >
                               <button
@@ -572,7 +572,7 @@ export default function WindowsTab() {
                         )}
                       </div>
 
-                      {/* Janelinhas compactas dos 7 dias para a versão futura */}
+                      {/* Janelinhas compactas dos 7 dias para a versÃ£o futura */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
                         {ALL_DAYS.map((d) => {
                           const dayConfig = r.days.find((item) => item.day_of_week === d);
@@ -600,11 +600,11 @@ export default function WindowsTab() {
                                     {dayConfig.opening_time} - {dayConfig.closing_time}
                                   </div>
                                   <div className="text-muted-foreground text-[9px]">
-                                    Almoço: {dayConfig.lunch_duration_minutes}m
+                                    AlmoÃ§o: {dayConfig.lunch_duration_minutes}m
                                   </div>
                                 </div>
                               ) : (
-                                <span className="text-[9px] text-muted-foreground italic py-0.5">Sem horário</span>
+                                <span className="text-[9px] text-muted-foreground italic py-0.5">Sem horÃ¡rio</span>
                               )}
                             </div>
                           );
@@ -619,7 +619,7 @@ export default function WindowsTab() {
             {pastRules.length > 0 && (
               <div className="space-y-2.5 pt-1">
                 <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                  Histórico de Versões Anteriores ({pastRules.length})
+                  HistÃ³rico de VersÃµes Anteriores ({pastRules.length})
                 </span>
 
                 <div className="space-y-2.5">
@@ -628,16 +628,16 @@ export default function WindowsTab() {
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-2">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-muted text-muted-foreground">
-                            Histórico
+                            HistÃ³rico
                           </span>
                           <span className="text-xs font-mono text-muted-foreground">
-                            Vigorou de {r.valid_from} até {r.valid_until || "—"}
+                            Vigorou de {r.valid_from} atÃ© {r.valid_until || "â€”"}
                           </span>
                         </div>
-                        <span className="text-[10px] text-muted-foreground italic">Versão arquivada (leitura)</span>
+                        <span className="text-[10px] text-muted-foreground italic">VersÃ£o arquivada (leitura)</span>
                       </div>
 
-                      {/* Janelinhas compactas dos 7 dias para o histórico */}
+                      {/* Janelinhas compactas dos 7 dias para o histÃ³rico */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
                         {ALL_DAYS.map((d) => {
                           const dayConfig = r.days.find((item) => item.day_of_week === d);
@@ -665,11 +665,11 @@ export default function WindowsTab() {
                                     {dayConfig.opening_time} - {dayConfig.closing_time}
                                   </div>
                                   <div className="text-muted-foreground text-[9px]">
-                                    Almoço: {dayConfig.lunch_duration_minutes}m
+                                    AlmoÃ§o: {dayConfig.lunch_duration_minutes}m
                                   </div>
                                 </div>
                               ) : (
-                                <span className="text-[9px] text-muted-foreground italic py-0.5">Sem horário</span>
+                                <span className="text-[9px] text-muted-foreground italic py-0.5">Sem horÃ¡rio</span>
                               )}
                             </div>
                           );
@@ -684,33 +684,33 @@ export default function WindowsTab() {
         )}
       </section>
 
-      {/* ── SECÇÃO 2: EXCEÇÕES E PAUSAS LETIVAS ──────────────────────────────────── */}
+      {/* â”€â”€ SECÃ‡ÃƒO 2: EXCEÃ‡Ã•ES E PAUSAS LETIVAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <section className="space-y-3 pt-2">
         <div className="flex items-center justify-between">
           <div>
             <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">
-              Exceções e Pausas Letivas
+              ExceÃ§Ãµes e Pausas Letivas
             </h4>
             <p className="text-[11px] text-muted-foreground">
-              Períodos em que a escola encerra ou funciona com horário especial (exames, férias, tolerâncias de ponto)
+              PerÃ­odos em que a escola encerra ou funciona com horÃ¡rio especial (exames, fÃ©rias, tolerÃ¢ncias de ponto)
             </p>
           </div>
 
           <span className="text-xs font-medium text-muted-foreground">
-            {exceptions.length} {exceptions.length === 1 ? "exceção" : "exceções"}
+            {exceptions.length} {exceptions.length === 1 ? "exceÃ§Ã£o" : "exceÃ§Ãµes"}
           </span>
         </div>
 
         {isLoadingExceptions ? (
           <div className="py-12 text-center text-xs text-muted-foreground animate-pulse">
-            A carregar exceções...
+            A carregar exceÃ§Ãµes...
           </div>
         ) : exceptions.length === 0 ? (
           <div className="py-10 text-center border border-dashed border-border rounded-xl bg-card">
             <CalendarIcon size={28} className="mx-auto text-muted-foreground/40 mb-2" />
-            <p className="text-xs font-medium text-foreground">Sem exceções registadas</p>
+            <p className="text-xs font-medium text-foreground">Sem exceÃ§Ãµes registadas</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Não existem exceções ativas ou agendadas. A escola funcionará conforme o horário semanal regular.
+              NÃ£o existem exceÃ§Ãµes ativas ou agendadas. A escola funcionarÃ¡ conforme o horÃ¡rio semanal regular.
             </p>
           </div>
         ) : (
@@ -751,7 +751,7 @@ export default function WindowsTab() {
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
                           <CalendarIcon size={12} />
                           <span>{exc.valid_from}</span>
-                          <span>→</span>
+                          <span>â†’</span>
                           <span>{exc.valid_until}</span>
                         </div>
                       </div>
@@ -762,7 +762,7 @@ export default function WindowsTab() {
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20">
-                          Horário Especial
+                          HorÃ¡rio Especial
                         </span>
                       )}
                     </div>
@@ -776,7 +776,7 @@ export default function WindowsTab() {
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-muted-foreground text-[11px]">
-                          <span>Almoço:</span>
+                          <span>AlmoÃ§o:</span>
                           <span className="font-mono">
                             {exc.lunch_start} - {exc.lunch_end} ({exc.lunch_duration_minutes}m)
                           </span>
@@ -790,9 +790,9 @@ export default function WindowsTab() {
                       <ActionTooltip
                         content={
                           !exc.can_edit_all && !exc.can_change_end_date
-                            ? "Esta exceção não pode ser editada"
+                            ? "Esta exceÃ§Ã£o nÃ£o pode ser editada"
                             : exc.can_edit_all
-                            ? "Editar exceção"
+                            ? "Editar exceÃ§Ã£o"
                             : "Alterar data de fim"
                         }
                       >
@@ -814,8 +814,8 @@ export default function WindowsTab() {
                       <ActionTooltip
                         content={
                           exc.can_delete === false
-                            ? exc.cannot_delete_reason || "Esta exceção não pode ser eliminada"
-                            : "Eliminar exceção"
+                            ? exc.cannot_delete_reason || "Esta exceÃ§Ã£o nÃ£o pode ser eliminada"
+                            : "Eliminar exceÃ§Ã£o"
                         }
                       >
                         <button
@@ -842,16 +842,16 @@ export default function WindowsTab() {
       </section>
 
       {/* ========================================================================= */}
-      {/* MODAL: NOVA / EDITAR VERSÃO DE HORÁRIO FIXO */}
+      {/* MODAL: NOVA / EDITAR VERSÃƒO DE HORÃRIO FIXO */}
       {/* ========================================================================= */}
       <Dialog open={ruleModalOpen} onOpenChange={setRuleModalOpen}>
         <DialogContent className="w-[95vw] max-w-4xl sm:max-w-4xl p-0 overflow-visible rounded-xl border border-border bg-card shadow-2xl">
           <DialogHeader className="px-6 py-4 border-b border-border bg-muted/10 rounded-t-xl">
             <DialogTitle className="font-semibold text-foreground text-sm">
-              {editingRule ? "Editar Versão de Horário Fixo" : "Nova Versão de Horário Fixo"}
+              {editingRule ? "Editar VersÃ£o de HorÃ¡rio Fixo" : "Nova VersÃ£o de HorÃ¡rio Fixo"}
             </DialogTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Defina a data a partir da qual esta versão vigora e configure os horários de cada dia da semana.
+              Defina a data a partir da qual esta versÃ£o vigora e configure os horÃ¡rios de cada dia da semana.
             </p>
           </DialogHeader>
 
@@ -863,25 +863,17 @@ export default function WindowsTab() {
               </div>
             )}
 
-            {/* Ação rápida para preencher dias da semana */}
+            {/* AÃ§Ã£o rÃ¡pida para preencher dias da semana */}
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-xs font-semibold text-foreground block">
-                  Configuração dos 7 Dias da Semana
+                  ConfiguraÃ§Ã£o dos 7 Dias da Semana
                 </span>
                 <span className="text-[11px] text-muted-foreground">
-                  Dias desativados serão considerados dias em que a escola não funciona.
+                  Dias desativados serÃ£o considerados dias em que a escola nÃ£o funciona.
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={handleCopyMondayToWeekdays}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shadow-2xs"
-                title="Copia os horários de Segunda-feira para Terça, Quarta, Quinta e Sexta"
-              >
-                <Copy size={13} />
-                Copiar 2ª para Dias Úteis
-              </button>
+              <ActionTooltip content="Copia os horários de Segunda-feira para Terça, Quarta, Quinta e Sexta"><button type="button" onClick={handleCopyMondayToWeekdays} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shadow-2xs cursor-pointer"><Copy size={13} />Copiar 2ª para Dias Úteis</button></ActionTooltip>
             </div>
 
             {ruleFormErrors.days && (
@@ -965,11 +957,11 @@ export default function WindowsTab() {
                             </div>
                           </div>
 
-                          {/* 3. Caixa do Horário de Almoço */}
+                          {/* 3. Caixa do HorÃ¡rio de AlmoÃ§o */}
                           <div className="p-3 rounded-lg bg-muted/25 border border-border/60 space-y-3">
                             <div className="flex items-center justify-between">
                               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                                Horário de Almoço dos Assistentes
+                                HorÃ¡rio de AlmoÃ§o dos Assistentes
                               </span>
                               <span className="text-[10px] text-muted-foreground">
                                 Janela e intervalo
@@ -978,7 +970,7 @@ export default function WindowsTab() {
 
                             <div className="grid grid-cols-2 gap-3 text-xs">
                               <div>
-                                <span className="text-[10px] text-muted-foreground block mb-1">Início Janela</span>
+                                <span className="text-[10px] text-muted-foreground block mb-1">InÃ­cio Janela</span>
                                 <TimePicker
                                   value={dayState.lunch_start}
                                   onChange={(v) =>
@@ -1007,7 +999,7 @@ export default function WindowsTab() {
 
                             <div className="text-xs">
                               <span className="text-[10px] text-muted-foreground block mb-1">
-                                Duração de Almoço por Assistente
+                                DuraÃ§Ã£o de AlmoÃ§o por Assistente
                               </span>
                               <CustomSelect
                                 value={String(dayState.lunch_duration_minutes)}
@@ -1035,14 +1027,14 @@ export default function WindowsTab() {
               })}
             </div>
 
-            {/* Vigência */}
+            {/* VigÃªncia */}
             <div className="border-t border-border/60 pt-4">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                Vigência
+                VigÃªncia
               </p>
               <div className="max-w-xs space-y-1.5">
                 <label className="text-xs text-muted-foreground block font-medium">
-                  Data de Início *
+                  Data de InÃ­cio *
                 </label>
                 <DatePicker
                   value={ruleValidFrom}
@@ -1051,7 +1043,7 @@ export default function WindowsTab() {
                   placeholder="AAAA-MM-DD"
                 />
                 <p className="text-[10px] text-muted-foreground/70">
-                  Em vigor a partir desta data até à data em que uma nova versão comece.
+                  Em vigor a partir desta data atÃ© Ã  data em que uma nova versÃ£o comece.
                 </p>
                 {ruleFormErrors.valid_from && (
                   <p className="text-xs text-red-500">{ruleFormErrors.valid_from.join(", ")}</p>
@@ -1074,23 +1066,23 @@ export default function WindowsTab() {
               disabled={createRuleMutation.isPending || updateRuleMutation.isPending}
               className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs disabled:opacity-50"
             >
-              {createRuleMutation.isPending || updateRuleMutation.isPending ? "A guardar..." : "Guardar Versão"}
+              {createRuleMutation.isPending || updateRuleMutation.isPending ? "A guardar..." : "Guardar VersÃ£o"}
             </button>
           </div>
         </DialogContent>
       </Dialog>
 
       {/* ========================================================================= */}
-      {/* MODAL: NOVA / EDITAR EXCEÇÃO */}
+      {/* MODAL: NOVA / EDITAR EXCEÃ‡ÃƒO */}
       {/* ========================================================================= */}
       <Dialog open={exceptionModalOpen} onOpenChange={setExceptionModalOpen}>
         <DialogContent className="w-[95vw] max-w-[720px] sm:max-w-[720px] p-0 overflow-visible rounded-xl border border-border bg-card shadow-2xl">
           <DialogHeader className="px-6 py-4 border-b border-border bg-muted/10 rounded-t-xl">
             <DialogTitle className="font-semibold text-foreground text-sm">
-              {editingException ? "Editar Exceção de Funcionamento" : "Nova Exceção de Funcionamento"}
+              {editingException ? "Editar ExceÃ§Ã£o de Funcionamento" : "Nova ExceÃ§Ã£o de Funcionamento"}
             </DialogTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              As exceções sobrepõem-se ao horário habitual durante o período indicado.
+              As exceÃ§Ãµes sobrepÃµem-se ao horÃ¡rio habitual durante o perÃ­odo indicado.
             </p>
           </DialogHeader>
 
@@ -1105,7 +1097,7 @@ export default function WindowsTab() {
             {/* Nome */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-foreground block">
-                Nome da Exceção *
+                Nome da ExceÃ§Ã£o *
               </label>
               <input
                 type="text"
@@ -1115,7 +1107,7 @@ export default function WindowsTab() {
                   setExcName(e.target.value);
                   if (excFormErrors.name) setExcFormErrors((prev) => ({ ...prev, name: undefined }));
                 }}
-                placeholder="Ex: Férias de Verão, Semana de Exames, Tolerância de Ponto"
+                placeholder="Ex: FÃ©rias de VerÃ£o, Semana de Exames, TolerÃ¢ncia de Ponto"
                 className={`w-full px-3 py-1.5 rounded-lg border bg-background text-foreground text-xs focus:ring-1 focus:ring-primary disabled:opacity-50 transition-colors ${
                   excFormErrors.name ? "border-destructive focus:ring-destructive" : "border-border"
                 }`}
@@ -1132,7 +1124,7 @@ export default function WindowsTab() {
                   Escola Fechada
                 </span>
                 <span className="text-[11px] text-muted-foreground">
-                  A escola não terá qualquer funcionamento durante este período.
+                  A escola nÃ£o terÃ¡ qualquer funcionamento durante este perÃ­odo.
                 </span>
               </div>
               <input
@@ -1144,11 +1136,11 @@ export default function WindowsTab() {
               />
             </div>
 
-            {/* Horários especiais caso não esteja fechada */}
+            {/* HorÃ¡rios especiais caso nÃ£o esteja fechada */}
             {!excIsClosed && (
               <div className="space-y-3 pt-2">
                 <span className="text-xs font-semibold text-foreground block">
-                  Horário Especial Aplicável nos Dias de Funcionamento do Período
+                  HorÃ¡rio Especial AplicÃ¡vel nos Dias de Funcionamento do PerÃ­odo
                 </span>
 
                 <div className="p-3.5 rounded-xl border border-border/70 bg-muted/20 space-y-3">
@@ -1179,20 +1171,20 @@ export default function WindowsTab() {
                     </div>
                   </div>
 
-                  {/* Bloco Almoço dos Assistentes (Neutro) */}
+                  {/* Bloco AlmoÃ§o dos Assistentes (Neutro) */}
                   <div className="p-3 rounded-lg bg-muted/25 border border-border/60 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                        Horário de Almoço dos Assistentes
+                        HorÃ¡rio de AlmoÃ§o dos Assistentes
                       </span>
                       <span className="text-[10px] text-muted-foreground">
-                        Janela e duração do intervalo
+                        Janela e duraÃ§Ã£o do intervalo
                       </span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 text-xs">
                       <div>
-                        <span className="text-[10px] text-muted-foreground block mb-1">Início Janela *</span>
+                        <span className="text-[10px] text-muted-foreground block mb-1">InÃ­cio Janela *</span>
                         <TimePicker
                           value={excLunchStart}
                           onChange={setExcLunchStart}
@@ -1212,7 +1204,7 @@ export default function WindowsTab() {
                     </div>
 
                     <div className="text-xs">
-                      <span className="text-[10px] text-muted-foreground block mb-1">Duração p/ Assistente *</span>
+                      <span className="text-[10px] text-muted-foreground block mb-1">DuraÃ§Ã£o p/ Assistente *</span>
                       <CustomSelect
                         value={excLunchDuration}
                         onChange={(v) => setExcLunchDuration(typeof v === "string" ? v : v.target.value)}
@@ -1229,15 +1221,15 @@ export default function WindowsTab() {
               </div>
             )}
 
-            {/* Vigência */}
+            {/* VigÃªncia */}
             <div className="border-t border-border/60 pt-4">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                Vigência
+                VigÃªncia
               </p>
               <div className="grid grid-cols-2 gap-3.5">
                 <div className="space-y-1">
                   <label className="text-xs text-muted-foreground block font-medium">
-                    Data de Início *
+                    Data de InÃ­cio *
                   </label>
                   <DatePicker
                     value={excValidFrom}
@@ -1288,18 +1280,18 @@ export default function WindowsTab() {
               disabled={createExceptionMutation.isPending || updateExceptionMutation.isPending}
               className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs disabled:opacity-50"
             >
-              {createExceptionMutation.isPending || updateExceptionMutation.isPending ? "A guardar..." : "Guardar Exceção"}
+              {createExceptionMutation.isPending || updateExceptionMutation.isPending ? "A guardar..." : "Guardar ExceÃ§Ã£o"}
             </button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Confirmação de Eliminar Versão */}
+      {/* ConfirmaÃ§Ã£o de Eliminar VersÃ£o */}
       <ConfirmationModal
         open={!!deleteRuleTarget}
-        title="Eliminar Versão de Horário"
-        description={`Tem a certeza de que pretende eliminar a versão de horário com início a ${deleteRuleTarget?.valid_from}? Esta ação não pode ser desfeita.`}
-        confirmLabel="Eliminar Versão"
+        title="Eliminar VersÃ£o de HorÃ¡rio"
+        description={`Tem a certeza de que pretende eliminar a versÃ£o de horÃ¡rio com inÃ­cio a ${deleteRuleTarget?.valid_from}? Esta aÃ§Ã£o nÃ£o pode ser desfeita.`}
+        confirmLabel="Eliminar VersÃ£o"
         cancelLabel="Cancelar"
         variant="danger"
         onConfirm={async () => {
@@ -1311,12 +1303,12 @@ export default function WindowsTab() {
         onClose={() => setDeleteRuleTarget(null)}
       />
 
-      {/* Confirmação de Eliminar Exceção */}
+      {/* ConfirmaÃ§Ã£o de Eliminar ExceÃ§Ã£o */}
       <ConfirmationModal
         open={!!deleteExceptionTarget}
-        title="Eliminar Exceção"
-        description={`Tem a certeza de que pretende eliminar a exceção "${deleteExceptionTarget?.name}"? O calendário voltará a considerar o horário fixo para este período.`}
-        confirmLabel="Eliminar Exceção"
+        title="Eliminar ExceÃ§Ã£o"
+        description={`Tem a certeza de que pretende eliminar a exceÃ§Ã£o "${deleteExceptionTarget?.name}"? O calendÃ¡rio voltarÃ¡ a considerar o horÃ¡rio fixo para este perÃ­odo.`}
+        confirmLabel="Eliminar ExceÃ§Ã£o"
         cancelLabel="Cancelar"
         variant="danger"
         onConfirm={async () => {
@@ -1330,3 +1322,4 @@ export default function WindowsTab() {
     </div>
   );
 }
+

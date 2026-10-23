@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -10,47 +10,31 @@ import {
 } from "lucide-react";
 import type { BlockState, StaffViewMode } from "../../types";
 import {
-  generateDayMatrix,
-  getDateInfo,
-  TIME_SLOTS,
-} from "../../api/mockData";
-import {
   BLOCK_STYLES,
+  formatDurationSlots,
+  groupSlotsFn,
   slotsToBlocks,
+  TIME_SLOTS,
   VIEW_START,
   VIEW_END,
   VIEW_SLOTS,
 } from "../dashboard/blockStyles";
 import { Badge } from "../ui/badge";
-
-export const STAFF_MONTH_MONTHS = [
-  { label: "Janeiro 2026", days: 31, firstDow: 2, firstOffset: -26 },
-  { label: "Fevereiro 2026", days: 28, firstDow: 5, firstOffset: 5 },
-];
-
-export function staffBlocksForDay(dayOffset: number) {
-  const matrix = generateDayMatrix(dayOffset);
-  const slots = matrix[6] || Array(96).fill("off"); // Fábio Lopes = assistant id 6
-  const groups: { state: BlockState; start: number; end: number }[] = [];
-  let cur: { state: BlockState; start: number; end: number } | null = null;
-  slots.forEach((s, i) => {
-    if (s === "off") {
-      if (cur) {
-        groups.push(cur);
-        cur = null;
-      }
-      return;
-    }
-    if (cur && cur.state === s) {
-      cur.end = i;
-    } else {
-      if (cur) groups.push(cur);
-      cur = { state: s, start: i, end: i };
-    }
-  });
-  if (cur) groups.push(cur);
-  return { slots, groups };
-}
+import { useAuth } from "../../context/AuthContext";
+import { useSchedulesList } from "../../hooks/api/useSchedules";
+import { useAbsencesList } from "../../hooks/api/useAbsences";
+import {
+  useOperatingCalendar,
+  useOperatingExceptions,
+  useOperatingRules,
+} from "../../hooks/api/useOperatingHours";
+import { useHolidaysList } from "../../hooks/api/useHolidays";
+import {
+  buildDayMatrixFromApi,
+  getDateInfo,
+  getRealMonthsRange,
+  resolveSchoolDayStatusByIsoDate,
+} from "../../utils/scheduleMatrixUtils";
 
 const STAFF_BLOCK_COLORS: Record<BlockState, string> = {
   work: "bg-accent/10 border-l-accent text-accent",
@@ -74,29 +58,70 @@ const STAFF_BLOCK_ICONS: Record<BlockState, React.ReactNode> = {
   delivery: null,
 };
 
+function useStaffDayBlocks(dayOffset: number) {
+  const { user } = useAuth();
+  const info = getDateInfo(dayOffset);
+  const assistantId = user.assistant_id ?? user.id ?? "staff";
+
+  const { data: schedules = [] } = useSchedulesList({
+    start_date: info.isoDate,
+    end_date: info.isoDate,
+    assistant_id: user.assistant_id ?? undefined,
+  });
+
+  const { data: absencesRes } = useAbsencesList({
+    start_date: info.isoDate,
+    end_date: info.isoDate,
+    assistant_id: user.assistant_id ?? undefined,
+    per_page: 50,
+  });
+
+  return useMemo(() => {
+    const dummyAssistant = {
+      id: assistantId,
+      name: user.name || "Assistente",
+      initials: user.initials || "AO",
+    };
+
+    // Caso o endpoint devolva todas as escalas da escola ou apenas a do assistente:
+    const effectiveSchedules =
+      user.assistant_id || schedules.length === 0
+        ? schedules
+        : [schedules[0]];
+
+    const targetId =
+      user.assistant_id ??
+      effectiveSchedules[0]?.assistant_id ??
+      dummyAssistant.id;
+
+    const { matrix } = buildDayMatrixFromApi({
+      isoDate: info.isoDate,
+      isOpen: info.dow < 5,
+      assistants: [{ ...dummyAssistant, id: targetId }],
+      schedules: effectiveSchedules,
+      absences: absencesRes?.data || [],
+    });
+
+    const slots = matrix[targetId] || Array(96).fill("off");
+    const groups = groupSlotsFn(slots);
+    return { slots, groups };
+  }, [info.isoDate, info.dow, assistantId, user, schedules, absencesRes]);
+}
+
 export function StaffDayView({ dayOffset }: { dayOffset: number }) {
   const info = getDateInfo(dayOffset);
-  const { groups } = staffBlocksForDay(dayOffset);
+  const { slots, groups } = useStaffDayBlocks(dayOffset);
   const isWeekend = info.dow >= 5;
-  const isToday = dayOffset === 0;
   const entryGroup = groups.find((g) => g.state !== "off");
   const lastGroup = [...groups].reverse().find((g) => g.state !== "off");
+  const activeWorkSlots = slots.filter(
+    (s) => s !== "off" && s !== "lunch" && s !== "absent"
+  ).length;
+  const workloadLabel =
+    activeWorkSlots > 0 ? formatDurationSlots(activeWorkSlots) : "—";
 
   return (
     <div className="pt-4">
-      {isToday && (
-        <div className="flex items-center gap-2 mb-4">
-          <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-accent rounded-full"
-              style={{ width: "45%" }}
-            />
-          </div>
-          <span className="text-xs font-mono text-muted-foreground">
-            4h 00min restantes
-          </span>
-        </div>
-      )}
       {isWeekend ? (
         <div className="text-center py-8">
           <p className="text-3xl mb-2">🌿</p>
@@ -117,7 +142,7 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
                   ? TIME_SLOTS[lastGroup.end + 1] || "24:00"
                   : "—",
               },
-              { label: "Carga", value: "6h" },
+              { label: "Carga", value: workloadLabel },
             ].map((s) => (
               <div
                 key={s.label}
@@ -132,8 +157,8 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
           </div>
           <div className="space-y-2">
             {groups.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                Sem blocos activos
+              <p className="text-sm text-muted-foreground text-center py-6">
+                A escala ainda não foi gerada para este dia
               </p>
             ) : (
               groups.map((block, i) => {
@@ -185,30 +210,88 @@ export function StaffWeekView({
   weekStart: number;
   onSelectDay: (o: number) => void;
 }) {
-  const offsets = Array.from({ length: 7 }, (_, i) => weekStart + i);
+  const { user } = useAuth();
+  const offsets = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => weekStart + i),
+    [weekStart]
+  );
+  const startInfo = getDateInfo(offsets[0]);
+  const endInfo = getDateInfo(offsets[6]);
+
+  const { data: schedules = [] } = useSchedulesList({
+    start_date: startInfo.isoDate,
+    end_date: endInfo.isoDate,
+    assistant_id: user.assistant_id ?? undefined,
+  });
+  const { data: absencesRes } = useAbsencesList({
+    start_date: startInfo.isoDate,
+    end_date: endInfo.isoDate,
+    assistant_id: user.assistant_id ?? undefined,
+    per_page: 50,
+  });
+  const { data: calendarDays } = useOperatingCalendar({
+    start_date: startInfo.isoDate,
+    end_date: endInfo.isoDate,
+  });
+  const { data: holidays } = useHolidaysList();
+  const { data: operatingExceptions } = useOperatingExceptions({
+    status: "all",
+  });
+  const { data: operatingRules } = useOperatingRules({
+    status: "all",
+  });
+
+  const targetId =
+    user.assistant_id ?? schedules[0]?.assistant_id ?? "staff";
+
   return (
     <div className="pt-2 pb-4 space-y-2">
       {offsets.map((offset) => {
         const info = getDateInfo(offset);
         const isToday = offset === 0;
-        const isWeekend = info.dow >= 5;
-        const { slots } = staffBlocksForDay(offset);
-        const hasWork = slots.some((s) => s !== "off");
-        const hasAbsent = slots.every((s) => s === "absent");
+        const status = resolveSchoolDayStatusByIsoDate(info.isoDate, {
+          calendarDays,
+          holidays,
+          operatingExceptions,
+          operatingRules,
+        });
+        const isClosed = !status.isOpen;
+        const dayViewStart = status.viewStartSlot ?? VIEW_START;
+        const dayViewEnd = status.viewEndSlot ?? VIEW_END;
+        const dayViewSlots = Math.max(1, dayViewEnd - dayViewStart);
+        const { matrix } = buildDayMatrixFromApi({
+          isoDate: info.isoDate,
+          isOpen: !isClosed,
+          assistants: [
+            {
+              id: targetId,
+              name: user.name || "Assistente",
+              initials: user.initials || "AO",
+            },
+          ],
+          schedules,
+          absences: absencesRes?.data || [],
+        });
+        const slots = matrix[targetId] || Array(96).fill("off");
+        const activeSlots = slots.filter(
+          (s) => s !== "off" && s !== "lunch" && s !== "absent"
+        ).length;
+        const hasWork = activeSlots > 0;
+        const hasAbsent = slots.some((s) => s === "absent");
         return (
           <button
             key={offset}
             type="button"
-            onClick={() => !isWeekend && onSelectDay(offset)}
+            onClick={() => !isClosed && onSelectDay(offset)}
             className={`w-full text-left rounded-xl border p-3 transition-colors
               ${
                 isToday
                   ? "border-accent bg-accent/5"
-                  : isWeekend
+                  : isClosed
                   ? "border-border bg-muted/20 opacity-50"
                   : "border-border bg-card hover:border-accent/40 hover:bg-accent/3"
               }
-              ${isWeekend ? "cursor-default" : "cursor-pointer"}
+              ${isClosed ? "cursor-default" : "cursor-pointer"}
             `}
           >
             <div className="flex items-center justify-between mb-2">
@@ -229,17 +312,25 @@ export function StaffWeekView({
                 </span>
                 {isToday && <Badge variant="default">Hoje</Badge>}
               </div>
-              {!isWeekend && (
+              {!isClosed ? (
                 <span className="text-[10px] text-muted-foreground font-mono">
-                  {hasAbsent ? "Ausência" : hasWork ? "6h" : "Folga"}
+                  {hasAbsent
+                    ? "Ausência"
+                    : hasWork
+                    ? formatDurationSlots(activeSlots)
+                    : "Sem escala"}
+                </span>
+              ) : (
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  {status.closedLabel || "Encerrada"}
                 </span>
               )}
             </div>
-            {!isWeekend && (
+            {!isClosed && (
               <div className="relative h-4 rounded-sm overflow-hidden bg-muted/30">
                 {slotsToBlocks(slots).map((b) => {
-                  const cs = Math.max(b.start, VIEW_START);
-                  const ce = Math.min(b.start + b.count, VIEW_END);
+                  const cs = Math.max(b.start, dayViewStart);
+                  const ce = Math.min(b.start + b.count, dayViewEnd);
                   if (b.state === "off" || ce <= cs) return null;
                   return (
                     <div
@@ -248,8 +339,8 @@ export function StaffWeekView({
                         BLOCK_STYLES[b.state]?.bg
                       } opacity-75 overflow-hidden`}
                       style={{
-                        left: `${((cs - VIEW_START) / VIEW_SLOTS) * 100}%`,
-                        width: `${((ce - cs) / VIEW_SLOTS) * 100}%`,
+                        left: `${((cs - dayViewStart) / dayViewSlots) * 100}%`,
+                        width: `${((ce - cs) / dayViewSlots) * 100}%`,
                       }}
                     >
                       {BLOCK_STYLES[b.state]?.locked && (
@@ -278,17 +369,33 @@ export function StaffMonthView({
   onSelectDay: (o: number) => void;
   onChangeMonth: (d: number) => void;
 }) {
-  const month =
-    STAFF_MONTH_MONTHS[
-      Math.max(0, Math.min(monthOffset, STAFF_MONTH_MONTHS.length - 1))
-    ];
+  const { user } = useAuth();
+  const monthsList = useMemo(() => getRealMonthsRange(1, 2), []);
+  const clampedIdx = Math.max(0, Math.min(monthOffset, monthsList.length - 1));
+  const month = monthsList[clampedIdx];
+
+  const { data: schedules = [] } = useSchedulesList({
+    start_date: month.startIso,
+    end_date: month.endIso,
+    assistant_id: user.assistant_id ?? undefined,
+  });
+  const { data: absencesRes } = useAbsencesList({
+    start_date: month.startIso,
+    end_date: month.endIso,
+    assistant_id: user.assistant_id ?? undefined,
+    per_page: 100,
+  });
+
+  const targetId =
+    user.assistant_id ?? schedules[0]?.assistant_id ?? "staff";
+
   return (
     <div className="pt-2 pb-4">
       <div className="flex items-center justify-between mb-3">
         <button
           type="button"
           onClick={() => onChangeMonth(-1)}
-          disabled={monthOffset === 0}
+          disabled={clampedIdx === 0}
           className="p-1.5 rounded border border-border hover:bg-muted disabled:opacity-30"
         >
           <ChevronLeft size={14} />
@@ -299,7 +406,7 @@ export function StaffMonthView({
         <button
           type="button"
           onClick={() => onChangeMonth(1)}
-          disabled={monthOffset >= STAFF_MONTH_MONTHS.length - 1}
+          disabled={clampedIdx >= monthsList.length - 1}
           className="p-1.5 rounded border border-border hover:bg-muted disabled:opacity-30"
         >
           <ChevronRight size={14} />
@@ -326,9 +433,24 @@ export function StaffMonthView({
           const dow = (month.firstDow + i) % 7;
           const isWeekend = dow >= 5;
           const isToday = offset === 0;
-          const { slots } = staffBlocksForDay(offset);
-          const hasWork = !isWeekend && slots.some((s) => s !== "off");
-          const hasAbsent = !isWeekend && slots.every((s) => s === "absent");
+          const info = getDateInfo(offset);
+          const { matrix } = buildDayMatrixFromApi({
+            isoDate: info.isoDate,
+            isOpen: !isWeekend,
+            assistants: [
+              {
+                id: targetId,
+                name: user.name || "Assistente",
+                initials: user.initials || "AO",
+              },
+            ],
+            schedules,
+            absences: absencesRes?.data || [],
+          });
+          const slots = matrix[targetId] || Array(96).fill("off");
+          const hasWork =
+            !isWeekend && slots.some((s) => s !== "off" && s !== "absent");
+          const hasAbsent = !isWeekend && slots.some((s) => s === "absent");
           return (
             <button
               key={dayNum}
@@ -378,24 +500,24 @@ export function StaffMonthView({
 }
 
 export default function StaffScheduleSection() {
+  const monthsList = useMemo(() => getRealMonthsRange(1, 2), []);
   const [viewMode, setViewMode] = useState<StaffViewMode>("day");
   const [dayOffset, setDayOffset] = useState(0);
   const [weekStart, setWeekStart] = useState(0);
-  const [monthOffset, setMonthOffset] = useState(0);
+  // index 1 = current month when monthsBefore = 1
+  const [monthOffset, setMonthOffset] = useState(1);
   const info = getDateInfo(dayOffset);
 
   function prevNav() {
-    if (viewMode === "day") setDayOffset((d) => Math.max(d - 1, -7));
-    if (viewMode === "week") setWeekStart((w) => Math.max(w - 7, -7));
+    if (viewMode === "day") setDayOffset((d) => Math.max(d - 1, -30));
+    if (viewMode === "week") setWeekStart((w) => Math.max(w - 7, -28));
     if (viewMode === "month") setMonthOffset((m) => Math.max(m - 1, 0));
   }
   function nextNav() {
-    if (viewMode === "day") setDayOffset((d) => Math.min(d + 1, 35));
-    if (viewMode === "week") setWeekStart((w) => Math.min(w + 7, 28));
+    if (viewMode === "day") setDayOffset((d) => Math.min(d + 1, 60));
+    if (viewMode === "week") setWeekStart((w) => Math.min(w + 7, 56));
     if (viewMode === "month")
-      setMonthOffset((m) =>
-        Math.min(m + 1, STAFF_MONTH_MONTHS.length - 1)
-      );
+      setMonthOffset((m) => Math.min(m + 1, monthsList.length - 1));
   }
 
   function navToDay(offset: number) {
@@ -494,7 +616,7 @@ export default function StaffScheduleSection() {
           onSelectDay={navToDay}
           onChangeMonth={(d) =>
             setMonthOffset((m) =>
-              Math.max(0, Math.min(m + d, STAFF_MONTH_MONTHS.length - 1))
+              Math.max(0, Math.min(m + d, monthsList.length - 1))
             )
           }
         />
@@ -502,4 +624,3 @@ export default function StaffScheduleSection() {
     </div>
   );
 }
-

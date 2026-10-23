@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { Download } from "lucide-react";
-import { AUDIT_LOG } from "../../api/mockData";
+import type { AuditLogEntry } from "../../types";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 
 export default function AuditLogPage() {
   const [selectedFilterType, setSelectedFilterType] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [logs] = useState<AuditLogEntry[]>([]);
 
   const typeStyles: Record<string, { badgeClass: string; dot: string }> = {
     approve: {
@@ -44,7 +45,7 @@ export default function AuditLogPage() {
     alert: "Alerta",
   };
 
-  const filteredLogs = AUDIT_LOG.filter((l) => {
+  const filteredLogs = logs.filter((l) => {
     if (selectedFilterType !== "all" && l.type !== selectedFilterType) return false;
     if (
       searchTerm &&
@@ -118,62 +119,70 @@ export default function AuditLogPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredLogs.map((log) => (
-                <tr
-                  key={log.id}
-                  className="border-b border-border/50 hover:bg-muted/20 transition-colors"
-                >
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                    {log.ts}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                        <span className="text-[8px] font-bold text-muted-foreground">
-                          {log.user === "Sistema"
-                            ? "S"
-                            : log.user
-                                .split(" ")
-                                .map((w) => w[0])
-                                .join("")}
-                        </span>
-                      </div>
-                      <span className="text-xs font-medium text-foreground whitespace-nowrap">
-                        {log.user}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-xs font-medium text-foreground whitespace-nowrap">
-                    {log.action}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge
-                      variant="outline"
-                      className="bg-muted text-muted-foreground border-border"
-                    >
-                      {log.entity}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground max-w-xs">
-                    {log.detail}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <div
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          typeStyles[log.type]?.dot
-                        }`}
-                      />
-                      <Badge
-                        variant="outline"
-                        className={typeStyles[log.type]?.badgeClass}
-                      >
-                        {typeLabels[log.type]}
-                      </Badge>
-                    </div>
+              {filteredLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    Sem registos de auditoria disponíveis.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredLogs.map((log) => (
+                  <tr
+                    key={log.id}
+                    className="border-b border-border/50 hover:bg-muted/20 transition-colors"
+                  >
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                      {log.ts}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                          <span className="text-[8px] font-bold text-muted-foreground">
+                            {log.user === "Sistema"
+                              ? "S"
+                              : log.user
+                                  .split(" ")
+                                  .map((w) => w[0])
+                                  .join("")}
+                          </span>
+                        </div>
+                        <span className="text-xs font-medium text-foreground whitespace-nowrap">
+                          {log.user}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-xs font-medium text-foreground whitespace-nowrap">
+                      {log.action}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge
+                        variant="outline"
+                        className="bg-muted text-muted-foreground border-border"
+                      >
+                        {log.entity}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground max-w-xs">
+                      {log.detail}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <div
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            typeStyles[log.type]?.dot
+                          }`}
+                        />
+                        <Badge
+                          variant="outline"
+                          className={typeStyles[log.type]?.badgeClass}
+                        >
+                          {typeLabels[log.type]}
+                        </Badge>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -193,4 +202,3 @@ export default function AuditLogPage() {
     </div>
   );
 }
-

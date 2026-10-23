@@ -1,6 +1,7 @@
 import React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import CustomSelect from "./CustomSelect";
+import ActionTooltip from "./ActionTooltip";
 
 export interface ListPaginationProps {
   currentPage: number;
@@ -82,16 +83,17 @@ export default function ListPagination({
 
       {totalPages > 1 && (
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => onPageChange(safeCurrentPage - 1)}
-            disabled={safeCurrentPage <= 1}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-border bg-card text-xs font-medium hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-xs"
-            title="Página anterior"
-          >
-            <ChevronLeft size={13} />
-            <span className="hidden sm:inline">Anterior</span>
-          </button>
+          <ActionTooltip content="Página anterior">
+            <button
+              type="button"
+              onClick={() => onPageChange(safeCurrentPage - 1)}
+              disabled={safeCurrentPage <= 1}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-border bg-card text-xs font-medium hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-xs cursor-pointer"
+            >
+              <ChevronLeft size={13} />
+              <span className="hidden sm:inline">Anterior</span>
+            </button>
+          </ActionTooltip>
 
           <div className="flex items-center gap-1 px-1">
             {getPageNumbers().map((p, idx) =>
@@ -116,16 +118,17 @@ export default function ListPagination({
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={() => onPageChange(safeCurrentPage + 1)}
-            disabled={safeCurrentPage >= totalPages}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-border bg-card text-xs font-medium hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-xs"
-            title="Página seguinte"
-          >
-            <span className="hidden sm:inline">Seguinte</span>
-            <ChevronRight size={13} />
-          </button>
+          <ActionTooltip content="Página seguinte">
+            <button
+              type="button"
+              onClick={() => onPageChange(safeCurrentPage + 1)}
+              disabled={safeCurrentPage >= totalPages}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-border bg-card text-xs font-medium hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-xs cursor-pointer"
+            >
+              <span className="hidden sm:inline">Seguinte</span>
+              <ChevronRight size={13} />
+            </button>
+          </ActionTooltip>
         </div>
       )}
     </div>

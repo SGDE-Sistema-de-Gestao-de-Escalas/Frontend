@@ -12,6 +12,7 @@ import { useTheme } from "../../context/ThemeContext";
 import AvatarMenu from "./AvatarMenu";
 import NotificationsDropdown from "./NotificationsDropdown";
 import SchoolSwitcher from "./SchoolSwitcher";
+import ActionTooltip from "../common/ActionTooltip";
 
 interface TopHeaderProps {
   currentPageTitle?: string;
@@ -74,26 +75,28 @@ export default function TopHeader({
       {/* Right: controls + avatar */}
       <div className="flex items-center gap-1 sm:gap-1.5">
         {/* Fullscreen */}
-        <button
-          type="button"
-          onClick={toggleFullscreen}
-          title="Ecrã inteiro"
-          aria-label="Ecrã inteiro"
-          className="hidden md:flex w-9 h-9 rounded-full items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors focus:outline-none"
-        >
-          <Maximize2 size={16} />
-        </button>
+        <ActionTooltip content="Ecrã inteiro">
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            aria-label="Ecrã inteiro"
+            className="hidden md:flex w-9 h-9 rounded-full items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors focus:outline-none cursor-pointer"
+          >
+            <Maximize2 size={16} />
+          </button>
+        </ActionTooltip>
 
         {/* Dark/Light mode toggle */}
-        <button
-          type="button"
-          onClick={toggleDark}
-          title={dark ? "Modo claro" : "Modo escuro"}
-          aria-label={dark ? "Ativar modo claro" : "Ativar modo escuro"}
-          className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors focus:outline-none"
-        >
-          {dark ? <Sun size={17} /> : <Moon size={16} />}
-        </button>
+        <ActionTooltip content={dark ? "Modo claro" : "Modo escuro"}>
+          <button
+            type="button"
+            onClick={toggleDark}
+            aria-label={dark ? "Ativar modo claro" : "Ativar modo escuro"}
+            className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors focus:outline-none cursor-pointer"
+          >
+            {dark ? <Sun size={17} /> : <Moon size={16} />}
+          </button>
+        </ActionTooltip>
 
         {/* Notifications */}
         {!isStaff && <NotificationsDropdown />}

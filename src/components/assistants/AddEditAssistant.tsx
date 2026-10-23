@@ -14,6 +14,7 @@ import {
 import { Card } from "../ui/card";
 import { Switch } from "../ui/switch";
 import DatePicker from "../common/DatePicker";
+import ActionTooltip from "../common/ActionTooltip";
 import { notify } from "../common/FeedbackNotification";
 import { useCreateAssistant, useUpdateAssistant } from "../../hooks/api/useAssistants";
 import assistantsService from "../../api/services/assistants.service";
@@ -361,11 +362,12 @@ export default function AddEditAssistant({
               <span className={`text-xs font-medium ${isActive ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
                 {isActive ? "Assistente Ativo" : "Assistente Inativo"}
               </span>
-              <Switch
-                checked={isActive}
-                onCheckedChange={setIsActive}
-                title={isActive ? "Inativar Assistente" : "Ativar Assistente"}
-              />
+              <ActionTooltip content={isActive ? "Inativar Assistente" : "Ativar Assistente"}>
+                <Switch
+                  checked={isActive}
+                  onCheckedChange={setIsActive}
+                />
+              </ActionTooltip>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -830,14 +832,15 @@ export default function AddEditAssistant({
                           </p>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setCriminalRecordFile(null)}
-                        className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                        title="Remover ficheiro selecionado"
-                      >
-                        <X size={16} />
-                      </button>
+                      <ActionTooltip content="Remover ficheiro selecionado">
+                        <button
+                          type="button"
+                          onClick={() => setCriminalRecordFile(null)}
+                          className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                        >
+                          <X size={16} />
+                        </button>
+                      </ActionTooltip>
                     </div>
                   ) : assistant?.has_criminal_record && !removeExistingCriminalRecord ? (
                     /* 2. Ficheiro existente no servidor */
@@ -856,45 +859,48 @@ export default function AddEditAssistant({
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={handleDownloadExistingRecord}
-                          disabled={isDownloadingRecord}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                          title="Descarregar ficheiro"
-                        >
-                          {isDownloadingRecord ? (
-                            <Loader2 size={13} className="animate-spin" />
-                          ) : (
-                            <Download size={13} />
-                          )}
-                          <span>Ver</span>
-                        </button>
-                        <label
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
-                          title="Substituir por outro documento"
-                        >
-                          <Upload size={13} />
-                          <span>Substituir</span>
-                          <input
-                            type="file"
-                            accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-                            className="hidden"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) handleFileSelected(f);
-                              e.target.value = "";
-                            }}
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setRemoveExistingCriminalRecord(true)}
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                          title="Eliminar documento atual"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        <ActionTooltip content="Descarregar ficheiro">
+                          <button
+                            type="button"
+                            onClick={handleDownloadExistingRecord}
+                            disabled={isDownloadingRecord}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                          >
+                            {isDownloadingRecord ? (
+                              <Loader2 size={13} className="animate-spin" />
+                            ) : (
+                              <Download size={13} />
+                            )}
+                            <span>Ver</span>
+                          </button>
+                        </ActionTooltip>
+                        <ActionTooltip content="Substituir por outro documento">
+                          <label
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
+                          >
+                            <Upload size={13} />
+                            <span>Substituir</span>
+                            <input
+                              type="file"
+                              accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleFileSelected(f);
+                                e.target.value = "";
+                              }}
+                            />
+                          </label>
+                        </ActionTooltip>
+                        <ActionTooltip content="Eliminar documento atual">
+                          <button
+                            type="button"
+                            onClick={() => setRemoveExistingCriminalRecord(true)}
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </ActionTooltip>
                       </div>
                     </div>
                   ) : removeExistingCriminalRecord ? (
