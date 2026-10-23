@@ -809,7 +809,7 @@ export default function AssistantScheduleManager({
                         </div>
                         <div className="flex items-center gap-2.5 text-muted-foreground text-[11px]">
                           <span className="font-medium text-foreground">
-                            🍽️ Almoço:{" "}
+                            Almoço:{" "}
                             {(rotatingInfo.activeLabel === "A" ? h.shiftA?.lunch : h.shiftB?.lunch) ? (
                               <strong>
                                 {(rotatingInfo.activeLabel === "A" ? h.shiftA?.lunch : h.shiftB?.lunch)?.start} às{" "}
@@ -880,7 +880,7 @@ export default function AssistantScheduleManager({
                                     : "bg-muted/30 text-muted-foreground"
                                 }`}
                               >
-                                <span>🍽️ Pausa Almoço:</span>
+                                <span>Pausa de Almoço:</span>
                                 <span className="font-semibold text-foreground">
                                   {s?.lunch ? `${s.lunch.start} às ${s.lunch.end} (${s.lunch.duration}m)` : "Sem pausa"}
                                 </span>

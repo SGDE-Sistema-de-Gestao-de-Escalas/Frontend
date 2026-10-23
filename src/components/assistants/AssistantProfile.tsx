@@ -1115,7 +1115,7 @@ export default function AssistantProfile({
               </div>
               <div className="flex items-center gap-3 text-xs bg-background/80 px-3.5 py-2 rounded-lg border border-purple-500/20">
                 <span className="font-medium text-foreground">
-                  🍽️ Pausa de Almoço: <strong className="text-purple-700 dark:text-purple-300">{currentShiftDetails.lunch?.replace("Almoço: ", "") || "Sem pausa"}</strong>
+                  Pausa de Almoço: <strong className="text-purple-700 dark:text-purple-300">{currentShiftDetails.lunch?.replace("Almoço: ", "") || "Sem pausa"}</strong>
                 </span>
               </div>
             </div>
