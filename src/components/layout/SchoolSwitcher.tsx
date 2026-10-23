@@ -14,7 +14,7 @@ export default function SchoolSwitcher({ onPlatformSettings }: SchoolSwitcherPro
   const activeSchools = schools.filter((s) => s.active);
   const inactiveSchools = schools.filter((s) => !s.active);
 
-  // Assistentes pertencem a uma escola atribuÃ­da e visualizam apenas o badge sem dropdown de seleÃ§Ã£o
+  // Assistentes pertencem a uma escola atribuída e visualizam apenas o badge sem dropdown de seleção
   if (!canSwitchSchool) {
     return (
       <ActionTooltip content={selectedSchool ? `Escola atribuída: ${selectedSchool.name}` : null}>
@@ -149,7 +149,7 @@ export default function SchoolSwitcher({ onPlatformSettings }: SchoolSwitcherPro
                 Nenhuma escola registada
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5 mb-3">
-                Crie a primeira escola para comeÃ§ar a utilizar a plataforma.
+                Crie a primeira escola para começar a utilizar a plataforma.
               </p>
               {onPlatformSettings && (
                 <button
