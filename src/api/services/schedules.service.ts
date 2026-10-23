@@ -1,3 +1,22 @@
+export interface SaveScheduleDayEntryPayload {
+  assistant_id: string;
+  activity_type_id?: string | null;
+  activity_name: string;
+  schedule_rule_id?: string | null;
+  start_time: string;
+  end_time: string;
+  is_locked?: boolean;
+}
+
+export interface SaveScheduleDayPayload {
+  date: string;
+  entries: SaveScheduleDayEntryPayload[];
+}
+
+export interface SaveScheduleDaysPayload {
+  days: SaveScheduleDayPayload[];
+}
+
 import apiClient from "../client";
 import type { EntityId } from "../../types";
 

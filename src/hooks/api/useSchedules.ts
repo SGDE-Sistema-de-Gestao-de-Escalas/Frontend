@@ -8,6 +8,7 @@ import schedulesService, {
   type PublishSchedulePayload,
   type PublishScheduleResponse,
   type PendingRecalculationsResponse,
+  type SaveScheduleDaysPayload,
 } from "../../api/services/schedules.service";
 import { useSchool } from "../../context/SchoolContext";
 import { schoolScopedKey } from "../../lib/queryClient";
@@ -126,3 +127,17 @@ export function usePublishSchedules() {
   });
 }
 
+
+
+export function useSaveScheduleDays() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: SaveScheduleDaysPayload) => schedulesService.saveDays(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: SCHEDULES_QUERY_KEY,
+      });
+    },
+  });
+}

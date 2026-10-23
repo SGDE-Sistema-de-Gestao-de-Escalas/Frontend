@@ -56,7 +56,8 @@ import { useQueries } from "@tanstack/react-query";
 import { useSchool } from "../../context/SchoolContext";
 import { schoolScopedKey } from "../../lib/queryClient";
 import { useAssistantsList } from "../../hooks/api/useAssistants";
-import { useSchedulesList } from "../../hooks/api/useSchedules";
+import { useSchedulesList, useSaveScheduleDays } from "../../hooks/api/useSchedules";
+import type { SaveScheduleDayPayload, SaveScheduleDayEntryPayload } from "../../api/services/schedules.service";
 import { useAbsencesList } from "../../hooks/api/useAbsences";
 import { useScheduleRulesList } from "../../hooks/api/useScheduleRules";
 import { useActivityTypesList } from "../../hooks/api/useActivityTypes";
@@ -186,6 +187,7 @@ export default function MatrixGrid({
   const [copyPickerIsoDate, setCopyPickerIsoDate] = useState<string>("");
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [showDiscardConfirmModal, setShowDiscardConfirmModal] = useState(false);
+  const saveDaysMutation = useSaveScheduleDays();
 
   function handleRequestCancelEditMode() {
     if (modifiedDaysSummary.length > 0) {
@@ -1216,22 +1218,66 @@ export default function MatrixGrid({
     setShowFinishModal(true);
   }
 
-  function handleConfirmSaveAllEdits() {
-    setSavedMatricesByDay((prev) => ({
-      ...prev,
-      ...draftMatricesByDay,
-    }));
-    setDraftMatricesByDay({});
-    setShowFinishModal(false);
-    setEditMode(false);
-    setIsPainting(false);
-    setPaintAid(null);
-    notify.success(
-      `Alterações guardadas para ${modifiedDaysSummary.length} ${
-        modifiedDaysSummary.length === 1 ? "dia" : "dias"
-      }.`,
-      "Escala Atualizada"
-    );
+  async function handleConfirmSaveAllEdits() {
+    const offsets = Object.keys(draftMatricesByDay).map(Number);
+    if (offsets.length === 0) return;
+
+    const daysToSave: SaveScheduleDayPayload[] = offsets.map((offset) => {
+      const date = getIsoDateFromOffset(offset);
+      const matrix = draftMatricesByDay[offset];
+      const entries: SaveScheduleDayEntryPayload[] = [];
+
+      activeAssistants.forEach((a) => {
+        const slots = matrix[a.id] || [];
+        const meta = slotMetaByAssistant[a.id] || {};
+        const blocks = slotsToBlocks(slots, meta).filter(
+          (b) => b.state !== "off" && b.state !== "lunch" && b.state !== "absent"
+        );
+
+        blocks.forEach((b) => {
+          const actName = b.activityName || BLOCK_STYLES[b.state]?.label || "Atividade";
+          const matchedAct = activityTypes.find(
+            (at) => at.name.toLowerCase() === actName.toLowerCase()
+          );
+
+          entries.push({
+            assistant_id: String(a.id),
+            activity_type_id: b.meta?.activityTypeId || matchedAct?.id || null,
+            activity_name: actName,
+            schedule_rule_id: b.meta?.ruleId || null,
+            start_time: TIME_SLOTS[b.start],
+            end_time: TIME_SLOTS[Math.min(b.start + b.count, 95)] || "24:00",
+            is_locked: Boolean(b.isLocked),
+          });
+        });
+      });
+
+      return { date, entries };
+    });
+
+    try {
+      await saveDaysMutation.mutateAsync({ days: daysToSave });
+
+      setSavedMatricesByDay((prev) => ({
+        ...prev,
+        ...draftMatricesByDay,
+      }));
+      setDraftMatricesByDay({});
+      setShowFinishModal(false);
+      setEditMode(false);
+      setIsPainting(false);
+      setPaintAid(null);
+
+      notify.success(
+        `Alterações guardadas com sucesso na base de dados para ${daysToSave.length} ${
+          daysToSave.length === 1 ? "dia" : "dias"
+        }.`,
+        "Escala Gravada"
+      );
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || "Ocorreu um erro ao guardar as escalas.";
+      notify.error(msg, "Erro ao Gravar");
+    }
   }
 
   // Is activity spotlight active?
@@ -3040,11 +3086,19 @@ export default function MatrixGrid({
               <button
                 type="button"
                 onClick={handleConfirmSaveAllEdits}
-                disabled={modifiedDaysSummary.length === 0}
-                className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors flex items-center gap-1.5"
+                disabled={modifiedDaysSummary.length === 0 || saveDaysMutation.isPending}
+                className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors flex items-center gap-1.5 cursor-pointer"
               >
-                <Check size={13} />
-                Confirmar e Guardar ({modifiedDaysSummary.length})
+                {saveDaysMutation.isPending ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <Check size={13} />
+                )}
+                <span>
+                  {saveDaysMutation.isPending
+                    ? "A gravar..."
+                    : `Confirmar e Guardar (${modifiedDaysSummary.length})`}
+                </span>
               </button>
             </div>
           </DialogFooter>
