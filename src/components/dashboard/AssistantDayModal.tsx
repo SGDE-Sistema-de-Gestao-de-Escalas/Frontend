@@ -225,7 +225,7 @@ export default function AssistantDayModal({
 
         {/* Timeline */}
         <div className="flex-1 overflow-y-auto p-5 space-y-2.5">
-          {isLoadingSchedules ? (
+          {isLoadingSchedules && !customDaySlots ? (
             <div className="flex flex-col items-center justify-center py-16 space-y-3 text-muted-foreground">
               <Loader2 size={22} className="animate-spin text-primary" />
               <p className="text-xs">A carregar tarefas do dia...</p>

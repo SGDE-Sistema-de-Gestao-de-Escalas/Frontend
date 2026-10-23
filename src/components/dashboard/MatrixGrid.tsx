@@ -109,7 +109,12 @@ interface DayRuleConfig {
 }
 
 interface MatrixGridProps {
-  onSelectAssistant?: (id: EntityId, offset?: number) => void;
+  onSelectAssistant?: (
+    id: EntityId,
+    offset?: number,
+    daySlots?: BlockState[],
+    slotMeta?: Record<number, SlotEntryMetadata>
+  ) => void;
   matrix?: ScheduleMatrix;
   dayOffset?: number;
   onChangeDayOffset?: (offset: number) => void;
@@ -180,6 +185,19 @@ export default function MatrixGrid({
   );
   const [copyPickerIsoDate, setCopyPickerIsoDate] = useState<string>("");
   const [showFinishModal, setShowFinishModal] = useState(false);
+  const [showDiscardConfirmModal, setShowDiscardConfirmModal] = useState(false);
+
+  function handleRequestCancelEditMode() {
+    if (modifiedDaysSummary.length > 0) {
+      setShowDiscardConfirmModal(true);
+    } else {
+      setDraftMatricesByDay({});
+      setCopiedFromByDay({});
+      setEditMode(false);
+      setIsPainting(false);
+      setPaintAid(null);
+    }
+  }
   const [publishModalState, setPublishModalState] = useState<{
     open: boolean;
     preselectedDate?: string;
@@ -1018,6 +1036,38 @@ export default function MatrixGrid({
             lunchSlotsCount
           )} de Pausa de Almoço marcada neste dia.`,
         });
+      }
+    });
+
+    // 4. Detetar espaços em branco / horário incompleto para assistentes escalados
+    workingOnDay.forEach((a) => {
+      const row = mat[a.id] || [];
+      const fixedBounds = fixedShiftBoundsByAssistant[a.id];
+      const bounds = getShiftBoundsFromRow(
+        row,
+        targetStatus.viewStartSlot,
+        targetStatus.viewEndSlot
+      );
+
+      const startSlot = fixedBounds?.startSlot ?? bounds.startSlot;
+      const endSlot = fixedBounds?.endSlot ?? bounds.endSlot;
+
+      if (startSlot !== null && endSlot !== null && endSlot > startSlot) {
+        const gapSlots: number[] = [];
+        for (let s = startSlot; s < endSlot; s++) {
+          if (row[s] === "off") {
+            gapSlots.push(s);
+          }
+        }
+
+        if (gapSlots.length > 0) {
+          warnings.push({
+            id: `unfilled-slots-${a.id}`,
+            severity: "warning",
+            title: `Espaços por preencher: ${a.name}`,
+            detail: `Tem ${formatDurationSlots(gapSlots.length)} sem tarefas atribuídas no turno (${TIME_SLOTS[startSlot]}–${TIME_SLOTS[endSlot]}).`,
+          });
+        }
       }
     });
 
@@ -2997,6 +3047,50 @@ export default function MatrixGrid({
                 Confirmar e Guardar ({modifiedDaysSummary.length})
               </button>
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação para Descartar Alterações ao Cancelar Edição */}
+      <Dialog
+        open={showDiscardConfirmModal}
+        onOpenChange={setShowDiscardConfirmModal}
+      >
+        <DialogContent className="max-w-md p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+          <DialogHeader className="px-5 py-4 border-b border-border bg-destructive/5">
+            <DialogTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <AlertTriangle size={16} className="text-destructive" />
+              Descartar alterações da escala?
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Fizeste alterações manuais em {modifiedDaysSummary.length}{" "}
+              {modifiedDaysSummary.length === 1 ? "dia" : "dias"}. Se saíres sem
+              concluir a edição, todas as alterações pendentes serão perdidas.
+            </p>
+          </DialogHeader>
+          <DialogFooter className="px-5 py-3 border-t border-border bg-muted/5 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowDiscardConfirmModal(false)}
+              className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              Continuar a Editar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDraftMatricesByDay({});
+                setCopiedFromByDay({});
+                setShowDiscardConfirmModal(false);
+                setEditMode(false);
+                setIsPainting(false);
+                setPaintAid(null);
+                notify.info("Alterações descartadas.", "Edição Cancelada");
+              }}
+              className="px-3.5 py-1.5 rounded-lg bg-destructive text-destructive-foreground text-xs font-medium hover:bg-destructive/90 transition-colors cursor-pointer"
+            >
+              Descartar e Sair
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

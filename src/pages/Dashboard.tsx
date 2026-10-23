@@ -5,7 +5,8 @@ import DashboardSection from "../components/dashboard/DashboardSection";
 import AssistantDayModal from "../components/dashboard/AssistantDayModal";
 import QuickAbsenceModal from "../components/dashboard/QuickAbsenceModal";
 import NoSchoolPlaceholder from "../components/common/NoSchoolPlaceholder";
-import type { EntityId } from "../types";
+import type { EntityId, BlockState } from "../types";
+import type { SlotEntryMetadata } from "../utils/scheduleMatrixUtils";
 
 export default function Dashboard() {
   const [selectedAssistantData, setSelectedAssistantData] = useState<{

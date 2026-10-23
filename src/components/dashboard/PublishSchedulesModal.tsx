@@ -256,6 +256,91 @@ function getDayScheduleDetails(
   return { assistants, totalEntries };
 }
 
+function getDayPublishValidation(
+  isoDate: string,
+  schedules: BackendScheduleResource[],
+  assistants: Assistant[]
+): {
+  canPublish: boolean;
+  isPast: boolean;
+  isIncomplete: boolean;
+  reason: string | null;
+} {
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const isPast = isoDate < todayIso;
+
+  if (isPast) {
+    return {
+      canPublish: false,
+      isPast: true,
+      isIncomplete: false,
+      reason: "Não é permitido publicar escalas de dias passados.",
+    };
+  }
+
+  const details = getDayScheduleDetails(isoDate, schedules, assistants);
+  if (details.assistants.length === 0) {
+    return {
+      canPublish: false,
+      isPast: false,
+      isIncomplete: true,
+      reason: "Não existem tarefas ou horários atribuídos neste dia.",
+    };
+  }
+
+  const gapReasons: string[] = [];
+
+  details.assistants.forEach((ast) => {
+    const sc = schedules.find((s) => String(s.assistant_id) === String(ast.assistantId));
+    const dayEntries = (sc?.entries || []).filter((e) => e.date?.slice(0, 10) === isoDate);
+    if (dayEntries.length === 0) return;
+
+    const sorted = [...dayEntries].sort((a, b) => a.start_time.localeCompare(b.start_time));
+    let lunchCount = 0;
+
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const curEnd = sorted[i].end_time.slice(0, 5);
+      const nextStart = sorted[i + 1].start_time.slice(0, 5);
+      if (nextStart > curEnd) {
+        const gapStartM = parseTimeToMinutes(curEnd);
+        const gapEndM = parseTimeToMinutes(nextStart);
+        const gapDur = gapEndM - gapStartM;
+        const isLunchWindow = gapDur >= 30 && gapDur <= 120 && gapStartM >= 11 * 60 && gapEndM <= 16 * 60;
+        if (isLunchWindow && lunchCount === 0) {
+          lunchCount++;
+        } else {
+          gapReasons.push(`${ast.assistantName} (${curEnd}–${nextStart})`);
+        }
+      }
+    }
+
+    let totalWorkMin = 0;
+    sorted.forEach((e) => {
+      totalWorkMin += parseTimeToMinutes(e.end_time) - parseTimeToMinutes(e.start_time);
+    });
+    if (sorted.length > 0 && totalWorkMin < 4 * 60) {
+      gapReasons.push(`${ast.assistantName} (apenas ${Math.floor(totalWorkMin / 60)}h)`);
+    }
+  });
+
+  if (gapReasons.length > 0) {
+    return {
+      canPublish: false,
+      isPast: false,
+      isIncomplete: true,
+      reason: `Horário com espaços por preencher: ${gapReasons.slice(0, 2).join(", ")}${gapReasons.length > 2 ? ` (+ ${gapReasons.length - 2})` : ""}.`,
+    };
+  }
+
+  return {
+    canPublish: true,
+    isPast: false,
+    isIncomplete: false,
+    reason: null,
+  };
+}
+
 export default function PublishSchedulesModal({
   open,
   onClose,
@@ -629,6 +714,20 @@ export default function PublishSchedulesModal({
                   </button>
                 </div>
               </div>
+
+              {!validationsByDate[previewDate]?.canPublish && (
+                <div className="flex items-start gap-2.5 p-3 rounded-xl border border-destructive/30 bg-destructive/5 text-destructive text-xs">
+                  <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold">
+                      {validationsByDate[previewDate]?.isPast ? "Dia Passado" : "Escala Incompleta"} — Não Publicável
+                    </p>
+                    <p className="text-[11px] text-destructive/90 mt-0.5">
+                      {validationsByDate[previewDate]?.reason}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Escala em Linha do Tempo Estilo Dashboard (Gantt Matrix) */}
               {previewDetails.assistants.length === 0 ? (
