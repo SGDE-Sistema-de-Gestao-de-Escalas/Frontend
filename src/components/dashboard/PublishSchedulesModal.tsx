@@ -39,6 +39,7 @@ import ActionTooltip from "../common/ActionTooltip";
 import { usePublishSchedules } from "../../hooks/api/useSchedules";
 import { useSchool } from "../../context/SchoolContext";
 import type { BackendScheduleResource } from "../../api/services/schedules.service";
+import type { BackendAbsenceResource } from "../../api/services/absences.service";
 import type { Assistant } from "../../types";
 import {
   getAllDraftDaysFromSchedules,
@@ -50,6 +51,7 @@ interface PublishSchedulesModalProps {
   onClose: () => void;
   schedules: BackendScheduleResource[];
   assistants?: Assistant[];
+  absences?: BackendAbsenceResource[];
   initialSelectedDate?: string;
   onSuccess?: () => void;
 }
@@ -260,7 +262,8 @@ function getDayScheduleDetails(
 function validateDayForPublish(
   isoDate: string,
   schedules: BackendScheduleResource[],
-  assistants: Assistant[]
+  assistants: Assistant[] = [],
+  absences: BackendAbsenceResource[] = []
 ): {
   canPublish: boolean;
   isPast: boolean;
@@ -280,8 +283,14 @@ function validateDayForPublish(
     };
   }
 
-  const details = getDayScheduleDetails(isoDate, schedules, assistants);
-  if (details.assistants.length === 0) {
+  // Obter todas as entradas deste dia em todas as escalas da escola
+  const allDayEntries = schedules.flatMap((sc) =>
+    (sc.entries || [])
+      .filter((e) => e.date?.slice(0, 10) === isoDate)
+      .map((e) => ({ ...e, assistantId: String(sc.assistant_id) }))
+  );
+
+  if (allDayEntries.length === 0) {
     return {
       canPublish: false,
       isPast: false,
@@ -292,14 +301,35 @@ function validateDayForPublish(
 
   const gapReasons: string[] = [];
 
-  details.assistants.forEach((ast) => {
-    const sc = schedules.find((s) => String(s.assistant_id) === String(ast.assistantId));
-    const dayEntries = (sc?.entries || []).filter((e) => e.date?.slice(0, 10) === isoDate);
-    if (dayEntries.length === 0) return;
+  // 1. Verificar assistentes residentes ativos que não têm qualquer horário atribuído neste dia
+  const assistantsWithEntries = new Set(allDayEntries.map((e) => e.assistantId));
+  const missingAssistants = assistants.filter((ast) => {
+    if (assistantsWithEntries.has(String(ast.id))) return false;
+    // Ignorar se estiver ausente (baixa, férias, etc.)
+    const isAbsent = absences.some((abs) => {
+      if (String(abs.assistant_id) !== String(ast.id)) return false;
+      const from = (abs.valid_from || abs.start_date || "").slice(0, 10);
+      const until = (abs.valid_until || abs.end_date || from).slice(0, 10);
+      return from <= isoDate && isoDate <= until;
+    });
+    return !isAbsent;
+  });
 
-    const sorted = [...dayEntries].sort((a, b) => a.start_time.localeCompare(b.start_time));
+  if (missingAssistants.length > 0) {
+    const names = missingAssistants.map((a) => a.name).slice(0, 2).join(", ");
+    gapReasons.push(
+      `${missingAssistants.length} assistente${missingAssistants.length > 1 ? "s" : ""} sem horário (${names}${missingAssistants.length > 2 ? "..." : ""})`
+    );
+  }
+
+  // 2. Verificar cada assistente com tarefas se tem espaços por preencher ou turno incompleto
+  assistantsWithEntries.forEach((astId) => {
+    const ast = assistants.find((a) => String(a.id) === astId);
+    const astName = ast?.name || `Assistente #${astId.slice(0, 6)}`;
+    const astEntries = allDayEntries.filter((e) => e.assistantId === astId);
+    const sorted = [...astEntries].sort((a, b) => a.start_time.localeCompare(b.start_time));
+
     let lunchCount = 0;
-
     for (let i = 0; i < sorted.length - 1; i++) {
       const curEnd = sorted[i].end_time.slice(0, 5);
       const nextStart = sorted[i + 1].start_time.slice(0, 5);
@@ -311,7 +341,7 @@ function validateDayForPublish(
         if (isLunchWindow && lunchCount === 0) {
           lunchCount++;
         } else {
-          gapReasons.push(`${ast.assistantName} (${curEnd}–${nextStart})`);
+          gapReasons.push(`${astName} (${curEnd}–${nextStart})`);
         }
       }
     }
@@ -320,8 +350,9 @@ function validateDayForPublish(
     sorted.forEach((e) => {
       totalWorkMin += parseTimeToMinutes(e.end_time) - parseTimeToMinutes(e.start_time);
     });
+
     if (sorted.length > 0 && totalWorkMin < 4 * 60) {
-      gapReasons.push(`${ast.assistantName} (apenas ${Math.floor(totalWorkMin / 60)}h)`);
+      gapReasons.push(`${astName} (apenas ${Math.floor(totalWorkMin / 60)}h atribuídas)`);
     }
   });
 
@@ -330,7 +361,7 @@ function validateDayForPublish(
       canPublish: false,
       isPast: false,
       isIncomplete: true,
-      reason: `Horário com espaços por preencher: ${gapReasons.slice(0, 2).join(", ")}${gapReasons.length > 2 ? ` (+ ${gapReasons.length - 2})` : ""}.`,
+      reason: `Horário incompleto: ${gapReasons.slice(0, 2).join("; ")}${gapReasons.length > 2 ? ` (+ ${gapReasons.length - 2})` : ""}.`,
     };
   }
 
@@ -347,6 +378,7 @@ export default function PublishSchedulesModal({
   onClose,
   schedules,
   assistants = [],
+  absences = [],
   initialSelectedDate,
   onSuccess,
 }: PublishSchedulesModalProps) {
@@ -366,10 +398,10 @@ export default function PublishSchedulesModal({
   const validationsByDate = useMemo(() => {
     const map: Record<string, ReturnType<typeof validateDayForPublish>> = {};
     draftDays.forEach((d) => {
-      map[d.isoDate] = validateDayForPublish(d.isoDate, schedules, assistants);
+      map[d.isoDate] = validateDayForPublish(d.isoDate, schedules, assistants, absences);
     });
     return map;
-  }, [draftDays, schedules, assistants]);
+  }, [draftDays, schedules, assistants, absences]);
 
   const publishableDates = useMemo(
     () =>
@@ -456,9 +488,9 @@ export default function PublishSchedulesModal({
     const currentWeekKey = mon.toISOString().slice(0, 10);
     const currentGroup = weekGroups.find((w) => w.weekKey === currentWeekKey);
     if (currentGroup) {
-      setSelectedDates(currentGroup.days.map((d) => d.isoDate));
+      setSelectedDates(currentGroup.days.filter((d) => validationsByDate[d.isoDate]?.canPublish).map((d) => d.isoDate));
     } else if (weekGroups.length > 0) {
-      setSelectedDates(weekGroups[0].days.map((d) => d.isoDate));
+      setSelectedDates(weekGroups[0].days.filter((d) => validationsByDate[d.isoDate]?.canPublish).map((d) => d.isoDate));
     }
   }
 
@@ -471,14 +503,16 @@ export default function PublishSchedulesModal({
     const nextWeekKey = nextMon.toISOString().slice(0, 10);
     const nextGroup = weekGroups.find((w) => w.weekKey === nextWeekKey);
     if (nextGroup) {
-      setSelectedDates(nextGroup.days.map((d) => d.isoDate));
+      setSelectedDates(nextGroup.days.filter((d) => validationsByDate[d.isoDate]?.canPublish).map((d) => d.isoDate));
     } else if (weekGroups.length > 1) {
-      setSelectedDates(weekGroups[1].days.map((d) => d.isoDate));
+      setSelectedDates(weekGroups[1].days.filter((d) => validationsByDate[d.isoDate]?.canPublish).map((d) => d.isoDate));
     }
   }
 
   function selectOnly(isoDate: string) {
-    setSelectedDates([isoDate]);
+    if (validationsByDate[isoDate]?.canPublish) {
+      setSelectedDates([isoDate]);
+    }
   }
 
   // Detalhes da pré-visualização do dia selecionado
@@ -576,11 +610,15 @@ export default function PublishSchedulesModal({
   }, [previewDetails]);
 
   async function handleConfirmPublish() {
-    if (selectedDates.length === 0) return;
+    const validSelected = selectedDates.filter((iso) => validationsByDate[iso]?.canPublish);
+    if (validSelected.length === 0) {
+      setErrorMessage("Nenhum dia válido e completo selecionado para publicação.");
+      return;
+    }
     setErrorMessage(null);
 
     try {
-      const sorted = [...selectedDates].sort();
+      const sorted = [...validSelected].sort();
       const minDate = sorted[0];
       const maxDate = sorted[sorted.length - 1];
 
@@ -1151,7 +1189,10 @@ export default function PublishSchedulesModal({
                                     <label
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        if (!canPublish) return;
+                                        if (!canPublish) {
+                                          e.preventDefault();
+                                          return;
+                                        }
                                       }}
                                       className={`flex items-center gap-2 select-none min-w-0 ${
                                         canPublish

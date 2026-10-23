@@ -3262,6 +3262,7 @@ export default function MatrixGrid({
         onClose={() => setPublishModalState({ open: false })}
         schedules={schedulesList}
         assistants={activeAssistants}
+        absences={absencesRes?.data || []}
         initialSelectedDate={publishModalState.preselectedDate}
       />
     </TooltipProvider>
