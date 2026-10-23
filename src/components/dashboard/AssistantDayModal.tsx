@@ -1,13 +1,21 @@
 import React from "react";
 import { Eye, UserX } from "lucide-react";
-import { assistants as ASSISTANTS, SCHEDULE_MATRIX, TIME_SLOTS } from "../../api/mockData";
 import type { BlockState, EntityId } from "../../types";
 import { Badge } from "../ui/badge";
 import { Sheet, SheetContent } from "../ui/sheet";
-import { BLOCK_STYLES, groupSlotsFn } from "./blockStyles";
+import { BLOCK_STYLES, groupSlotsFn, TIME_SLOTS } from "./blockStyles";
+import { useAssistantsList } from "../../hooks/api/useAssistants";
+import { useSchedulesList } from "../../hooks/api/useSchedules";
+import { useAbsencesList } from "../../hooks/api/useAbsences";
+import {
+  buildDayMatrixFromApi,
+  getDateInfo,
+  hasGeneratedScheduleForDate,
+} from "../../utils/scheduleMatrixUtils";
 
 interface AssistantDayModalProps {
   assistantId: EntityId | null;
+  dayOffset?: number;
   onClose: () => void;
   onViewProfile: () => void;
   onMarkAbsence: (assistantName: string) => void;
@@ -15,16 +23,42 @@ interface AssistantDayModalProps {
 
 export default function AssistantDayModal({
   assistantId,
+  dayOffset = 0,
   onClose,
   onViewProfile,
   onMarkAbsence,
 }: AssistantDayModalProps) {
+  const dayInfo = getDateInfo(dayOffset);
+  const { data: assistants = [] } = useAssistantsList();
+  const { data: schedules = [] } = useSchedulesList({
+    start_date: dayInfo.isoDate,
+    end_date: dayInfo.isoDate,
+  });
+  const { data: absencesRes } = useAbsencesList({
+    start_date: dayInfo.isoDate,
+    end_date: dayInfo.isoDate,
+    per_page: 100,
+  });
+
   if (assistantId === null) return null;
 
-  const assistant = ASSISTANTS.find((a) => a.id === assistantId);
+  const assistant = assistants.find((a) => String(a.id) === String(assistantId));
   if (!assistant) return null;
 
-  const slots = SCHEDULE_MATRIX[assistantId] || [];
+  const hasScheduleGenerated = hasGeneratedScheduleForDate(
+    dayInfo.isoDate,
+    schedules
+  );
+
+  const { matrix } = buildDayMatrixFromApi({
+    isoDate: dayInfo.isoDate,
+    isOpen: dayInfo.dow < 5,
+    assistants: [assistant],
+    schedules,
+    absences: absencesRes?.data || [],
+  });
+
+  const slots = matrix[assistant.id] || Array(96).fill("off");
   const groups = groupSlotsFn(slots);
 
   const colorMap: Record<BlockState, string> = {
@@ -86,11 +120,14 @@ export default function AssistantDayModal({
               {assistant.name}
             </h3>
             <p className="text-xs text-muted-foreground font-mono mt-0.5">
-              27 Jan 2026 · Horário do dia
+              {dayInfo.dateStr} · Horário do dia
             </p>
             {assistant.exception && (
               <div className="mt-1">
-                <Badge variant="outline" className="text-[#D97706] border-[#D97706]/30 bg-[#D97706]/10 text-[10px]">
+                <Badge
+                  variant="outline"
+                  className="text-[#D97706] border-[#D97706]/30 bg-[#D97706]/10 text-[10px]"
+                >
                   {assistant.exception}
                 </Badge>
               </div>
@@ -118,7 +155,9 @@ export default function AssistantDayModal({
         <div className="flex-1 overflow-y-auto p-5 space-y-2">
           {groups.length === 0 ? (
             <div className="text-center py-8 text-sm text-muted-foreground">
-              Sem blocos ativos hoje
+              {!hasScheduleGenerated
+                ? "A escala ainda não foi gerada para este dia"
+                : "Sem blocos ativos neste dia"}
             </div>
           ) : (
             groups.map((block, i) => {
@@ -184,4 +223,3 @@ export default function AssistantDayModal({
     </Sheet>
   );
 }
-

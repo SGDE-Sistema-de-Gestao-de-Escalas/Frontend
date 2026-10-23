@@ -1,14 +1,5 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Lock } from "lucide-react";
-import {
-  assistants as ASSISTANTS,
-  generateDayMatrix,
-  getDateInfo,
-  TIME_SLOTS,
-  VIEW_END,
-  VIEW_SLOTS,
-  VIEW_START,
-} from "../../api/mockData";
 import type { BlockState, EntityId } from "../../types";
 import { Card } from "../ui/card";
 import {
@@ -17,11 +8,30 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../ui/tooltip";
+import ActionTooltip from "../common/ActionTooltip";
 import {
   BLOCK_STYLES,
   formatDurationSlots,
   slotsToBlocks,
+  TIME_SLOTS,
 } from "./blockStyles";
+import { useAssistantsList } from "../../hooks/api/useAssistants";
+import { useSchedulesList } from "../../hooks/api/useSchedules";
+import { useAbsencesList } from "../../hooks/api/useAbsences";
+import {
+  useOperatingCalendar,
+  useOperatingExceptions,
+  useOperatingRules,
+} from "../../hooks/api/useOperatingHours";
+import { useHolidaysList } from "../../hooks/api/useHolidays";
+import {
+  buildDayMatrixFromApi,
+  getDateInfo,
+  getSchedulePublishStatusForDate,
+  hasGeneratedScheduleForDate,
+  resolveSchoolDayStatusByIsoDate,
+  SlotEntryMetadata,
+} from "../../utils/scheduleMatrixUtils";
 
 interface WeekMatrixViewProps {
   weekStart: number;
@@ -34,7 +44,75 @@ export default function WeekMatrixView({
   onSelectDay,
   onSelectAssistant,
 }: WeekMatrixViewProps) {
-  const weekOffsets = Array.from({ length: 7 }, (_, i) => weekStart + i);
+  const weekOffsets = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => weekStart + i),
+    [weekStart]
+  );
+
+  const startInfo = getDateInfo(weekOffsets[0]);
+  const endInfo = getDateInfo(weekOffsets[6]);
+
+  const { data: assistants = [] } = useAssistantsList();
+  const { data: schedules = [] } = useSchedulesList({
+    start_date: startInfo.isoDate,
+    end_date: endInfo.isoDate,
+  });
+  const { data: absencesRes } = useAbsencesList({
+    start_date: startInfo.isoDate,
+    end_date: endInfo.isoDate,
+    per_page: 200,
+  });
+  const { data: calendarDays = [] } = useOperatingCalendar(
+    startInfo.isoDate,
+    endInfo.isoDate
+  );
+  const { data: operatingRules = [] } = useOperatingRules();
+  const { data: operatingExceptions = [] } = useOperatingExceptions();
+  const { data: holidays = [] } = useHolidaysList();
+
+  const operatingSources = useMemo(
+    () => ({
+      calendarDays,
+      operatingRules,
+      operatingExceptions,
+      holidays,
+    }),
+    [calendarDays, operatingRules, operatingExceptions, holidays]
+  );
+
+  const activeAssistants = useMemo(
+    () =>
+      assistants.filter(
+        (a) => !a.deleted_at && (a.active ?? a.is_active ?? true)
+      ),
+    [assistants]
+  );
+
+  const dayDataByOffset = useMemo(() => {
+    const map: Record<
+      number,
+      {
+        matrix: Record<EntityId, BlockState[]>;
+        slotMetaByAssistant: Record<EntityId, Record<number, SlotEntryMetadata>>;
+      }
+    > = {};
+    weekOffsets.forEach((offset) => {
+      const info = getDateInfo(offset);
+      const status = resolveSchoolDayStatusByIsoDate(
+        info.isoDate,
+        operatingSources
+      );
+      const res = buildDayMatrixFromApi({
+        isoDate: info.isoDate,
+        isOpen: status.isOpen,
+        assistants: activeAssistants,
+        schedules,
+        absences: absencesRes?.data || [],
+      });
+      map[offset] = res;
+    });
+    return map;
+  }, [weekOffsets, operatingSources, activeAssistants, schedules, absencesRes]);
 
   return (
     <TooltipProvider delayDuration={60}>
@@ -43,10 +121,10 @@ export default function WeekMatrixView({
         <div className="px-4 py-2.5 border-b border-border bg-muted/20 flex items-center gap-4 flex-wrap">
           {(
             [
+              "collection",
               "work",
               "surveillance",
               "cleaning",
-              "collection",
               "delivery",
               "lunch",
               "absent",
@@ -79,24 +157,49 @@ export default function WeekMatrixView({
               </div>
               {weekOffsets.map((offset) => {
                 const info = getDateInfo(offset);
+                const status = resolveSchoolDayStatusByIsoDate(
+                  info.isoDate,
+                  operatingSources
+                );
                 const isToday = offset === 0;
-                const isWeekend = info.dow >= 5;
+                const isClosed = !status.isOpen;
+                const hasGenerated =
+                  !isClosed &&
+                  hasGeneratedScheduleForDate(info.isoDate, schedules);
+                const pubInfo = !isClosed
+                  ? getSchedulePublishStatusForDate(info.isoDate, schedules)
+                  : null;
+                const hoursLabel =
+                  !isClosed && status.openingTime && status.closingTime
+                    ? `${status.openingTime.slice(0, 5)}–${status.closingTime.slice(0, 5)}`
+                    : null;
+
+                const tooltipText = isClosed
+                  ? status.title || "Encerrado"
+                  : pubInfo?.isDraft
+                  ? `Horário em rascunho (não publicado) · Funcionamento: ${hoursLabel || ""}`
+                  : pubInfo?.isPublished
+                  ? `Horário publicado · Funcionamento: ${hoursLabel || ""}`
+                  : hoursLabel
+                  ? `Horário de funcionamento: ${hoursLabel}`
+                  : null;
+
                 return (
-                  <button
-                    key={offset}
-                    type="button"
-                    onClick={() => !isWeekend && onSelectDay(offset)}
-                    className={`flex-1 px-2 py-2 text-center border-r border-border/50 last:border-0 transition-colors ${
-                      isWeekend
-                        ? "bg-muted/20 cursor-default"
-                        : "hover:bg-primary/5 cursor-pointer"
-                    } ${isToday ? "bg-primary/10" : ""}`}
-                  >
+                  <ActionTooltip key={offset} content={tooltipText}>
+                    <button
+                      type="button"
+                      onClick={() => !isClosed && onSelectDay(offset)}
+                      className={`w-full px-2 py-2 text-center border-r border-border/50 last:border-0 transition-colors ${
+                        isClosed
+                          ? "bg-muted/20 cursor-default"
+                          : "hover:bg-primary/5 cursor-pointer"
+                      } ${isToday ? "bg-primary/10" : ""}`}
+                    >
                     <p
                       className={`text-[10px] font-semibold uppercase tracking-wide ${
                         isToday
                           ? "text-primary"
-                          : isWeekend
+                          : isClosed
                           ? "text-muted-foreground/50"
                           : "text-muted-foreground"
                       }`}
@@ -107,144 +210,206 @@ export default function WeekMatrixView({
                       className={`text-xs font-mono mt-0.5 ${
                         isToday
                           ? "text-primary font-bold"
-                          : isWeekend
+                          : isClosed
                           ? "text-muted-foreground/40"
                           : "text-foreground"
                       }`}
                     >
                       {info.dateStr}
                     </p>
+                    {hoursLabel && (
+                      <p className="text-[9px] font-mono text-muted-foreground/75 mt-0.5">
+                        {hoursLabel}
+                      </p>
+                    )}
+                    {!isClosed && !hasGenerated && (
+                      <span className="inline-block mt-0.5 text-[9px] font-medium text-[#D97706]">
+                        Não gerada
+                      </span>
+                    )}
+                    {!isClosed && hasGenerated && pubInfo && (
+                      pubInfo.isPublished ? (
+                        <span className="inline-block mt-0.5 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
+                          Publicada
+                        </span>
+                      ) : (
+                        <span className="inline-block mt-0.5 text-[9px] font-semibold text-amber-600 dark:text-amber-400">
+                          Rascunho
+                        </span>
+                      )
+                    )}
                   </button>
-                );
+                </ActionTooltip>
+              );
               })}
             </div>
 
             {/* Assistant rows */}
-            {ASSISTANTS.map((assistant) => (
-              <div
-                key={assistant.id}
-                className="flex border-b border-border/50 last:border-b-0 hover:bg-muted/10 transition-colors"
-              >
-                <button
-                  type="button"
-                  className="w-40 flex-shrink-0 px-3 py-1.5 border-r border-border flex items-center gap-2 hover:bg-primary/5 transition-colors text-left"
-                  onClick={() => onSelectAssistant(assistant.id)}
-                >
-                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <span className="text-[9px] font-bold text-primary font-mono">
-                      {assistant.initials}
-                    </span>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-foreground hover:text-primary truncate transition-colors">
-                      {assistant.name.split(" ")[0]}{" "}
-                      {assistant.name.split(" ").slice(-1)[0]?.[0]
-                        ? `${assistant.name.split(" ").slice(-1)[0][0]}.`
-                        : ""}
-                    </p>
-                    {assistant.exception && (
-                      <p className="text-[9px] text-[#D97706] truncate">
-                        {assistant.exception}
-                      </p>
-                    )}
-                  </div>
-                </button>
-                {weekOffsets.map((offset) => {
-                  const matrix = generateDayMatrix(offset);
-                  const slots = matrix[assistant.id];
-                  const info = getDateInfo(offset);
-                  const isWeekend = info.dow >= 5;
-                  const isToday = offset === 0;
-                  return (
-                    <div
-                      key={offset}
-                      onClick={() => !isWeekend && onSelectDay(offset)}
-                      className={`flex-1 h-10 border-r border-border/50 last:border-0 overflow-hidden transition-colors ${
-                        isWeekend
-                          ? "bg-muted/20 cursor-default"
-                          : "hover:bg-muted/20 cursor-pointer"
-                      } ${isToday ? "ring-1 ring-inset ring-primary/30" : ""}`}
-                    >
-                      <div className="relative w-full h-full">
-                        {isToday && (
-                          <div className="absolute inset-0 bg-primary/5" />
-                        )}
-                        {slotsToBlocks(slots).map((b) => {
-                          const cs = Math.max(b.start, VIEW_START);
-                          const ce = Math.min(b.start + b.count, VIEW_END);
-                          if (b.state === "off" || ce <= cs) return null;
-
-                          const styleConfig = BLOCK_STYLES[b.state];
-                          const startTimeStr = TIME_SLOTS[b.start] ?? "";
-                          const endTimeStr =
-                            TIME_SLOTS[Math.min(b.start + b.count, 95)] ??
-                            "24:00";
-                          const durationStr = formatDurationSlots(b.count);
-
-                          const radiusClass =
-                            b.hasPrevAdjacent && b.hasNextAdjacent
-                              ? "rounded-none"
-                              : b.hasPrevAdjacent
-                              ? "rounded-l-none rounded-r-md"
-                              : b.hasNextAdjacent
-                              ? "rounded-l-md rounded-r-none"
-                              : "rounded-md";
-
-                          const separatorClass = b.hasPrevAdjacent
-                            ? "border-l border-card/85"
-                            : "";
-
-                          return (
-                            <Tooltip key={b.start}>
-                              <TooltipTrigger asChild>
-                                <div
-                                  className={`absolute inset-y-1.5 ${radiusClass} ${separatorClass} ${styleConfig.bg} hover:brightness-110 hover:z-10 overflow-hidden transition-all`}
-                                  style={{
-                                    left: `${
-                                      ((cs - VIEW_START) / VIEW_SLOTS) * 100
-                                    }%`,
-                                    width: `${
-                                      ((ce - cs) / VIEW_SLOTS) * 100
-                                    }%`,
-                                  }}
-                                >
-                                  {styleConfig.locked && (
-                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                      <Lock
-                                        size={7}
-                                        className="text-white/60"
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent
-                                side="top"
-                                sideOffset={6}
-                                className="bg-popover text-popover-foreground border border-border shadow-xl px-3 py-2 rounded-xl text-left"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className={`w-2 h-2 rounded-full ${styleConfig.bg}`}
-                                  />
-                                  <span className="font-semibold text-xs text-foreground">
-                                    {styleConfig.label}
-                                  </span>
-                                </div>
-                                <p className="text-[11px] font-mono text-muted-foreground mt-0.5">
-                                  {info.dayShort} {info.dateStr} · {startTimeStr}–
-                                  {endTimeStr} ({durationStr})
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
+            {activeAssistants.length === 0 ? (
+              <div className="p-8 text-center text-xs text-muted-foreground">
+                Sem assistentes ativos nesta escola.
               </div>
-            ))}
+            ) : (
+              activeAssistants.map((assistant) => (
+                <div
+                  key={assistant.id}
+                  className="flex border-b border-border/50 last:border-b-0 hover:bg-muted/10 transition-colors"
+                >
+                  <button
+                    type="button"
+                    className="w-40 flex-shrink-0 px-3 py-1.5 border-r border-border flex items-center gap-2 hover:bg-primary/5 transition-colors text-left"
+                    onClick={() => onSelectAssistant(assistant.id)}
+                  >
+                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <span className="text-[9px] font-bold text-primary font-mono">
+                        {assistant.initials}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-foreground hover:text-primary truncate transition-colors">
+                        {assistant.name.split(" ")[0]}{" "}
+                        {assistant.name.split(" ").slice(-1)[0]?.[0]
+                          ? `${assistant.name.split(" ").slice(-1)[0][0]}.`
+                          : ""}
+                      </p>
+                      {assistant.exception && (
+                        <p className="text-[9px] text-[#D97706] truncate">
+                          {assistant.exception}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                  {weekOffsets.map((offset) => {
+                    const dayData = dayDataByOffset[offset];
+                    const matrix = dayData?.matrix || {};
+                    const slots = matrix[assistant.id] || Array(96).fill("off");
+                    const meta = dayData?.slotMetaByAssistant?.[assistant.id];
+                    const info = getDateInfo(offset);
+                    const status = resolveSchoolDayStatusByIsoDate(
+                      info.isoDate,
+                      operatingSources
+                    );
+                    const isClosed = !status.isOpen;
+                    const isToday = offset === 0;
+                    const dayViewStart = status.viewStartSlot;
+                    const dayViewEnd = status.viewEndSlot;
+                    const dayViewSlots = Math.max(1, dayViewEnd - dayViewStart);
+
+                    return (
+                      <div
+                        key={offset}
+                        onClick={() => !isClosed && onSelectDay(offset)}
+                        className={`flex-1 h-10 border-r border-border/50 last:border-0 overflow-hidden transition-colors ${
+                          isClosed
+                            ? "bg-muted/20 cursor-default"
+                            : "hover:bg-muted/20 cursor-pointer"
+                        } ${isToday ? "ring-1 ring-inset ring-primary/30" : ""}`}
+                      >
+                        <div className="relative w-full h-full">
+                          {isToday && (
+                            <div className="absolute inset-0 bg-primary/5" />
+                          )}
+                          {slotsToBlocks(slots, meta).map((b) => {
+                            const cs = Math.max(b.start, dayViewStart);
+                            const ce = Math.min(
+                              b.start + b.count,
+                              dayViewEnd
+                            );
+                            if (b.state === "off" || ce <= cs) return null;
+
+                            const styleConfig = BLOCK_STYLES[b.state];
+                            const displayLabel = b.activityName || styleConfig.label;
+                            const isLocked = b.isLocked ?? styleConfig.locked;
+                            const startTimeStr = TIME_SLOTS[b.start] ?? "";
+                            const endTimeStr =
+                              TIME_SLOTS[Math.min(b.start + b.count, 95)] ??
+                              "24:00";
+                            const durationStr = formatDurationSlots(b.count);
+
+                            const radiusClass =
+                              b.hasPrevAdjacent && b.hasNextAdjacent
+                                ? "rounded-none"
+                                : b.hasPrevAdjacent
+                                ? "rounded-l-none rounded-r-md"
+                                : b.hasNextAdjacent
+                                ? "rounded-l-md rounded-r-none"
+                                : "rounded-md";
+
+                            const separatorClass = b.hasPrevAdjacent
+                              ? "border-l border-card/85"
+                              : "";
+
+                            return (
+                              <Tooltip key={b.start}>
+                                <TooltipTrigger asChild>
+                                  <div
+                                    className={`absolute inset-y-1.5 ${radiusClass} ${separatorClass} ${
+                                      b.activityColor ? "" : styleConfig.bg
+                                    } hover:brightness-110 hover:z-10 overflow-hidden transition-all`}
+                                    style={{
+                                      left: `${
+                                        ((cs - dayViewStart) / dayViewSlots) *
+                                        100
+                                      }%`,
+                                      width: `${
+                                        ((ce - cs) / dayViewSlots) * 100
+                                      }%`,
+                                      ...(b.activityColor
+                                        ? { backgroundColor: b.activityColor }
+                                        : {}),
+                                    }}
+                                  >
+                                    {isLocked && (
+                                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                        <Lock
+                                          size={7}
+                                          className="text-white/60"
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                  side="top"
+                                  sideOffset={6}
+                                  className="bg-popover text-popover-foreground border border-border shadow-xl px-3 py-2 rounded-xl text-left"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`w-2 h-2 rounded-full ${
+                                        b.activityColor ? "" : styleConfig.bg
+                                      }`}
+                                      style={
+                                        b.activityColor
+                                          ? { backgroundColor: b.activityColor }
+                                          : undefined
+                                      }
+                                    />
+                                    <span className="font-semibold text-xs text-foreground">
+                                      {displayLabel}
+                                    </span>
+                                    {b.activityName &&
+                                      b.activityName !== styleConfig.label && (
+                                        <span className="text-[10px] text-muted-foreground">
+                                          ({styleConfig.label})
+                                        </span>
+                                      )}
+                                  </div>
+                                  <p className="text-[11px] font-mono text-muted-foreground mt-0.5">
+                                    {info.dayShort} {info.dateStr} · {startTimeStr}–
+                                    {endTimeStr} ({durationStr})
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </Card>
