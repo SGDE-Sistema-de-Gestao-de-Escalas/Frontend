@@ -4,6 +4,7 @@ import {
   BarChart2,
   Clock,
   Info,
+  Loader2,
   Lock,
   Pencil,
   Plus,
@@ -124,6 +125,9 @@ export default function AssistantScheduleManager({
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [scheduleFieldErrors, setScheduleFieldErrors] = useState<{ start?: string; end?: string }>({});
   const [scheduleToDelete, setScheduleToDelete] = useState<AssistantScheduleItem | null>(null);
+
+  const isSavingSchedule =
+    createScheduleMutation.isPending || updateScheduleMutation.isPending;
 
   // Form states for adding/editing schedule
   const [shiftProfile, setShiftProfile] = useState<"fixed" | "rotating">("fixed");
@@ -294,7 +298,7 @@ export default function AssistantScheduleManager({
     setShowAddScheduleModal(true);
   }
 
-  function handleSaveSchedule() {
+  async function handleSaveSchedule() {
     setScheduleError(null);
     setScheduleFieldErrors({});
 
@@ -353,19 +357,21 @@ export default function AssistantScheduleManager({
         }
       }
 
-      setSchedules((prev) =>
-        prev.map((s) => (s.id === editingSchedule.id ? { ...s, to: endVal } : s))
-      );
-      if (assistantId) {
-        updateScheduleMutation.mutate({
-          id: editingSchedule.id,
-          assistantId: String(assistantId),
-          data: { valid_until: endVal },
-        });
+      try {
+        if (assistantId) {
+          await updateScheduleMutation.mutateAsync({
+            id: editingSchedule.id,
+            assistantId: String(assistantId),
+            data: { valid_until: endVal },
+          });
+        }
+        setShowAddScheduleModal(false);
+        setEditingScheduleId(null);
+      } catch (err: any) {
+        const beMsg =
+          err?.response?.data?.message || "Não foi possível atualizar a data de término.";
+        setScheduleError(beMsg);
       }
-      notify.success("Data de fim de vigência atualizada!");
-      setShowAddScheduleModal(false);
-      setEditingScheduleId(null);
       return;
     }
 
@@ -439,51 +445,43 @@ export default function AssistantScheduleManager({
           }),
     };
 
-    setSchedules((prev) => {
-      let list = editingScheduleId
-        ? prev.map((s) => (s.id === editingScheduleId ? itemToSave : s))
-        : [itemToSave, ...prev];
-
-      if (activeSchedule && activeSchedule.id !== editingScheduleId && startVal > activeSchedule.from) {
-        const eve = addDays(startVal, -1);
-        list = list.map((s) => {
-          if (s.id === activeSchedule.id) {
-            return { ...s, to: eve };
-          }
-          return s;
-        });
+    try {
+      if (assistantId) {
+        if (editingScheduleId) {
+          await updateScheduleMutation.mutateAsync({
+            id: editingScheduleId,
+            assistantId: String(assistantId),
+            data: {
+              valid_from: itemToSave.from,
+              valid_until: itemToSave.to,
+            },
+          });
+        } else {
+          await createScheduleMutation.mutateAsync(
+            scheduleItemToApiPayload(String(assistantId), itemToSave)
+          );
+        }
       }
 
-      return list.sort((a, b) => (b.from > a.from ? 1 : -1));
-    });
-
-    if (assistantId) {
-      if (editingScheduleId) {
-        updateScheduleMutation.mutate({
-          id: editingScheduleId,
-          assistantId: String(assistantId),
-          data: {
-            valid_from: itemToSave.from,
-            valid_until: itemToSave.to,
-          },
-        });
-      } else {
-        createScheduleMutation.mutate(
-          scheduleItemToApiPayload(String(assistantId), itemToSave)
-        );
+      // Sucesso confirmado pelo servidor: fechar modal
+      setShowAddScheduleModal(false);
+      setEditingScheduleId(null);
+    } catch (err: any) {
+      // Em caso de erro: modal permanece aberta com os dados para correção
+      const beMsg =
+        err?.response?.data?.message || "Não foi possível registar o horário.";
+      setScheduleError(beMsg);
+      const beErrors = err?.response?.data?.errors;
+      if (beErrors) {
+        const fieldErrors: { start?: string; end?: string } = {};
+        if (beErrors.valid_from) fieldErrors.start = beErrors.valid_from[0];
+        if (beErrors.valid_until) fieldErrors.end = beErrors.valid_until[0];
+        setScheduleFieldErrors(fieldErrors);
       }
     }
-
-    notify.success(
-      editingScheduleId
-        ? "Horário atualizado com sucesso!"
-        : "Novo horário adicionado!"
-    );
-    setShowAddScheduleModal(false);
-    setEditingScheduleId(null);
   }
 
-  function handleConfirmDeleteSchedule() {
+  async function handleConfirmDeleteSchedule() {
     if (!scheduleToDelete) return;
 
     const isActiveSchedule =
@@ -502,33 +500,17 @@ export default function AssistantScheduleManager({
       return;
     }
 
-    const isFuture = getScheduleTypeStatus(scheduleToDelete, schedules) === "future";
-
-    setSchedules((prev) => {
-      const nextList = prev.filter((s) => s.id !== scheduleToDelete.id);
-      if (isFuture) {
-        return nextList.map((s) => {
-          if (getScheduleTypeStatus(s, nextList) === "active") {
-            return { ...s, to: null };
-          }
-          return s;
+    try {
+      if (assistantId && scheduleToDelete) {
+        await deleteScheduleMutation.mutateAsync({
+          id: scheduleToDelete.id,
+          assistantId: String(assistantId),
         });
       }
-      return nextList;
-    });
-
-    if (assistantId && scheduleToDelete) {
-      deleteScheduleMutation.mutate({
-        id: scheduleToDelete.id,
-        assistantId: String(assistantId),
-      });
+      setScheduleToDelete(null);
+    } catch {
+      // Erro tratado e notificado pelo hook
     }
-
-    notify.success(
-      isFuture
-        ? "Horário agendado eliminado. A vigência do horário atual ficou em aberto."
-        : "Registo histórico de horário eliminado com sucesso."
-    );
     setScheduleToDelete(null);
   }
 
@@ -846,29 +828,36 @@ export default function AssistantScheduleManager({
               : "Defina o perfil de turno e o período de vigência"
           }
           onClose={() => {
-            setShowAddScheduleModal(false);
-            setEditingScheduleId(null);
-            setScheduleError(null);
+            if (!isSavingSchedule) {
+              setShowAddScheduleModal(false);
+              setEditingScheduleId(null);
+              setScheduleError(null);
+            }
           }}
           maxWidth="max-w-4xl"
           footer={
             <>
               <button
                 type="button"
+                disabled={isSavingSchedule}
                 onClick={() => {
                   setShowAddScheduleModal(false);
                   setEditingScheduleId(null);
                   setScheduleError(null);
                 }}
-                className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
+                disabled={isSavingSchedule}
                 onClick={handleSaveSchedule}
-                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
               >
+                {isSavingSchedule && (
+                  <Loader2 size={13} className="animate-spin" />
+                )}
                 Guardar Horário
               </button>
             </>

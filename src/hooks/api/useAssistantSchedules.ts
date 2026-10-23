@@ -28,9 +28,9 @@ export function useCreateAssistantSchedule() {
   return useMutation({
     mutationFn: (payload: CreateAssistantScheduleProfilePayload) =>
       assistantSchedulesService.create(payload),
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [...ASSISTANT_SCHEDULES_KEY, String(variables.assistant_id)],
+        queryKey: ASSISTANT_SCHEDULES_KEY,
       });
       notify.success("Horário padrão configurado com sucesso.", "Horário Guardado");
     },
@@ -54,9 +54,9 @@ export function useUpdateAssistantSchedule() {
       data: UpdateAssistantScheduleProfilePayload;
       assistantId: string;
     }) => assistantSchedulesService.update(id, data),
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [...ASSISTANT_SCHEDULES_KEY, String(variables.assistantId)],
+        queryKey: ASSISTANT_SCHEDULES_KEY,
       });
       notify.success("Vigência do horário atualizada com sucesso.", "Horário Atualizado");
     },
@@ -78,9 +78,9 @@ export function useDeleteAssistantSchedule() {
       id: string | number;
       assistantId: string;
     }) => assistantSchedulesService.delete(id),
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [...ASSISTANT_SCHEDULES_KEY, String(variables.assistantId)],
+        queryKey: ASSISTANT_SCHEDULES_KEY,
       });
       notify.success("Horário eliminado com sucesso.", "Horário Eliminado");
     },

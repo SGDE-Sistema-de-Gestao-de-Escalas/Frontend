@@ -155,7 +155,11 @@ export default function AssistantProfile({
     endDate?: string;
     days?: string;
     time?: string;
+    lunch?: string;
+    general?: string;
   }>({});
+  const isSavingException =
+    createExceptionMutation.isPending || updateExceptionMutation.isPending;
   const [exceptionDays, setExceptionDays] = useState<string[]>([
     "Seg",
     "Ter",
@@ -314,13 +318,15 @@ export default function AssistantProfile({
     setShowAddException(true);
   }
 
-  function handleSaveException() {
+  async function handleSaveException() {
     const errors: {
       type?: string;
       startDate?: string;
       endDate?: string;
       days?: string;
       time?: string;
+      lunch?: string;
+      general?: string;
     } = {};
 
     if (!exceptionType.trim()) {
@@ -343,6 +349,17 @@ export default function AssistantProfile({
       errors.time = "A hora de saída tem de ser posterior à hora de entrada.";
     }
 
+    if (exceptionLunchEnabled) {
+      if (
+        exceptionLunchStart &&
+        exceptionLunchEnd &&
+        exceptionLunchEnd <= exceptionLunchStart
+      ) {
+        errors.lunch =
+          "A hora de fim de almoço tem de ser posterior à hora de início.";
+      }
+    }
+
     if (Object.keys(errors).length > 0) {
       setExceptionErrors(errors);
       return;
@@ -356,15 +373,6 @@ export default function AssistantProfile({
       ? `Horário diferido ${exceptionEntry}–${exceptionExit}`
       : "Horário especial";
 
-    const lunchData = exceptionLunchEnabled
-      ? {
-          ativo: true,
-          inicio: exceptionLunchStart,
-          fim: exceptionLunchEnd,
-          duracao: parseInt(exceptionLunchDuration, 10) || 30,
-        }
-      : undefined;
-
     const commonPayload = {
       type: exceptionType.trim(),
       description: computedDetail,
@@ -376,67 +384,76 @@ export default function AssistantProfile({
       lunch_enabled: exceptionLunchEnabled,
       lunch_start: exceptionLunchEnabled ? exceptionLunchStart : null,
       lunch_end: exceptionLunchEnabled ? exceptionLunchEnd : null,
-      lunch_duration_minutes: exceptionLunchEnabled ? parseInt(exceptionLunchDuration, 10) || 30 : null,
+      lunch_duration_minutes: exceptionLunchEnabled
+        ? parseInt(exceptionLunchDuration, 10) || 30
+        : null,
     };
 
-    if (editingExceptionId) {
-      setExceptions((prev) =>
-        prev.map((e) =>
-          e.id === editingExceptionId
-            ? {
-                ...e,
-                tipo: exceptionType.trim(),
-                detalhe: computedDetail,
-                entrada: exceptionEntry,
-                saida: exceptionExit,
-                dias: exceptionDays,
-                pausaAlmoco: lunchData,
-                inicio: exceptionStartDate,
-                fim: exceptionEndDate || undefined,
-              }
-            : e
-        )
-      );
-      if (assistant?.id) {
-        updateExceptionMutation.mutate({
-          id: editingExceptionId,
-          assistantId: String(assistant.id),
-          data: commonPayload,
-        });
+    try {
+      if (editingExceptionId) {
+        if (assistant?.id) {
+          await updateExceptionMutation.mutateAsync({
+            id: editingExceptionId,
+            assistantId: String(assistant.id),
+            data: commonPayload,
+          });
+        }
+      } else {
+        if (assistant?.id) {
+          await createExceptionMutation.mutateAsync({
+            assistant_id: String(assistant.id),
+            ...commonPayload,
+          });
+        }
       }
-    } else {
-      const newRule: ExceptionRule = {
-        id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-        tipo: exceptionType.trim(),
-        detalhe: computedDetail,
-        entrada: exceptionEntry,
-        saida: exceptionExit,
-        dias: exceptionDays,
-        pausaAlmoco: lunchData,
-        inicio: exceptionStartDate,
-        fim: exceptionEndDate || undefined,
-      };
-      setExceptions((prev) => [newRule, ...prev]);
-      if (assistant?.id) {
-        createExceptionMutation.mutate({
-          assistant_id: String(assistant.id),
-          ...commonPayload,
-        });
+
+      // Sucesso confirmado pelo servidor: fechar modal e limpar estado de edição
+      setShowAddException(false);
+      setEditingExceptionId(null);
+    } catch (err: any) {
+      // Em caso de erro: modal permanece aberta com os dados preenchidos para o utilizador corrigir
+      const beErrors = err?.response?.data?.errors;
+      const beMsg =
+        err?.response?.data?.message ||
+        "Não foi possível registar a regra de exceção.";
+
+      const mappedErrors: typeof exceptionErrors = {};
+      if (beErrors) {
+        if (beErrors.type) mappedErrors.type = beErrors.type[0];
+        if (beErrors.valid_from) mappedErrors.startDate = beErrors.valid_from[0];
+        if (beErrors.valid_until) mappedErrors.endDate = beErrors.valid_until[0];
+        if (beErrors.days) mappedErrors.days = beErrors.days[0];
+        if (beErrors.start_time) mappedErrors.time = beErrors.start_time[0];
+        if (beErrors.end_time) mappedErrors.time = beErrors.end_time[0];
+        if (
+          beErrors.lunch_start ||
+          beErrors.lunch_end ||
+          beErrors.lunch_duration_minutes
+        ) {
+          mappedErrors.lunch =
+            beErrors.lunch_start?.[0] ||
+            beErrors.lunch_end?.[0] ||
+            beErrors.lunch_duration_minutes?.[0];
+        }
       }
+      mappedErrors.general = beMsg;
+      setExceptionErrors(mappedErrors);
     }
-    setShowAddException(false);
   }
 
-  function confirmDeleteException() {
+  async function confirmDeleteException() {
     if (deleteExceptionTarget) {
-      setExceptions((prev) => prev.filter((e) => e.id !== deleteExceptionTarget.id));
-      if (assistant?.id) {
-        deleteExceptionMutation.mutate({
-          id: deleteExceptionTarget.id,
-          assistantId: String(assistant.id),
-        });
+      try {
+        if (assistant?.id) {
+          await deleteExceptionMutation.mutateAsync({
+            id: deleteExceptionTarget.id,
+            assistantId: String(assistant.id),
+          });
+        }
+        setDeleteExceptionTarget(null);
+      } catch {
+        // Erro já tratado e notificado pelo hook
       }
-      setDeleteExceptionTarget(null);
     }
   }
 
@@ -1181,27 +1198,48 @@ export default function AssistantProfile({
                     ? "Atualizar detalhe e vigência da exceção"
                     : "Horário especial com data de vigência"
                 }
-                onClose={() => setShowAddException(false)}
+                onClose={() => {
+                  if (!isSavingException) {
+                    setShowAddException(false);
+                    setExceptionErrors({});
+                  }
+                }}
                 footer={
                   <>
                     <button
                       type="button"
-                      onClick={() => setShowAddException(false)}
-                      className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      disabled={isSavingException}
+                      onClick={() => {
+                        setShowAddException(false);
+                        setExceptionErrors({});
+                      }}
+                      className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors cursor-pointer"
                     >
                       Cancelar
                     </button>
                     <button
                       type="button"
+                      disabled={isSavingException}
                       onClick={handleSaveException}
-                      className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
+                      className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
                     >
+                      {isSavingException && (
+                        <Loader2 size={13} className="animate-spin" />
+                      )}
                       {editingExceptionId ? "Guardar Alterações" : "Criar Exceção"}
                     </button>
                   </>
                 }
               >
                 <div className="space-y-4">
+                  {exceptionErrors.general && (
+                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/25 text-destructive text-xs flex items-start gap-2">
+                      <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+                      <div className="flex-1 leading-relaxed font-medium">
+                        {exceptionErrors.general}
+                      </div>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
                       <label className="text-xs font-medium text-muted-foreground block mb-1">
@@ -1369,6 +1407,11 @@ export default function AssistantProfile({
                             </div>
                           </div>
                         </div>
+                      )}
+                      {exceptionErrors.lunch && (
+                        <p className="text-[11px] text-destructive mt-1.5 font-medium">
+                          {exceptionErrors.lunch}
+                        </p>
                       )}
                     </div>
 

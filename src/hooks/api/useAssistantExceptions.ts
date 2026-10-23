@@ -28,9 +28,9 @@ export function useCreateAssistantException() {
   return useMutation({
     mutationFn: (payload: CreateAssistantExceptionPayload) =>
       assistantExceptionsService.create(payload),
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [...ASSISTANT_EXCEPTIONS_KEY, String(variables.assistant_id)],
+        queryKey: ASSISTANT_EXCEPTIONS_KEY,
       });
       notify.success("Regra de exceção registada com sucesso.", "Exceção Criada");
     },
@@ -54,9 +54,9 @@ export function useUpdateAssistantException() {
       data: UpdateAssistantExceptionPayload;
       assistantId: string;
     }) => assistantExceptionsService.update(id, data),
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [...ASSISTANT_EXCEPTIONS_KEY, String(variables.assistantId)],
+        queryKey: ASSISTANT_EXCEPTIONS_KEY,
       });
       notify.success("Regra de exceção atualizada com sucesso.", "Exceção Atualizada");
     },
@@ -78,9 +78,9 @@ export function useDeleteAssistantException() {
       id: string | number;
       assistantId: string;
     }) => assistantExceptionsService.delete(id),
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [...ASSISTANT_EXCEPTIONS_KEY, String(variables.assistantId)],
+        queryKey: ASSISTANT_EXCEPTIONS_KEY,
       });
       notify.success("Regra de exceção eliminada com sucesso.", "Exceção Eliminada");
     },
