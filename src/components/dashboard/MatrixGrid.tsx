@@ -608,7 +608,16 @@ export default function MatrixGrid({
         targetInfo.isoDate,
         absencesRes?.data || []
       );
-      if (targetAbsent.absent && targetAbsent.isFullDay) {
+      const targetFixedBounds = fixedShiftBoundsByAssistant[a.id];
+      const isTargetShiftCovered =
+        targetAbsent.absent &&
+        targetFixedBounds &&
+        targetAbsent.startSlot !== undefined &&
+        targetAbsent.endSlot !== undefined &&
+        targetAbsent.startSlot <= targetFixedBounds.startSlot &&
+        targetAbsent.endSlot >= targetFixedBounds.endSlot;
+
+      if (targetAbsent.absent && (targetAbsent.isFullDay || isTargetShiftCovered)) {
         const bounds = getShiftBoundsFromRow(
           effectiveSourceTasks,
           targetStatus.viewStartSlot,
@@ -669,7 +678,16 @@ export default function MatrixGrid({
         dayInfo.isoDate,
         absencesRes?.data || []
       );
-      if (absInfo.absent && absInfo.isFullDay) {
+      const fixedBounds = fixedShiftBoundsByAssistant[a.id];
+      const isShiftCovered =
+        absInfo.absent &&
+        fixedBounds &&
+        absInfo.startSlot !== undefined &&
+        absInfo.endSlot !== undefined &&
+        absInfo.startSlot <= fixedBounds.startSlot &&
+        absInfo.endSlot >= fixedBounds.endSlot;
+
+      if (absInfo.absent && (absInfo.isFullDay || isShiftCovered)) {
         const copiedRow = copiedInfo?.sourcePlannedMatrix?.[a.id];
         const fallbackRow = baseDayMatrix[a.id] || Array(96).fill("off");
         const plannedRow = copiedRow ?? fallbackRow;

@@ -750,7 +750,7 @@ export function checkAssistantAbsenceOnDate(
         matching.absence_type_name ||
         matching.justification ||
         "Ausência Registada",
-      isFullDay: spanSlots >= 32 || (!matching.start_time && !matching.end_time),
+      isFullDay: spanSlots >= 24 || (!matching.start_time && !matching.end_time),
       startSlot,
       endSlot,
     };
