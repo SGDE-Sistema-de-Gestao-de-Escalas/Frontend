@@ -6,16 +6,19 @@ import {
   UpdateAssistantExceptionPayload,
 } from "../../types/assistantSchedule.types";
 import { EntityId } from "../../types";
+import { useSchool } from "../../context/SchoolContext";
+import { schoolScopedKey } from "../../lib/queryClient";
 
 export const ASSISTANT_EXCEPTIONS_KEY = ["assistant-exceptions"];
 
 export function useAssistantExceptions(assistantId?: EntityId) {
+  const { selectedSchoolId } = useSchool();
   const aid = assistantId ? String(assistantId) : "";
 
   return useQuery({
-    queryKey: [...ASSISTANT_EXCEPTIONS_KEY, aid],
+    queryKey: schoolScopedKey("assistant-exceptions", selectedSchoolId, aid),
     queryFn: () => assistantExceptionsService.getAll(aid),
-    enabled: !!aid,
+    enabled: !!selectedSchoolId && !!aid,
   });
 }
 

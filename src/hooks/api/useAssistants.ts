@@ -50,7 +50,16 @@ export function useAssistantsPaginated(filters?: AssistantFilters) {
         perPage: meta?.per_page ?? filters?.per_page ?? 10,
       };
     },
-    placeholderData: keepPreviousData,
+    placeholderData: (previousData, previousQuery) => {
+      // Manter dados anteriores apenas durante paginação dentro da MESMA escola
+      const prevKey = previousQuery?.queryKey;
+      const currentSchool = String(selectedSchoolId ?? "");
+      const prevSchool = prevKey?.[2]; // ["assistants", "school", schoolId, ...]
+      if (prevSchool && String(prevSchool) === currentSchool) {
+        return previousData;
+      }
+      return undefined;
+    },
     enabled: !!selectedSchoolId,
   });
 }
@@ -80,10 +89,12 @@ export function useAssistantsList(filters?: AssistantFilters) {
 }
 
 export function useAssistant(id?: number | string) {
+  const { selectedSchoolId } = useSchool();
+
   return useQuery({
-    queryKey: [...ASSISTANTS_QUERY_KEY, "detail", id],
+    queryKey: schoolScopedKey("assistants", selectedSchoolId, "detail", id),
     queryFn: async (): Promise<Assistant | null> => {
-      if (!id) return null;
+      if (!id || !selectedSchoolId) return null;
       const result: any = await assistantsService.getById(id);
       const data =
         result?.data?.assistant ??

@@ -6,16 +6,17 @@ import NoSchoolPlaceholder from "../components/common/NoSchoolPlaceholder";
 
 export default function Assistants() {
   const navigate = useNavigate();
-  const { selectedSchool } = useSchool();
+  const { selectedSchool, selectedSchoolId } = useSchool();
 
   if (!selectedSchool) {
     return <NoSchoolPlaceholder moduleName="os Assistentes" />;
   }
 
   return (
-    <AssistantsPageWrapper
-      onViewProfile={(id) => navigate(id ? `/profile/${id}` : "/profile")}
-    />
+    <div key={String(selectedSchoolId ?? "assistants")} className="w-full">
+      <AssistantsPageWrapper
+        onViewProfile={(id) => navigate(id ? `/profile/${id}` : "/profile")}
+      />
+    </div>
   );
-
 }

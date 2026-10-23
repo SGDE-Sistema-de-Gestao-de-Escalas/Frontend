@@ -59,6 +59,12 @@ export default function AdminLayout({
   const { currentSchoolId, selectedSchool } = useSchool();
   const activePage = currentPage || internalPage;
 
+  // Fechar qualquer modal ativo ao trocar de escola para não reter assistentes da escola anterior
+  React.useEffect(() => {
+    setSelectedAssistantId(null);
+    setAbsenceFor(null);
+  }, [currentSchoolId]);
+
   function handleNavigate(pageId: string) {
     const p = pageId as AdminPage;
     setInternalPage(p);
@@ -107,8 +113,11 @@ export default function AdminLayout({
           onLogout={onLogout}
         />
 
-        {/* Scrollable page content */}
-        <div className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6">
+        {/* Scrollable page content com key vinculada à escola ativa para reset total de formulários/selects */}
+        <div
+          key={String(currentSchoolId ?? selectedSchool?.id ?? "school")}
+          className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6"
+        >
           {children ? (
             children
           ) : (
@@ -209,4 +218,3 @@ export default function AdminLayout({
     </div>
   );
 }
-

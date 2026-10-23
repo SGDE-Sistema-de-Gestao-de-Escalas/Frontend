@@ -6,16 +6,19 @@ import {
   UpdateAssistantScheduleProfilePayload,
 } from "../../types/assistantSchedule.types";
 import { EntityId } from "../../types";
+import { useSchool } from "../../context/SchoolContext";
+import { schoolScopedKey } from "../../lib/queryClient";
 
 export const ASSISTANT_SCHEDULES_KEY = ["assistant-schedules"];
 
 export function useAssistantSchedules(assistantId?: EntityId) {
+  const { selectedSchoolId } = useSchool();
   const aid = assistantId ? String(assistantId) : "";
 
   return useQuery({
-    queryKey: [...ASSISTANT_SCHEDULES_KEY, aid],
+    queryKey: schoolScopedKey("assistant-schedules", selectedSchoolId, aid),
     queryFn: () => assistantSchedulesService.getAll(aid),
-    enabled: !!aid,
+    enabled: !!selectedSchoolId && !!aid,
   });
 }
 

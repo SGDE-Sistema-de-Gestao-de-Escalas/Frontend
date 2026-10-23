@@ -32,14 +32,16 @@ export function useActivityTypesList() {
  * Hook para obter o detalhe de um tipo de atividade por ID.
  */
 export function useActivityType(id?: string) {
+  const { selectedSchoolId } = useSchool();
+
   return useQuery({
-    queryKey: [...ACTIVITY_TYPES_QUERY_KEY, "detail", id],
+    queryKey: schoolScopedKey("activity-types", selectedSchoolId, "detail", id),
     queryFn: async (): Promise<BackendActivityTypeResource | null> => {
-      if (!id) return null;
+      if (!id || !selectedSchoolId) return null;
       const result = await activityTypesService.getById(id);
       return (result as any)?.data ?? (result as any) ?? null;
     },
-    enabled: !!id,
+    enabled: !!id && !!selectedSchoolId,
     retry: false,
   });
 }

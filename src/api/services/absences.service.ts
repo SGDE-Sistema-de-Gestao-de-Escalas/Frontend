@@ -1,6 +1,5 @@
 import apiClient from "../client";
 import type { ApiResponse } from "../types/api.types";
-import { absences as initialMockAbsences } from "../mockData";
 
 export interface AbsenceAssistantInfo {
   id: string | number;
@@ -199,36 +198,8 @@ export function normalizeAbsenceResource(item: any): BackendAbsenceResource {
   };
 }
 
-// Armazenamento em memória para suporte fallback caso o endpoint ainda esteja a ser iniciado
-let localAbsencesMock: BackendAbsenceResource[] = initialMockAbsences.map((a) => ({
-  id: String(a.id),
-  assistant_id: String(a.id),
-  absence_type_id: "1",
-  assistant_name: a.assistant,
-  assistant: {
-    id: a.id,
-    name: a.assistant,
-    initials: a.initials,
-    active: true,
-  },
-  absence_type_name: a.reason,
-  absence_type: {
-    id: "1",
-    name: a.reason,
-  },
-  valid_from: a.start.includes("-") ? a.start : "2026-01-27",
-  valid_until: a.end.includes("-") ? a.end : "2026-01-31",
-  start_date: a.start.includes("-") ? a.start : "2026-01-27",
-  end_date: a.end.includes("-") ? a.end : "2026-01-31",
-  start_time: a.startTime || "08:00",
-  end_time: a.endTime || "17:00",
-  total_days: a.days || 1,
-  justification: a.reason,
-  document_path: a.documentPath || null,
-  status: (a.status as any) || "pending",
-  notes: a.note || null,
-  created_at: a.submitted || "2026-01-27",
-}));
+// Cache em memória vazia apenas para fallback caso o servidor devolva 404
+let localAbsencesMock: BackendAbsenceResource[] = [];
 
 export const absencesService = {
   /**

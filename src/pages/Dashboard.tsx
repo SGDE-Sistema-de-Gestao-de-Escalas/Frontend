@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSchool } from "../context/SchoolContext";
 import DashboardSection from "../components/dashboard/DashboardSection";
@@ -14,12 +14,18 @@ export default function Dashboard() {
   const { currentSchoolId, selectedSchool } = useSchool();
   const navigate = useNavigate();
 
+  // Resetar seleções e modais quando a escola ativa é alterada
+  useEffect(() => {
+    setSelectedAssistantId(null);
+    setAbsenceFor(null);
+  }, [currentSchoolId]);
+
   if (!selectedSchool) {
     return <NoSchoolPlaceholder moduleName="o Dashboard" />;
   }
 
   return (
-    <>
+    <div key={String(currentSchoolId ?? "dash")} className="w-full">
       <DashboardSection
         onSelectAssistant={(id) => setSelectedAssistantId(id)}
         currentSchoolId={currentSchoolId}
@@ -50,6 +56,6 @@ export default function Dashboard() {
           currentSchoolId={currentSchoolId}
         />
       )}
-    </>
+    </div>
   );
 }

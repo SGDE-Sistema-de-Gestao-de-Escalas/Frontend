@@ -45,6 +45,7 @@ import {
 } from "../../hooks/api/useAbsences";
 import { useAssistantsList } from "../../hooks/api/useAssistants";
 import { useAbsenceTypesList } from "../../hooks/api/useAbsenceTypes";
+import { useSchool } from "../../context/SchoolContext";
 import absencesService, {
   type BackendAbsenceResource,
 } from "../../api/services/absences.service";
@@ -52,6 +53,8 @@ import type { EntityId, Assistant } from "../../types";
 import { notify } from "../common/FeedbackNotification";
 
 export default function AbsenceManagement() {
+  const { selectedSchoolId } = useSchool();
+
   // Dados remotos via TanStack Query (com status "all" para trazer ativos e inativos)
   const { data: assistants = [], isLoading: isLoadingAssistants } = useAssistantsList({
     status: "all",
@@ -64,6 +67,28 @@ export default function AbsenceManagement() {
   const [assistantFilter, setAssistantFilter] = useState<string>("all");
   const [startDateFilter, setStartDateFilter] = useState<string>("");
   const [endDateFilter, setEndDateFilter] = useState<string>("");
+
+  // Resetar seleções e filtros se o utilizador trocar de escola
+  useEffect(() => {
+    setAssistantFilter("all");
+    setStatusFilter("all");
+    setStartDateFilter("");
+    setEndDateFilter("");
+    setCurrentPage(1);
+    setSelectedId(null);
+    setShowForm(false);
+    setEditingAbsence(null);
+  }, [selectedSchoolId]);
+
+  // Se o assistente selecionado no filtro não existir na lista da escola ativa, repor "all"
+  useEffect(() => {
+    if (assistantFilter !== "all" && assistants.length > 0) {
+      const exists = assistants.some((a) => String(a.id) === String(assistantFilter));
+      if (!exists) {
+        setAssistantFilter("all");
+      }
+    }
+  }, [assistants, assistantFilter]);
 
   // Paginação (padrão de pelo menos 10 registos por página)
   const [currentPage, setCurrentPage] = useState(1);
@@ -528,15 +553,16 @@ export default function AbsenceManagement() {
           {/* Botão Limpar Filtros */}
           {hasActiveFilters && (
             <div className="sm:self-end pt-1 sm:pt-0">
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors w-full sm:w-auto justify-center"
-                title="Limpar todos os filtros"
-              >
-                <RotateCcw size={12} />
-                <span>Limpar</span>
-              </button>
+              <ActionTooltip content="Limpar todos os filtros">
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors w-full sm:w-auto justify-center cursor-pointer"
+                >
+                  <RotateCcw size={12} />
+                  <span>Limpar</span>
+                </button>
+              </ActionTooltip>
             </div>
           )}
         </div>
@@ -745,29 +771,31 @@ export default function AbsenceManagement() {
 
               {totalPages > 1 && (
                 <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={safeCurrentPage <= 1 || isFetchingAbsences}
-                    className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                    title="Página anterior"
-                  >
-                    <ChevronLeft size={13} />
-                  </button>
+                  <ActionTooltip content="Página anterior">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={safeCurrentPage <= 1 || isFetchingAbsences}
+                      className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    >
+                      <ChevronLeft size={13} />
+                    </button>
+                  </ActionTooltip>
 
                   <span className="px-2 font-mono text-[11px]">
                     {safeCurrentPage} / {totalPages}
                   </span>
 
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={safeCurrentPage >= totalPages || isFetchingAbsences}
-                    className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                    title="Página seguinte"
-                  >
-                    <ChevronRight size={13} />
-                  </button>
+                  <ActionTooltip content="Página seguinte">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={safeCurrentPage >= totalPages || isFetchingAbsences}
+                      className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    >
+                      <ChevronRight size={13} />
+                    </button>
+                  </ActionTooltip>
                 </div>
               )}
             </div>
@@ -797,14 +825,15 @@ export default function AbsenceManagement() {
               {/* Header do Detalhe */}
               <div className="p-4 sm:p-5 border-b border-border bg-muted/10 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(null)}
-                    className="lg:hidden p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground"
-                    title="Voltar à lista"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
+                  <ActionTooltip content="Voltar à lista">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(null)}
+                      className="lg:hidden p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground cursor-pointer"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                  </ActionTooltip>
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center font-bold font-mono text-xs flex-shrink-0 ${
                       isAssistantInactive(selectedAbsence)
