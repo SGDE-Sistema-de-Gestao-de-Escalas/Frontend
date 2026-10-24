@@ -3,6 +3,7 @@ import {
   ArrowRight,
   ChevronLeft,
   ChevronRight,
+  Clock,
   Loader2,
   Sparkles,
 } from "lucide-react";
@@ -14,7 +15,6 @@ import {
   TIME_SLOTS,
   VIEW_START,
   VIEW_END,
-  VIEW_SLOTS,
 } from "../dashboard/blockStyles";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -33,6 +33,7 @@ import {
   buildDayMatrixFromApi,
   getDateInfo,
   getRealMonthsRange,
+  getSchedulePublishStatusForDate,
   resolveAssistantShiftBounds,
   resolveSchoolDayStatusByIsoDate,
   type AssistantScheduleProfileApi,
@@ -252,16 +253,18 @@ function useStaffScheduleData(dayOffset: number) {
  */
 export function StaffDayView({ dayOffset }: { dayOffset: number }) {
   const info = getDateInfo(dayOffset);
-  const { slots, blocks, shiftBounds, dayStatus, isLoading } =
+  const { slots, blocks, shiftBounds, dayStatus, schedules, isLoading } =
     useStaffScheduleData(dayOffset);
 
   const activeBlocks = blocks.filter((b) => b.state !== "off");
 
-  // O dia é considerado de descanso se a escola estiver encerrada ou o assistente não tiver turnos atribuídos
-  const isOffDay =
-    !dayStatus.isOpen ||
-    activeBlocks.length === 0 ||
-    activeBlocks.every((b) => b.state === "off");
+  // 1. Verificar se a escola está encerrada (Fim de semana, feriado, férias, tolerância)
+  const isSchoolClosed = !dayStatus.isOpen;
+
+  // 2. Verificar se o horário já foi gerado e publicado para esta data
+  const publishInfo = getSchedulePublishStatusForDate(info.isoDate, schedules);
+  const isPublished = publishInfo.isPublished;
+  const hasWork = activeBlocks.length > 0;
 
   if (isLoading) {
     return (
@@ -274,7 +277,63 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
     );
   }
 
-  if (isOffDay) {
+  // CASO A: A escola encontra-se encerrada (Feriado, Fim de semana, Férias ou encerramento oficial)
+  if (isSchoolClosed) {
+    return (
+      <div className="pt-2 pb-12">
+        <div className="bg-card border border-border/80 rounded-2xl p-6 sm:p-8 text-center max-w-lg mx-auto shadow-xs my-6">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary mb-3">
+            <Sparkles size={22} className="text-primary" />
+          </div>
+          <h3 className="text-lg font-semibold text-foreground">
+            Dia de Descanso
+          </h3>
+          <p className="text-xs font-mono text-muted-foreground mt-0.5">
+            {info.dayName}, {info.dateStr}
+          </p>
+          <p className="text-sm text-muted-foreground mt-3 leading-relaxed">
+            {dayStatus.closedLabel ||
+              "Hoje não tem serviço agendado. Desfrute do seu dia de descanso e aproveite o tempo com o que e quem mais gosta."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // CASO B: A escola está aberta, MAS o horário ainda não foi gerado ou publicado pela direção
+  if (!isSchoolClosed && !isPublished) {
+    return (
+      <div className="pt-2 pb-12">
+        <div className="bg-card border border-border/80 rounded-2xl p-6 sm:p-8 text-center max-w-lg mx-auto shadow-xs my-6">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-amber-500/10 text-amber-600 mb-3">
+            <Clock size={22} className="text-amber-600" />
+          </div>
+          <div className="inline-block mb-1">
+            <Badge
+              variant="outline"
+              className="text-[10px] py-0 px-2 border-amber-500/30 text-amber-600 bg-amber-500/10 font-medium"
+            >
+              {publishInfo.status === "draft"
+                ? "Escala em Preparação"
+                : "Horário Não Publicado"}
+            </Badge>
+          </div>
+          <h3 className="text-lg font-semibold text-foreground mt-1">
+            Escala Não Disponível
+          </h3>
+          <p className="text-xs font-mono text-muted-foreground mt-0.5">
+            {info.dayName}, {info.dateStr}
+          </p>
+          <p className="text-sm text-muted-foreground mt-3 leading-relaxed">
+            A escala de serviço para este dia ainda não foi gerada ou publicada pela direção escolar. Logo que esteja finalizada e publicada, poderá consultar aqui os seus horários e tarefas atribuídas.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // CASO C: A escola está aberta, a escala foi publicada, e este assistente tem folga / dia de descanso atribuído
+  if (!isSchoolClosed && isPublished && !hasWork) {
     return (
       <div className="pt-2 pb-12">
         <div className="bg-card border border-border/80 rounded-2xl p-6 sm:p-8 text-center max-w-lg mx-auto shadow-xs my-6">
@@ -296,7 +355,7 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
     );
   }
 
-  // Janela da linha temporal: Baseada estritamente no horário do turno do assistente para o dia!
+  // CASO D: Escola aberta, horário publicado e assistente tem tarefas atribuídas
   const entryBlock = activeBlocks.find((b) => b.state !== "absent");
   const lastBlock = [...activeBlocks]
     .reverse()
@@ -636,6 +695,9 @@ export function StaffWeekView({
               }`
             : null;
 
+        // Estado de publicação para o dia
+        const pubInfo = getSchedulePublishStatusForDate(info.isoDate, schedules);
+
         return (
           <button
             key={offset}
@@ -684,7 +746,15 @@ export function StaffWeekView({
               </div>
 
               <div>
-                {!isClosed && hasWork && entryExitStr ? (
+                {isClosed ? (
+                  <span className="text-xs text-muted-foreground">
+                    {status.closedLabel || "Encerrada"}
+                  </span>
+                ) : !pubInfo.isPublished ? (
+                  <span className="text-[11px] font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                    {pubInfo.status === "draft" ? "Em preparação" : "Não publicada"}
+                  </span>
+                ) : hasWork && entryExitStr ? (
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-mono font-medium text-foreground">
                       {entryExitStr}
@@ -695,16 +765,14 @@ export function StaffWeekView({
                   </div>
                 ) : (
                   <span className="text-xs text-muted-foreground">
-                    {isClosed
-                      ? status.closedLabel || "Encerrada"
-                      : "Dia de descanso"}
+                    Dia de descanso
                   </span>
                 )}
               </div>
             </div>
 
             {/* Barra de Escalas com a mesma estética do Admin (cantos contínuos entre blocos) */}
-            {!isClosed && activeBlocks.length > 0 && (
+            {!isClosed && pubInfo.isPublished && activeBlocks.length > 0 && (
               <div className="relative h-4 rounded-md overflow-hidden bg-muted/40 my-2">
                 {activeBlocks.map((b, bi) => {
                   const cs = Math.max(b.start, shiftStart);
@@ -749,7 +817,7 @@ export function StaffWeekView({
             )}
 
             {/* Chips de Atividades com respetivas cores e horários */}
-            {!isClosed && activeBlocks.length > 0 && (
+            {!isClosed && pubInfo.isPublished && activeBlocks.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {activeBlocks.map((b, bi) => {
                   const color = getBlockDisplayColor(b);
@@ -823,6 +891,17 @@ export function StaffMonthView({
 
   const { data: allAssistantSchedules = [] } = useAllAssistantSchedules();
   const { data: allAssistantExceptions = [] } = useAllAssistantExceptions();
+  const { data: calendarDays } = useOperatingCalendar({
+    start_date: month.startIso,
+    end_date: month.endIso,
+  });
+  const { data: holidays } = useHolidaysList();
+  const { data: operatingExceptions } = useOperatingExceptions({
+    status: "all",
+  });
+  const { data: operatingRules } = useOperatingRules({
+    status: "all",
+  });
 
   const targetId = user.assistant_id ?? "staff";
 
@@ -855,13 +934,18 @@ export function StaffMonthView({
 
     for (let i = 0; i < month.days; i++) {
       const offset = month.firstOffset + i;
-      const dow = (month.firstDow + i) % 7;
-      const isWeekend = dow >= 5;
       const info = getDateInfo(offset);
+      const dayStatus = resolveSchoolDayStatusByIsoDate(info.isoDate, {
+        calendarDays,
+        holidays,
+        operatingExceptions,
+        operatingRules,
+      });
+      const isClosed = !dayStatus.isOpen;
 
       const { matrix } = buildDayMatrixFromApi({
         isoDate: info.isoDate,
-        isOpen: !isWeekend,
+        isOpen: !isClosed,
         assistants: [
           {
             id: targetId,
@@ -904,18 +988,27 @@ export function StaffMonthView({
     absencesRes,
     profilesByAssistant,
     exceptionsByAssistant,
+    calendarDays,
+    holidays,
+    operatingExceptions,
+    operatingRules,
   ]);
 
   // Detalhes do dia selecionado para o preview abaixo do calendário
   const previewData = useMemo(() => {
     if (selectedDayOffset === null) return null;
     const info = getDateInfo(selectedDayOffset);
-    const dow = info.dow;
-    const isWeekend = dow >= 5;
+    const dayStatus = resolveSchoolDayStatusByIsoDate(info.isoDate, {
+      calendarDays,
+      holidays,
+      operatingExceptions,
+      operatingRules,
+    });
+    const isClosed = !dayStatus.isOpen;
 
     const { matrix, slotMetaByAssistant } = buildDayMatrixFromApi({
       isoDate: info.isoDate,
-      isOpen: !isWeekend,
+      isOpen: !isClosed,
       assistants: [
         {
           id: targetId,
@@ -942,9 +1035,14 @@ export function StaffMonthView({
       (s) => s !== "off" && s !== "lunch" && s !== "absent"
     ).length;
 
+    const pubInfo = getSchedulePublishStatusForDate(info.isoDate, schedules);
+
     return {
       info,
       blocks: activeBlocks,
+      isClosed,
+      closedLabel: dayStatus.closedLabel,
+      pubInfo,
       entryTime: entryBlock ? TIME_SLOTS[entryBlock.start] : null,
       exitTime: lastBlock
         ? TIME_SLOTS[lastBlock.start + lastBlock.count] || "24:00"
@@ -961,6 +1059,10 @@ export function StaffMonthView({
     absencesRes,
     profilesByAssistant,
     exceptionsByAssistant,
+    calendarDays,
+    holidays,
+    operatingExceptions,
+    operatingRules,
   ]);
 
   return (
@@ -1029,15 +1131,22 @@ export function StaffMonthView({
           {Array.from({ length: month.days }, (_, i) => {
             const dayNum = i + 1;
             const offset = month.firstOffset + i;
-            const dow = (month.firstDow + i) % 7;
-            const isWeekend = dow >= 5;
             const isToday = offset === 0;
             const isSelected = selectedDayOffset === offset;
             const info = getDateInfo(offset);
 
+            const dayStatus = resolveSchoolDayStatusByIsoDate(info.isoDate, {
+              calendarDays,
+              holidays,
+              operatingExceptions,
+              operatingRules,
+            });
+            const isClosed = !dayStatus.isOpen;
+            const pubInfo = getSchedulePublishStatusForDate(info.isoDate, schedules);
+
             const { matrix } = buildDayMatrixFromApi({
               isoDate: info.isoDate,
-              isOpen: !isWeekend,
+              isOpen: !isClosed,
               assistants: [
                 {
                   id: targetId,
@@ -1052,8 +1161,8 @@ export function StaffMonthView({
             });
             const slots = matrix[targetId] || Array(96).fill("off");
             const hasWork =
-              !isWeekend && slots.some((s) => s !== "off" && s !== "absent");
-            const hasAbsent = !isWeekend && slots.some((s) => s === "absent");
+              !isClosed && slots.some((s) => s !== "off" && s !== "absent");
+            const hasAbsent = !isClosed && slots.some((s) => s === "absent");
 
             return (
               <button
@@ -1076,7 +1185,7 @@ export function StaffMonthView({
                   }
                   ${
                     !isToday && !hasWork && !hasAbsent
-                      ? isWeekend
+                      ? isClosed
                         ? "text-muted-foreground/40"
                         : "text-muted-foreground/60"
                       : ""
@@ -1093,7 +1202,10 @@ export function StaffMonthView({
                   {hasAbsent && (
                     <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
                   )}
-                  {!hasWork && !hasAbsent && !isWeekend && (
+                  {!isClosed && !pubInfo.isPublished && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500/70" />
+                  )}
+                  {!hasWork && !hasAbsent && isClosed && (
                     <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
                   )}
                 </div>
@@ -1103,10 +1215,11 @@ export function StaffMonthView({
         </div>
 
         {/* Legenda */}
-        <div className="flex items-center gap-4 mt-4 pt-3 border-t border-border/60">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 mt-4 pt-3 border-t border-border/60">
           {[
             { color: "bg-accent", label: "Com Turno" },
             { color: "bg-destructive", label: "Ausência" },
+            { color: "bg-amber-500/70", label: "Não Publicada" },
             { color: "bg-muted-foreground/30", label: "Sem Serviço / Folga" },
           ].map((l) => (
             <div key={l.label} className="flex items-center gap-1.5">
@@ -1144,7 +1257,18 @@ export function StaffMonthView({
             </Button>
           </div>
 
-          {previewData.blocks.length > 0 ? (
+          {previewData.isClosed ? (
+            <p className="text-xs text-muted-foreground py-1">
+              Dia de descanso (Estabelecimento encerrado).
+            </p>
+          ) : !previewData.pubInfo.isPublished ? (
+            <div className="flex items-center gap-2 py-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />
+              <p className="text-xs text-amber-600 font-medium">
+                A escala para este dia ainda não foi gerada ou publicada pela direção.
+              </p>
+            </div>
+          ) : previewData.blocks.length > 0 ? (
             <div>
               {previewData.entryTime && (
                 <div className="flex items-center gap-2 mb-2 text-xs font-mono text-muted-foreground">
@@ -1189,7 +1313,7 @@ export function StaffMonthView({
             </div>
           ) : (
             <p className="text-xs text-muted-foreground py-1">
-              Dia de descanso ou sem tarefas agendadas.
+              Dia de descanso - Sem tarefas agendadas para este dia.
             </p>
           )}
         </div>
