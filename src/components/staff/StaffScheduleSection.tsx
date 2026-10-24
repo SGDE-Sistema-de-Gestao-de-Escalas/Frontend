@@ -336,8 +336,13 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
     );
   }
 
-  // CASO C: A escola está aberta, a escala foi publicada, e este assistente tem folga / dia de descanso atribuído
-  if (!isSchoolClosed && isPublished && !hasWork) {
+  const hasDefinedShift =
+    shiftBounds.startSlot !== null &&
+    shiftBounds.endSlot !== null &&
+    shiftBounds.endSlot > shiftBounds.startSlot;
+
+  // CASO C: A escola está aberta, a escala foi publicada, e este assistente tem folga / dia de descanso atribuído (sem turno nem serviço)
+  if (!isSchoolClosed && isPublished && !hasWork && !hasDefinedShift) {
     return (
       <div className="pt-2 pb-12">
         <div className="bg-card border border-border/80 rounded-2xl p-6 sm:p-8 text-center max-w-lg mx-auto shadow-xs my-6 flex flex-col items-center">
@@ -530,7 +535,7 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
         {activeBlocks.length === 0 ? (
           <div className="text-center py-8 bg-card border border-border rounded-xl">
             <p className="text-sm text-muted-foreground">
-              A escala ainda não foi gerada para este dia.
+              Sem tarefas específicas atribuídas para este turno.
             </p>
           </div>
         ) : (
@@ -714,9 +719,25 @@ export function StaffWeekView({
           .reverse()
           .find((b) => b.state !== "absent");
 
+        const weekShiftBounds = resolveAssistantShiftBounds({
+          assistantId: targetId,
+          isoDate: info.isoDate,
+          dow: info.dow,
+          viewStartSlot: status.viewStartSlot ?? VIEW_START,
+          viewEndSlot: status.viewEndSlot ?? VIEW_END,
+          profiles: profilesByAssistant[String(targetId)],
+          exceptions: exceptionsByAssistant[String(targetId)],
+          schedulesList: schedules,
+          absences: absencesRes?.data || [],
+        });
+        const hasDefinedShift =
+          weekShiftBounds.startSlot !== null &&
+          weekShiftBounds.endSlot !== null &&
+          weekShiftBounds.endSlot > weekShiftBounds.startSlot;
+
         // Limites de turno do assistente para o dia
-        const shiftStart = entryBlock ? entryBlock.start : 32;
-        const shiftEnd = lastBlock ? lastBlock.start + lastBlock.count : 68;
+        const shiftStart = weekShiftBounds.startSlot ?? (entryBlock ? entryBlock.start : 32);
+        const shiftEnd = weekShiftBounds.endSlot ?? (lastBlock ? lastBlock.start + lastBlock.count : 68);
         const shiftSlots = Math.max(1, shiftEnd - shiftStart);
 
         const entryExitStr =
@@ -792,6 +813,12 @@ export function StaffWeekView({
                     </span>
                     <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                       {formatDurationSlots(activeSlots)}
+                    </span>
+                  </div>
+                ) : hasDefinedShift ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono font-medium text-foreground">
+                      {TIME_SLOTS[shiftStart]} – {TIME_SLOTS[shiftEnd] || "24:00"}
                     </span>
                   </div>
                 ) : (
