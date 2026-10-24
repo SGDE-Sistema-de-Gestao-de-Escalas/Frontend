@@ -87,6 +87,8 @@ interface AssistantDaySchedule {
     isLocked: boolean;
     isFallback: boolean;
   }[];
+  hasNoSchedule?: boolean;
+  absenceReason?: string | null;
 }
 
 function parseTimeToMinutes(t: string): number {
@@ -146,7 +148,10 @@ function groupDraftDaysByWeek(days: DraftDaySummary[]): DraftWeekGroup[] {
 function getDayScheduleDetails(
   isoDate: string,
   schedules: BackendScheduleResource[],
-  assistantsList: Assistant[] = []
+  assistantsList: Assistant[] = [],
+  absences: BackendAbsenceResource[] = [],
+  temporaryAssignments: AssistantTemporaryAssignmentApi[] = [],
+  selectedSchoolId?: string | number
 ): {
   assistants: AssistantDaySchedule[];
   totalEntries: number;
@@ -264,6 +269,71 @@ function getDayScheduleDetails(
     });
 
     totalEntries += dayEntries.length;
+  });
+
+  // Incluir também assistentes que não tenham tarefas registadas nesta data para que a sua situação fique visível no preview
+  assistantsList.forEach((ast) => {
+    const aId = String(ast.id);
+    if (assistantsMap.has(aId)) return;
+
+    // Se é assistente transferido para fora da escola hoje, não o mostramos aqui
+    const isTransferredOutToday = temporaryAssignments.some((tr) => {
+      if (String(tr.assistant_id) !== aId) return false;
+      if (selectedSchoolId && String(tr.origin_school_id) !== String(selectedSchoolId)) return false;
+      const from = (tr.valid_from || "").slice(0, 10);
+      const until = (tr.valid_until || tr.valid_from || "").slice(0, 10);
+      return from <= isoDate && isoDate <= until;
+    });
+    if (isTransferredOutToday) return;
+
+    // Se é assistente recebido por transferência temporária:
+    // Só deve ser exibido se a transferência estiver ativa para esta escola nesta data
+    if (ast.is_temporary_transfer) {
+      const isTransferredHereToday = temporaryAssignments.some((tr) => {
+        if (String(tr.assistant_id) !== aId) return false;
+        if (selectedSchoolId && String(tr.destination_school_id) !== String(selectedSchoolId)) return false;
+        const from = (tr.valid_from || "").slice(0, 10);
+        const until = (tr.valid_until || tr.valid_from || "").slice(0, 10);
+        return from <= isoDate && isoDate <= until;
+      });
+      if (!isTransferredHereToday) return;
+    }
+
+    // Verificar se tem ausência registada
+    const matchedAbsence = absences.find((abs) => {
+      if (String(abs.assistant_id) !== aId) return false;
+      const from = (abs.valid_from || abs.start_date || "").slice(0, 10);
+      const until = (abs.valid_until || abs.end_date || from).slice(0, 10);
+      return from <= isoDate && isoDate <= until;
+    });
+
+    const sc = schedules.find((s) => String(s.assistant_id) === aId);
+    const shiftStart = sc?.shift_start ? sc.shift_start.slice(0, 5) : "";
+    const shiftEnd = sc?.shift_end ? sc.shift_end.slice(0, 5) : "";
+
+    const initials =
+      ast.initials ||
+      ast.name
+        .split(" ")
+        .map((p) => p[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase();
+
+    assistantsMap.set(aId, {
+      assistantId: aId,
+      assistantName: ast.name,
+      initials,
+      shiftStart,
+      shiftEnd,
+      isTemporaryTransfer: Boolean(ast.is_temporary_transfer),
+      originSchoolName: ast.origin_school_name || null,
+      entries: [],
+      hasNoSchedule: true,
+      absenceReason: matchedAbsence
+        ? (matchedAbsence.absence_type?.name || "Ausência")
+        : null,
+    });
   });
 
   const assistants = Array.from(assistantsMap.values()).sort((a, b) => {
@@ -572,8 +642,15 @@ export default function PublishSchedulesModal({
   // Detalhes da pré-visualização do dia selecionado
   const previewDetails = useMemo(() => {
     if (!previewDate) return null;
-    return getDayScheduleDetails(previewDate, schedules, assistants);
-  }, [previewDate, schedules, assistants]);
+    return getDayScheduleDetails(
+      previewDate,
+      schedules,
+      assistants,
+      absences,
+      temporaryAssignments,
+      selectedSchoolId
+    );
+  }, [previewDate, schedules, assistants, absences, temporaryAssignments, selectedSchoolId]);
 
   const previewSummary = useMemo(() => {
     if (!previewDate) return null;
@@ -694,24 +771,46 @@ export default function PublishSchedulesModal({
   const isPublishing = publishMutation.isPending;
 
   function renderAssistantPreviewRow(ast: AssistantDaySchedule) {
+    const hasEntries = ast.entries.length > 0;
+    const isUnscheduled = !hasEntries;
+
     return (
       <div
         key={ast.assistantId}
-        className="flex items-center hover:bg-muted/15 transition-colors group"
+        className={`flex items-center transition-colors group ${
+          isUnscheduled
+            ? "bg-amber-500/[0.03] hover:bg-amber-500/[0.07]"
+            : "hover:bg-muted/15"
+        }`}
       >
         {/* Coluna do Assistente */}
-        <div className="w-48 sm:w-56 px-3 py-2.5 border-r border-border/60 flex items-center gap-2.5 flex-shrink-0 bg-card/60 group-hover:bg-card">
-          <div className="w-7 h-7 rounded-full bg-primary/10 text-primary font-bold text-[10px] flex items-center justify-center flex-shrink-0">
+        <div className={`w-48 sm:w-56 px-3 py-2.5 border-r border-border/60 flex items-center gap-2.5 flex-shrink-0 ${
+          isUnscheduled ? "bg-amber-500/[0.05] group-hover:bg-amber-500/10" : "bg-card/60 group-hover:bg-card"
+        }`}>
+          <div className={`w-7 h-7 rounded-full font-bold text-[10px] flex items-center justify-center flex-shrink-0 ${
+            isUnscheduled
+              ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 ring-1 ring-amber-500/40"
+              : "bg-primary/10 text-primary"
+          }`}>
             {ast.initials}
           </div>
           <div className="min-w-0">
             <p className="text-xs font-semibold text-foreground truncate">
               {ast.assistantName}
             </p>
-            <p className="text-[10px] font-mono text-muted-foreground flex items-center gap-1 mt-0.5">
-              <Clock size={9} className="text-primary/70 flex-shrink-0" />
-              <span>Turno {ast.shiftStart}–{ast.shiftEnd}</span>
-            </p>
+            {isUnscheduled ? (
+              <p className="text-[10px] font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-0.5">
+                <AlertTriangle size={9} className="flex-shrink-0 text-amber-600 dark:text-amber-400" />
+                <span className="truncate">
+                  {ast.absenceReason ? `Ausência: ${ast.absenceReason}` : "Sem horário atribuído"}
+                </span>
+              </p>
+            ) : (
+              <p className="text-[10px] font-mono text-muted-foreground flex items-center gap-1 mt-0.5">
+                <Clock size={9} className="text-primary/70 flex-shrink-0" />
+                <span>Turno {ast.shiftStart}–{ast.shiftEnd}</span>
+              </p>
+            )}
           </div>
         </div>
 
@@ -732,31 +831,44 @@ export default function PublishSchedulesModal({
             );
           })}
 
-          {/* Sombra do Turno Total do Assistente */}
-          {ast.shiftStart && ast.shiftEnd && (
-            <div
-              className="absolute top-1.5 bottom-1.5 rounded-lg bg-primary/[0.04] border border-primary/15 pointer-events-none"
-              style={{
-                left: `${Math.max(
-                  0,
-                  ((parseTimeToMinutes(ast.shiftStart) -
-                    timelineRange.minM) /
-                    timelineRange.totalMinutes) *
-                    100
-                )}%`,
-                width: `${Math.min(
-                  100,
-                  ((parseTimeToMinutes(ast.shiftEnd) -
-                    parseTimeToMinutes(ast.shiftStart)) /
-                    timelineRange.totalMinutes) *
-                    100
-                )}%`,
-              }}
-            />
-          )}
+          {isUnscheduled ? (
+            <div className="relative z-10 w-full flex items-center px-3">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-300 text-[11px] font-medium shadow-2xs">
+                <AlertTriangle size={12} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>
+                  {ast.absenceReason
+                    ? `Ausência registada: ${ast.absenceReason}`
+                    : "Sem horário ou tarefas atribuídas para este dia"}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Sombra do Turno Total do Assistente */}
+              {ast.shiftStart && ast.shiftEnd && (
+                <div
+                  className="absolute top-1.5 bottom-1.5 rounded-lg bg-primary/[0.04] border border-primary/15 pointer-events-none"
+                  style={{
+                    left: `${Math.max(
+                      0,
+                      ((parseTimeToMinutes(ast.shiftStart) -
+                        timelineRange.minM) /
+                        timelineRange.totalMinutes) *
+                        100
+                    )}%`,
+                    width: `${Math.min(
+                      100,
+                      ((parseTimeToMinutes(ast.shiftEnd) -
+                        parseTimeToMinutes(ast.shiftStart)) /
+                        timelineRange.totalMinutes) *
+                        100
+                    )}%`,
+                  }}
+                />
+              )}
 
-          {/* Cápsulas de Atividades */}
-          {ast.entries.map((ent) => {
+              {/* Cápsulas de Atividades */}
+              {ast.entries.map((ent) => {
             const entStartMin = parseTimeToMinutes(ent.startTime);
             const entEndMin = parseTimeToMinutes(ent.endTime);
             const leftPct = Math.max(
@@ -823,6 +935,8 @@ export default function PublishSchedulesModal({
               </Tooltip>
             );
           })}
+            </>
+          )}
         </div>
       </div>
     );
