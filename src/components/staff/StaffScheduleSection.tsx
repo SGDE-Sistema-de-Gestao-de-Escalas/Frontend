@@ -17,6 +17,12 @@ import {
   VIEW_END,
 } from "../dashboard/blockStyles";
 import { Badge } from "../ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { useAuth } from "../../context/AuthContext";
 import { useSchedulesList } from "../../hooks/api/useSchedules";
@@ -455,27 +461,54 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
             const showDurationChip = widthPct >= 22;
 
             return (
-              <div
-                key={i}
-                title={`${name} (${timeStr})`}
-                className={`absolute inset-y-1 ${radiusClass} ${separatorClass} text-white shadow-2xs overflow-hidden transition-all flex items-center px-2 gap-1.5 text-left`}
-                style={{
-                  left: `${leftPct}%`,
-                  width: `${widthPct}%`,
-                  backgroundColor: color,
-                }}
-              >
-                {showLabel && (
-                  <span className="truncate text-xs font-medium tracking-tight">
-                    {name}
-                  </span>
-                )}
-                {showDurationChip && (
-                  <span className="shrink-0 rounded bg-black/15 px-1 py-0.2 font-mono text-[9px] text-white/90">
-                    {dStr}
-                  </span>
-                )}
-              </div>
+              <Tooltip key={i}>
+                <TooltipTrigger asChild>
+                  <div
+                    className={`absolute inset-y-1 ${radiusClass} ${separatorClass} text-white shadow-2xs overflow-hidden transition-all flex items-center px-2 gap-1.5 text-left cursor-default hover:brightness-110 hover:z-10`}
+                    style={{
+                      left: `${leftPct}%`,
+                      width: `${widthPct}%`,
+                      backgroundColor: color,
+                    }}
+                  >
+                    {showLabel && (
+                      <span className="truncate text-xs font-medium tracking-tight">
+                        {name}
+                      </span>
+                    )}
+                    {showDurationChip && (
+                      <span className="shrink-0 rounded bg-black/15 px-1 py-0.2 font-mono text-[9px] text-white/90">
+                        {dStr}
+                      </span>
+                    )}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  sideOffset={6}
+                  className="bg-popover text-popover-foreground border border-border shadow-xl px-3.5 py-2.5 rounded-xl text-left min-w-[190px]"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{ backgroundColor: color }}
+                      />
+                      <span className="font-semibold text-xs text-foreground">
+                        {name}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-1.5 pt-1.5 border-t border-border/60 space-y-0.5">
+                    <p className="text-[11px] font-mono text-muted-foreground">
+                      {timeStr}{" "}
+                      <span className="text-foreground/80 font-semibold">
+                        ({dStr})
+                      </span>
+                    </p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
             );
           })}
         </div>
@@ -800,17 +833,50 @@ export function StaffWeekView({
                     ? "border-l border-card/80"
                     : "";
 
+                  const dMin = b.count * 15;
+                  const dStr =
+                    dMin >= 60
+                      ? `${Math.floor(dMin / 60)}h${
+                          dMin % 60 > 0 ? ` ${dMin % 60}m` : ""
+                        }`
+                      : `${dMin}m`;
+
                   return (
-                    <div
-                      key={bi}
-                      title={`${name}: ${timeStr}`}
-                      className={`absolute inset-y-0.5 ${radiusClass} ${separatorClass} transition-transform hover:scale-105`}
-                      style={{
-                        left: `${((cs - shiftStart) / shiftSlots) * 100}%`,
-                        width: `${((ce - cs) / shiftSlots) * 100}%`,
-                        backgroundColor: color,
-                      }}
-                    />
+                    <Tooltip key={bi}>
+                      <TooltipTrigger asChild>
+                        <div
+                          className={`absolute inset-y-0.5 ${radiusClass} ${separatorClass} transition-transform hover:scale-105 hover:z-10 cursor-pointer`}
+                          style={{
+                            left: `${((cs - shiftStart) / shiftSlots) * 100}%`,
+                            width: `${((ce - cs) / shiftSlots) * 100}%`,
+                            backgroundColor: color,
+                          }}
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="top"
+                        sideOffset={6}
+                        className="bg-popover text-popover-foreground border border-border shadow-xl px-3.5 py-2.5 rounded-xl text-left min-w-[190px]"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full"
+                            style={{ backgroundColor: color }}
+                          />
+                          <span className="font-semibold text-xs text-foreground">
+                            {name}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 pt-1.5 border-t border-border/60 space-y-0.5">
+                          <p className="text-[11px] font-mono text-muted-foreground">
+                            {timeStr}{" "}
+                            <span className="text-foreground/80 font-semibold">
+                              ({dStr})
+                            </span>
+                          </p>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
                   );
                 })}
               </div>
