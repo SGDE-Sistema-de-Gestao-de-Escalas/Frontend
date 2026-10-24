@@ -608,33 +608,31 @@ export const absencesService = {
 
   /**
    * Alterar estado da ausência (Justificar / Injustificar)
-   * Tenta primeiro PATCH /api/absences/{id}/status e depois PUT /api/absences/{id}
+   * PATCH /api/absences/{id}/status (ou PUT /api/absences/{id})
    */
   async updateStatus(
     id: string | number,
     status: "justified" | "unjustified" | "pending" | "justificada" | "injustificada",
     notes?: string
   ): Promise<BackendAbsenceResource> {
+    const canonicalStatus =
+      status === "justificada"
+        ? "justified"
+        : status === "injustificada"
+        ? "unjustified"
+        : status;
+
+    const payload: Record<string, any> = {
+      status: canonicalStatus,
+    };
+    if (notes !== undefined && notes !== null) {
+      payload.notes = notes;
+    }
+
     try {
-      try {
-        const response = await apiClient.patch<any>(`/absences/${id}/status`, {
-          status,
-          notes,
-        });
-        const raw = response.data?.data ?? response.data;
-        return normalizeAbsenceResource(raw);
-      } catch (patchErr: any) {
-        // Se a rota PATCH não estiver disponível (404/405), tenta PUT padrão REST
-        if (patchErr?.response?.status === 404 || patchErr?.response?.status === 405) {
-          const putResponse = await apiClient.put<any>(`/absences/${id}`, {
-            status,
-            ...(notes !== undefined ? { notes } : {}),
-          });
-          const raw = putResponse.data?.data ?? putResponse.data;
-          return normalizeAbsenceResource(raw);
-        }
-        throw patchErr;
-      }
+      const response = await apiClient.patch<any>(`/absences/${id}/status`, payload);
+      const raw = response.data?.data ?? response.data;
+      return normalizeAbsenceResource(raw);
     } catch (err: any) {
       if (err?.response && err.response.status !== 404) {
         throw err;
@@ -643,7 +641,7 @@ export const absencesService = {
         if (String(a.id) === String(id)) {
           return {
             ...a,
-            status: status as any,
+            status: canonicalStatus as any,
             notes: notes !== undefined ? notes : a.notes,
           };
         }

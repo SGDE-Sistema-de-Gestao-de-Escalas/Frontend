@@ -625,9 +625,14 @@ export function getSchedulePublishStatusForDate(
   schedules: BackendScheduleResource[] = []
 ): SchedulePublishInfo {
   const cleanIso = isoDate.slice(0, 10);
-  const matchingSchedules = schedules.filter((sc) =>
-    (sc.entries || []).some((entry) => entry.date?.slice(0, 10) === cleanIso)
-  );
+  const matchingSchedules = schedules.filter((sc) => {
+    if (sc.entries && sc.entries.length > 0) {
+      return sc.entries.some((entry) => entry.date?.slice(0, 10) === cleanIso);
+    }
+    const ws = (sc.week_start || "").slice(0, 10);
+    const we = (sc.week_end || "").slice(0, 10);
+    return Boolean(ws && we && ws <= cleanIso && cleanIso <= we);
+  });
 
   if (matchingSchedules.length === 0) {
     return {
