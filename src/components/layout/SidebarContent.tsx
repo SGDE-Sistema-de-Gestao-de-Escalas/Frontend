@@ -36,9 +36,7 @@ export const ADMIN_NAV: NavItemConfig[] = [
 
 export const STAFF_NAV: NavItemConfig[] = [
   { id: "schedule", label: "O Meu Horário", icon: <Calendar size={16} />, to: "/staff/schedule" },
-  { id: "register-absence", label: "Justificar Falta", icon: <FileText size={16} />, to: "/staff/register-absence" },
-  { id: "absence-detail", label: "As Minhas Faltas", icon: <Inbox size={16} />, to: "/staff/absences" },
-  { id: "account", label: "A Minha Conta", icon: <User size={16} />, to: "/staff/account" },
+  { id: "absences", label: "Ausências", icon: <Inbox size={16} />, to: "/staff/absences" },
 ];
 
 export interface SidebarContentProps {
@@ -143,7 +141,9 @@ export default function SidebarContent({
         ) : (
           <div className="space-y-1">
             {STAFF_NAV.map((item) => {
-              const active = currentPage === item.id;
+              const active = item.id === "absences"
+                ? (currentPage === "absences" || currentPage === "absence-detail" || currentPage === "register-absence")
+                : currentPage === item.id;
               return (
                 <button
                   key={item.id}
@@ -197,26 +197,6 @@ export default function SidebarContent({
           <ChevronRight size={14} className="text-muted-foreground flex-shrink-0" />
         </button>
 
-        {isStaff && (
-          <div className="pt-1 border-t border-sidebar-border/50 space-y-0.5">
-            <button
-              type="button"
-              onClick={handleSwitchRole}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors text-left"
-            >
-              <Users size={13} />
-              <span>Vista Admin</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-destructive hover:bg-destructive/10 transition-colors text-left"
-            >
-              <LogOut size={13} />
-              <span>Terminar Sessão</span>
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

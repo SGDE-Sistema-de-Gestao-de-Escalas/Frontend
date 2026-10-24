@@ -13,6 +13,7 @@ export type AdminPage =
 
 export type StaffPage =
   | "schedule"
+  | "absences"
   | "register-absence"
   | "account"
   | "absence-detail";

@@ -109,7 +109,7 @@ export default function AppRouter() {
         <Route path="/staff/absence" element={<StaffRoute><StaffAbsences /></StaffRoute>} />
         <Route
           path="/staff/register-absence"
-          element={<StaffRoute><StaffRegisterAbsence /></StaffRoute>}
+          element={<Navigate to="/staff/absences" replace />}
         />
         <Route path="/staff/account" element={<StaffRoute><Account /></StaffRoute>} />
       </Route>

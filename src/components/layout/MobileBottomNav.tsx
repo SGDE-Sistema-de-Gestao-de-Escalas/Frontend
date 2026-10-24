@@ -32,8 +32,7 @@ export default function MobileBottomNav({
 
   const staffItems = [
     { id: "schedule", label: "Horário", icon: <Calendar size={18} /> },
-    { id: "register-absence", label: "Justificar", icon: <FileText size={18} /> },
-    { id: "absence-detail", label: "Faltas", icon: <Inbox size={18} /> },
+    { id: "absences", label: "Ausências", icon: <Inbox size={18} /> },
   ];
 
   const items = isStaff ? staffItems : adminItems;
@@ -41,7 +40,9 @@ export default function MobileBottomNav({
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-card border-t border-border flex items-center shadow-lg">
       {items.map((item) => {
-        const isActive = currentPage === item.id;
+        const isActive = item.id === "absences"
+          ? (currentPage === "absences" || currentPage === "absence-detail" || currentPage === "register-absence")
+          : currentPage === item.id;
         return (
           <button
             key={item.id}
