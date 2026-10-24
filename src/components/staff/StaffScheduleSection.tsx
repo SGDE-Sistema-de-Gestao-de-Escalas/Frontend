@@ -1,14 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
-  Briefcase,
-  Calendar,
   ChevronLeft,
   ChevronRight,
-  Clock,
-  Coffee,
+  Loader2,
   Sparkles,
-  UserX,
 } from "lucide-react";
 import type { BlockState, StaffViewMode } from "../../types";
 import {
@@ -31,11 +27,16 @@ import {
   useOperatingRules,
 } from "../../hooks/api/useOperatingHours";
 import { useHolidaysList } from "../../hooks/api/useHolidays";
+import { useAllAssistantSchedules } from "../../hooks/api/useAssistantSchedules";
+import { useAllAssistantExceptions } from "../../hooks/api/useAssistantExceptions";
 import {
   buildDayMatrixFromApi,
   getDateInfo,
   getRealMonthsRange,
+  resolveAssistantShiftBounds,
   resolveSchoolDayStatusByIsoDate,
+  type AssistantScheduleProfileApi,
+  type AssistantExceptionApi,
 } from "../../utils/scheduleMatrixUtils";
 
 /**
@@ -78,30 +79,65 @@ export function getBlockDisplayColor(block: {
 }
 
 /**
- * Hook para obter dados e blocos de um determinado dia para o assistente autenticado
+ * Hook com pré-carregamento por intervalo (-7 a +21 dias, idêntico ao Admin)
+ * para transições de dia instantâneas e sem qualquer efeito de ecrã em branco/flicker.
  */
-function useStaffDayBlocks(dayOffset: number) {
+function useStaffScheduleData(dayOffset: number) {
   const { user } = useAuth();
   const info = getDateInfo(dayOffset);
   const assistantId = user.assistant_id ?? user.id ?? "staff";
 
+  // Intervalo em cache: 1 semana para trás e 3 semanas para a frente (como no Admin)
+  const [loadedRange, setLoadedRange] = useState(() => {
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(today.getDate() - 7);
+    const end = new Date(today);
+    end.setDate(today.getDate() + 21);
+    return {
+      start: start.toISOString().split("T")[0],
+      end: end.toISOString().split("T")[0],
+    };
+  });
+
+  // Expandir intervalo caso o utilizador navegue para lá do buffer carregado
+  useEffect(() => {
+    setLoadedRange((prev) => {
+      let newStart = prev.start;
+      let newEnd = prev.end;
+      if (info.isoDate < prev.start) {
+        const d = new Date(info.isoDate);
+        d.setDate(d.getDate() - 7);
+        newStart = d.toISOString().split("T")[0];
+      }
+      if (info.isoDate > prev.end) {
+        const d = new Date(info.isoDate);
+        d.setDate(d.getDate() + 14);
+        newEnd = d.toISOString().split("T")[0];
+      }
+      if (newStart === prev.start && newEnd === prev.end) return prev;
+      return { start: newStart, end: newEnd };
+    });
+  }, [info.isoDate]);
+
   const { data: schedules = [], isLoading: isLoadingSchedules } =
     useSchedulesList({
-      start_date: info.isoDate,
-      end_date: info.isoDate,
+      start_date: loadedRange.start,
+      end_date: loadedRange.end,
       assistant_id: user.assistant_id ?? undefined,
+      per_page: 250,
     });
 
   const { data: absencesRes, isLoading: isLoadingAbsences } = useAbsencesList({
-    start_date: info.isoDate,
-    end_date: info.isoDate,
+    start_date: loadedRange.start,
+    end_date: loadedRange.end,
     assistant_id: user.assistant_id ?? undefined,
-    per_page: 50,
+    per_page: 100,
   });
 
   const { data: calendarDays } = useOperatingCalendar({
-    start_date: info.isoDate,
-    end_date: info.isoDate,
+    start_date: loadedRange.start,
+    end_date: loadedRange.end,
   });
   const { data: holidays } = useHolidaysList();
   const { data: operatingExceptions } = useOperatingExceptions({
@@ -111,22 +147,37 @@ function useStaffDayBlocks(dayOffset: number) {
     status: "all",
   });
 
-  return useMemo(() => {
+  const { data: allAssistantSchedules = [] } = useAllAssistantSchedules();
+  const { data: allAssistantExceptions = [] } = useAllAssistantExceptions();
+
+  const profilesByAssistant = useMemo(() => {
+    const map: Record<string, AssistantScheduleProfileApi[]> = {};
+    allAssistantSchedules.forEach((p) => {
+      const aid = String(p.assistant_id);
+      if (!map[aid]) map[aid] = [];
+      map[aid].push(p);
+    });
+    return map;
+  }, [allAssistantSchedules]);
+
+  const exceptionsByAssistant = useMemo(() => {
+    const map: Record<string, AssistantExceptionApi[]> = {};
+    allAssistantExceptions.forEach((e) => {
+      const aid = String(e.assistant_id);
+      if (!map[aid]) map[aid] = [];
+      map[aid].push(e);
+    });
+    return map;
+  }, [allAssistantExceptions]);
+
+  const dayData = useMemo(() => {
     const dummyAssistant = {
       id: assistantId,
       name: user.name || "Assistente",
       initials: user.initials || "AO",
     };
 
-    const effectiveSchedules =
-      user.assistant_id || schedules.length === 0
-        ? schedules
-        : [schedules[0]];
-
-    const targetId =
-      user.assistant_id ??
-      effectiveSchedules[0]?.assistant_id ??
-      dummyAssistant.id;
+    const targetId = user.assistant_id ?? dummyAssistant.id;
 
     const dayStatus = resolveSchoolDayStatusByIsoDate(info.isoDate, {
       calendarDays,
@@ -137,12 +188,27 @@ function useStaffDayBlocks(dayOffset: number) {
 
     const isSchoolOpen = dayStatus.isOpen;
 
+    // Obter limites de turno e exceções específicas deste assistente para o dia
+    const shiftBounds = resolveAssistantShiftBounds({
+      assistantId: targetId,
+      isoDate: info.isoDate,
+      dow: info.dow,
+      viewStartSlot: dayStatus.viewStartSlot ?? VIEW_START,
+      viewEndSlot: dayStatus.viewEndSlot ?? VIEW_END,
+      profiles: profilesByAssistant[String(targetId)],
+      exceptions: exceptionsByAssistant[String(targetId)],
+      schedulesList: schedules,
+      absences: absencesRes?.data || [],
+    });
+
     const { matrix, slotMetaByAssistant } = buildDayMatrixFromApi({
       isoDate: info.isoDate,
       isOpen: isSchoolOpen,
       assistants: [{ ...dummyAssistant, id: targetId }],
-      schedules: effectiveSchedules,
+      schedules,
       absences: absencesRes?.data || [],
+      profilesByAssistant,
+      exceptionsByAssistant,
     });
 
     const slots = matrix[targetId] || Array(96).fill("off");
@@ -152,11 +218,13 @@ function useStaffDayBlocks(dayOffset: number) {
     return {
       slots,
       blocks,
+      shiftBounds,
       dayStatus,
-      isLoading: isLoadingSchedules || isLoadingAbsences,
+      targetId,
     };
   }, [
     info.isoDate,
+    info.dow,
     assistantId,
     user,
     schedules,
@@ -165,9 +233,18 @@ function useStaffDayBlocks(dayOffset: number) {
     holidays,
     operatingExceptions,
     operatingRules,
-    isLoadingSchedules,
-    isLoadingAbsences,
+    profilesByAssistant,
+    exceptionsByAssistant,
   ]);
+
+  return {
+    ...dayData,
+    schedules,
+    absencesRes,
+    profilesByAssistant,
+    exceptionsByAssistant,
+    isLoading: isLoadingSchedules && schedules.length === 0,
+  };
 }
 
 /**
@@ -175,29 +252,32 @@ function useStaffDayBlocks(dayOffset: number) {
  */
 export function StaffDayView({ dayOffset }: { dayOffset: number }) {
   const info = getDateInfo(dayOffset);
-  const { slots, blocks, dayStatus, isLoading } = useStaffDayBlocks(dayOffset);
+  const { slots, blocks, shiftBounds, dayStatus, isLoading } =
+    useStaffScheduleData(dayOffset);
 
   const activeBlocks = blocks.filter((b) => b.state !== "off");
+
+  // O dia é considerado de descanso se a escola estiver encerrada ou o assistente não tiver turnos atribuídos
   const isOffDay =
     !dayStatus.isOpen ||
     activeBlocks.length === 0 ||
     activeBlocks.every((b) => b.state === "off");
 
-  const entryBlock = activeBlocks.find((b) => b.state !== "absent");
-  const lastBlock = [...activeBlocks]
-    .reverse()
-    .find((b) => b.state !== "absent");
-
-  const activeWorkSlots = slots.filter(
-    (s) => s !== "off" && s !== "lunch" && s !== "absent"
-  ).length;
-  const workloadLabel =
-    activeWorkSlots > 0 ? formatDurationSlots(activeWorkSlots) : "—";
-
-  if (isOffDay && !isLoading) {
+  if (isLoading) {
     return (
-      <div className="pt-4 pb-12">
-        <div className="bg-card border border-border/80 rounded-2xl p-6 sm:p-8 text-center max-w-lg mx-auto shadow-sm my-6">
+      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+        <Loader2 size={24} className="animate-spin text-primary mb-3" />
+        <p className="text-sm font-medium text-foreground">
+          A carregar o seu horário...
+        </p>
+      </div>
+    );
+  }
+
+  if (isOffDay) {
+    return (
+      <div className="pt-2 pb-12">
+        <div className="bg-card border border-border/80 rounded-2xl p-6 sm:p-8 text-center max-w-lg mx-auto shadow-xs my-6">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary mb-3">
             <Sparkles size={22} className="text-primary" />
           </div>
@@ -216,12 +296,27 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
     );
   }
 
-  // Janela da linha temporal da barra de escalas
-  const firstSlot = entryBlock ? entryBlock.start : 32; // 08:00 default
-  const lastSlot = lastBlock ? lastBlock.start + lastBlock.count : 68; // 17:00 default
-  const barStart = Math.min(32, Math.max(0, firstSlot - 2));
-  const barEnd = Math.max(68, Math.min(96, lastSlot + 2));
+  // Janela da linha temporal: Baseada estritamente no horário do turno do assistente para o dia!
+  const entryBlock = activeBlocks.find((b) => b.state !== "absent");
+  const lastBlock = [...activeBlocks]
+    .reverse()
+    .find((b) => b.state !== "absent");
+
+  const assistantShiftStart =
+    shiftBounds.startSlot ?? (entryBlock ? entryBlock.start : 32);
+  const assistantShiftEnd =
+    shiftBounds.endSlot ??
+    (lastBlock ? lastBlock.start + lastBlock.count : 68);
+
+  const barStart = assistantShiftStart;
+  const barEnd = Math.max(assistantShiftStart + 4, assistantShiftEnd);
   const barSlots = Math.max(1, barEnd - barStart);
+
+  const activeWorkSlots = slots.filter(
+    (s) => s !== "off" && s !== "lunch" && s !== "absent"
+  ).length;
+  const workloadLabel =
+    activeWorkSlots > 0 ? formatDurationSlots(activeWorkSlots) : "—";
 
   return (
     <div className="pt-2 pb-8 space-y-4">
@@ -230,13 +325,11 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
         {[
           {
             label: "Entrada",
-            value: entryBlock ? TIME_SLOTS[entryBlock.start] : "—",
+            value: TIME_SLOTS[assistantShiftStart] || "—",
           },
           {
             label: "Saída",
-            value: lastBlock
-              ? TIME_SLOTS[lastBlock.start + lastBlock.count] || "24:00"
-              : "—",
+            value: TIME_SLOTS[assistantShiftEnd] || "—",
           },
           { label: "Carga Diária", value: workloadLabel },
         ].map((s) => (
@@ -252,22 +345,23 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
         ))}
       </div>
 
-      {/* Barra de Escalas Contínua (Marca de Identidade Visual da Aplicação) */}
+      {/* Linha Temporal Contínua com a mesma estética do Admin (cantos contínuos entre blocos) */}
       <div className="bg-card border border-border rounded-xl p-3.5 sm:p-4 shadow-xs">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Linha Temporal de Atividades
+            Horário do Turno
           </span>
-          <span className="text-xs font-mono text-muted-foreground">
+          <span className="text-xs font-mono font-medium text-foreground">
             {TIME_SLOTS[barStart]} — {TIME_SLOTS[barEnd] || "24:00"}
           </span>
         </div>
 
-        <div className="relative h-10 w-full bg-muted/30 rounded-lg p-1 border border-border/40 overflow-hidden">
+        <div className="relative h-11 w-full bg-muted/40 rounded-lg p-1 border border-border/50 overflow-hidden">
           {activeBlocks.map((b, i) => {
             const cs = Math.max(b.start, barStart);
             const ce = Math.min(b.start + b.count, barEnd);
             if (ce <= cs) return null;
+
             const leftPct = ((cs - barStart) / barSlots) * 100;
             const widthPct = ((ce - cs) / barSlots) * 100;
             const color = getBlockDisplayColor(b);
@@ -276,35 +370,68 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
             const timeStr = `${TIME_SLOTS[b.start]} – ${
               TIME_SLOTS[b.start + b.count] || "24:00"
             }`;
+            const dMin = b.count * 15;
+            const dStr =
+              dMin >= 60
+                ? `${Math.floor(dMin / 60)}h${
+                    dMin % 60 > 0 ? ` ${dMin % 60}m` : ""
+                  }`
+                : `${dMin}m`;
+
+            // Mesma regra de cantos do Admin: sem cantos arredondados quando encostado a outro bloco
+            const radiusClass =
+              b.hasPrevAdjacent && b.hasNextAdjacent
+                ? "rounded-none"
+                : b.hasPrevAdjacent
+                ? "rounded-l-none rounded-r-md"
+                : b.hasNextAdjacent
+                ? "rounded-l-md rounded-r-none"
+                : "rounded-md";
+
+            const separatorClass = b.hasPrevAdjacent
+              ? "border-l-[1.5px] border-card/90"
+              : "";
+
+            const showLabel = widthPct >= 10;
+            const showDurationChip = widthPct >= 22;
 
             return (
               <div
                 key={i}
                 title={`${name} (${timeStr})`}
-                className="absolute inset-y-1 rounded-md transition-transform hover:scale-[1.01] flex items-center justify-center px-1 text-[11px] font-medium text-white shadow-xs overflow-hidden truncate"
+                className={`absolute inset-y-1 ${radiusClass} ${separatorClass} text-white shadow-2xs overflow-hidden transition-all flex items-center px-2 gap-1.5 text-left`}
                 style={{
                   left: `${leftPct}%`,
                   width: `${widthPct}%`,
                   backgroundColor: color,
                 }}
               >
-                {widthPct > 12 && <span className="truncate">{name}</span>}
+                {showLabel && (
+                  <span className="truncate text-xs font-medium tracking-tight">
+                    {name}
+                  </span>
+                )}
+                {showDurationChip && (
+                  <span className="shrink-0 rounded bg-black/15 px-1 py-0.2 font-mono text-[9px] text-white/90">
+                    {dStr}
+                  </span>
+                )}
               </div>
             );
           })}
         </div>
 
-        {/* Marcadores de hora sob a barra */}
-        <div className="relative w-full h-4 mt-1 flex justify-between text-[10px] font-mono text-muted-foreground/60 px-0.5">
+        {/* Marcadores de hora sob a barra (início e fim do turno do assistente) */}
+        <div className="relative w-full h-4 mt-1.5 flex justify-between text-[10px] font-mono text-muted-foreground/70 px-0.5">
           <span>{TIME_SLOTS[barStart]}</span>
-          {barSlots > 20 && (
+          {barSlots > 12 && (
             <span>{TIME_SLOTS[Math.round((barStart + barEnd) / 2)]}</span>
           )}
           <span>{TIME_SLOTS[barEnd] || "24:00"}</span>
         </div>
       </div>
 
-      {/* Lista Limpa de Tarefas (Sem ícones desnecessários, com as cores reais) */}
+      {/* Lista Limpa de Tarefas (Sem ícones desnecessários, cores oficiais e duração) */}
       <div className="space-y-2">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 pt-1">
           Tarefas Agendadas
@@ -408,6 +535,7 @@ export function StaffWeekView({
     start_date: startInfo.isoDate,
     end_date: endInfo.isoDate,
     assistant_id: user.assistant_id ?? undefined,
+    per_page: 200,
   });
   const { data: absencesRes } = useAbsencesList({
     start_date: startInfo.isoDate,
@@ -426,9 +554,30 @@ export function StaffWeekView({
   const { data: operatingRules } = useOperatingRules({
     status: "all",
   });
+  const { data: allAssistantSchedules = [] } = useAllAssistantSchedules();
+  const { data: allAssistantExceptions = [] } = useAllAssistantExceptions();
 
-  const targetId =
-    user.assistant_id ?? schedules[0]?.assistant_id ?? "staff";
+  const targetId = user.assistant_id ?? "staff";
+
+  const profilesByAssistant = useMemo(() => {
+    const map: Record<string, AssistantScheduleProfileApi[]> = {};
+    allAssistantSchedules.forEach((p) => {
+      const aid = String(p.assistant_id);
+      if (!map[aid]) map[aid] = [];
+      map[aid].push(p);
+    });
+    return map;
+  }, [allAssistantSchedules]);
+
+  const exceptionsByAssistant = useMemo(() => {
+    const map: Record<string, AssistantExceptionApi[]> = {};
+    allAssistantExceptions.forEach((e) => {
+      const aid = String(e.assistant_id);
+      if (!map[aid]) map[aid] = [];
+      map[aid].push(e);
+    });
+    return map;
+  }, [allAssistantExceptions]);
 
   return (
     <div className="pt-2 pb-6 space-y-2.5">
@@ -442,9 +591,6 @@ export function StaffWeekView({
           operatingRules,
         });
         const isClosed = !status.isOpen;
-        const dayViewStart = status.viewStartSlot ?? VIEW_START;
-        const dayViewEnd = status.viewEndSlot ?? VIEW_END;
-        const dayViewSlots = Math.max(1, dayViewEnd - dayViewStart);
 
         const { matrix, slotMetaByAssistant } = buildDayMatrixFromApi({
           isoDate: info.isoDate,
@@ -458,6 +604,8 @@ export function StaffWeekView({
           ],
           schedules,
           absences: absencesRes?.data || [],
+          profilesByAssistant,
+          exceptionsByAssistant,
         });
 
         const slots = matrix[targetId] || Array(96).fill("off");
@@ -475,6 +623,11 @@ export function StaffWeekView({
         const lastBlock = [...activeBlocks]
           .reverse()
           .find((b) => b.state !== "absent");
+
+        // Limites de turno do assistente para o dia
+        const shiftStart = entryBlock ? entryBlock.start : 32;
+        const shiftEnd = lastBlock ? lastBlock.start + lastBlock.count : 68;
+        const shiftSlots = Math.max(1, shiftEnd - shiftStart);
 
         const entryExitStr =
           entryBlock && lastBlock
@@ -550,12 +703,12 @@ export function StaffWeekView({
               </div>
             </div>
 
-            {/* Barra de Escalas com Cores Reais */}
+            {/* Barra de Escalas com a mesma estética do Admin (cantos contínuos entre blocos) */}
             {!isClosed && activeBlocks.length > 0 && (
               <div className="relative h-4 rounded-md overflow-hidden bg-muted/40 my-2">
                 {activeBlocks.map((b, bi) => {
-                  const cs = Math.max(b.start, dayViewStart);
-                  const ce = Math.min(b.start + b.count, dayViewEnd);
+                  const cs = Math.max(b.start, shiftStart);
+                  const ce = Math.min(b.start + b.count, shiftEnd);
                   if (ce <= cs) return null;
                   const color = getBlockDisplayColor(b);
                   const name =
@@ -566,14 +719,27 @@ export function StaffWeekView({
                     TIME_SLOTS[b.start + b.count] || "24:00"
                   }`;
 
+                  const radiusClass =
+                    b.hasPrevAdjacent && b.hasNextAdjacent
+                      ? "rounded-none"
+                      : b.hasPrevAdjacent
+                      ? "rounded-l-none rounded-r-xs"
+                      : b.hasNextAdjacent
+                      ? "rounded-l-xs rounded-r-none"
+                      : "rounded-xs";
+
+                  const separatorClass = b.hasPrevAdjacent
+                    ? "border-l border-card/80"
+                    : "";
+
                   return (
                     <div
                       key={bi}
                       title={`${name}: ${timeStr}`}
-                      className="absolute inset-y-0.5 rounded-xs transition-transform hover:scale-105"
+                      className={`absolute inset-y-0.5 ${radiusClass} ${separatorClass} transition-transform hover:scale-105`}
                       style={{
-                        left: `${((cs - dayViewStart) / dayViewSlots) * 100}%`,
-                        width: `${((ce - cs) / dayViewSlots) * 100}%`,
+                        left: `${((cs - shiftStart) / shiftSlots) * 100}%`,
+                        width: `${((ce - cs) / shiftSlots) * 100}%`,
                         backgroundColor: color,
                       }}
                     />
@@ -646,6 +812,7 @@ export function StaffMonthView({
     start_date: month.startIso,
     end_date: month.endIso,
     assistant_id: user.assistant_id ?? undefined,
+    per_page: 250,
   });
   const { data: absencesRes } = useAbsencesList({
     start_date: month.startIso,
@@ -654,8 +821,30 @@ export function StaffMonthView({
     per_page: 100,
   });
 
-  const targetId =
-    user.assistant_id ?? schedules[0]?.assistant_id ?? "staff";
+  const { data: allAssistantSchedules = [] } = useAllAssistantSchedules();
+  const { data: allAssistantExceptions = [] } = useAllAssistantExceptions();
+
+  const targetId = user.assistant_id ?? "staff";
+
+  const profilesByAssistant = useMemo(() => {
+    const map: Record<string, AssistantScheduleProfileApi[]> = {};
+    allAssistantSchedules.forEach((p) => {
+      const aid = String(p.assistant_id);
+      if (!map[aid]) map[aid] = [];
+      map[aid].push(p);
+    });
+    return map;
+  }, [allAssistantSchedules]);
+
+  const exceptionsByAssistant = useMemo(() => {
+    const map: Record<string, AssistantExceptionApi[]> = {};
+    allAssistantExceptions.forEach((e) => {
+      const aid = String(e.assistant_id);
+      if (!map[aid]) map[aid] = [];
+      map[aid].push(e);
+    });
+    return map;
+  }, [allAssistantExceptions]);
 
   // Calcular métricas mensais do assistente
   const monthMetrics = useMemo(() => {
@@ -682,6 +871,8 @@ export function StaffMonthView({
         ],
         schedules,
         absences: absencesRes?.data || [],
+        profilesByAssistant,
+        exceptionsByAssistant,
       });
 
       const slots = matrix[targetId] || Array(96).fill("off");
@@ -705,7 +896,15 @@ export function StaffMonthView({
       absenceDays: absenceDaysCount,
       restDays: restDaysCount,
     };
-  }, [month, targetId, user, schedules, absencesRes]);
+  }, [
+    month,
+    targetId,
+    user,
+    schedules,
+    absencesRes,
+    profilesByAssistant,
+    exceptionsByAssistant,
+  ]);
 
   // Detalhes do dia selecionado para o preview abaixo do calendário
   const previewData = useMemo(() => {
@@ -726,6 +925,8 @@ export function StaffMonthView({
       ],
       schedules,
       absences: absencesRes?.data || [],
+      profilesByAssistant,
+      exceptionsByAssistant,
     });
 
     const slots = matrix[targetId] || Array(96).fill("off");
@@ -752,7 +953,15 @@ export function StaffMonthView({
         activeSlots > 0 ? formatDurationSlots(activeSlots) : null,
       hasAbsent: slots.some((s) => s === "absent"),
     };
-  }, [selectedDayOffset, targetId, user, schedules, absencesRes]);
+  }, [
+    selectedDayOffset,
+    targetId,
+    user,
+    schedules,
+    absencesRes,
+    profilesByAssistant,
+    exceptionsByAssistant,
+  ]);
 
   return (
     <div className="pt-2 pb-6 space-y-4">
@@ -838,6 +1047,8 @@ export function StaffMonthView({
               ],
               schedules,
               absences: absencesRes?.data || [],
+              profilesByAssistant,
+              exceptionsByAssistant,
             });
             const slots = matrix[targetId] || Array(96).fill("off");
             const hasWork =
