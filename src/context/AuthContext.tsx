@@ -13,6 +13,7 @@ export interface UserProfile {
   email: string;
   assistant_id?: number | string | null;
   school_id?: number | string | null;
+  school_name?: string | null;
 }
 
 interface AuthContextType {
@@ -72,6 +73,7 @@ function mapAuthUserToProfile(authUser: AuthUser): UserProfile {
     email: authUser.email,
     assistant_id: authUser.assistant_id,
     school_id: authUser.school_id,
+    school_name: authUser.school_name,
   };
 }
 

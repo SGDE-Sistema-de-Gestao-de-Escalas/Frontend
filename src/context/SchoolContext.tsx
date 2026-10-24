@@ -92,11 +92,17 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
         }));
         setSchoolsList(mapped);
 
-        if (isStaff && user?.school_id) {
-          const staffSchoolId = String(user.school_id);
+        if (isStaff) {
+          const matched = mapped.find(
+            (s) =>
+              (user?.school_id && String(s.id) === String(user.school_id)) ||
+              (user?.school_name &&
+                s.name.toLowerCase() === user.school_name.toLowerCase())
+          ) || mapped.find((s) => s.active) || mapped[0];
+          const staffSchoolId = String(matched?.id || user?.school_id || "");
           localStorage.setItem("selected_school_id", staffSchoolId);
           apiClient.defaults.headers.common["X-School-ID"] = staffSchoolId;
-          setSelectedSchoolId(user.school_id);
+          setSelectedSchoolId(matched?.id || user?.school_id || null);
         } else if (mapped.length > 0) {
           setSelectedSchoolId((currId) => {
             const exists = mapped.some((s) => String(s.id) === String(currId));

@@ -16,6 +16,7 @@ export interface AuthUser {
   role: Role | { id: string | number; name: string; slug: Role };
   assistant_id?: string | number | null;
   school_id?: string | number | null;
+  school_name?: string | null;
 }
 
 export interface BackendLoginResponse {
