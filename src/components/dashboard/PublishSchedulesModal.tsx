@@ -321,16 +321,21 @@ function getDayScheduleDetails(
     let shiftStart = sc?.shift_start ? sc.shift_start.slice(0, 5) : "";
     let shiftEnd = sc?.shift_end ? sc.shift_end.slice(0, 5) : "";
 
-    if ((!shiftStart || !shiftEnd) && (profilesByAssistant || exceptionsByAssistant)) {
+    const aProfiles = profilesByAssistant?.[aId] || [];
+    const aExceptions = exceptionsByAssistant?.[aId] || [];
+    const hasConfiguredShift = aProfiles.length > 0 || aExceptions.length > 0;
+
+    // Apenas inferir horário contratual se o assistente tiver efetivamente um perfil ou exceção configurados na escola
+    if ((!shiftStart || !shiftEnd) && hasConfiguredShift) {
       const dow = new Date(isoDate).getDay();
       const bounds = resolveAssistantShiftBounds({
         assistantId: aId,
         isoDate,
         dow,
-        viewStartSlot: 0,
-        viewEndSlot: 96,
-        profiles: profilesByAssistant?.[aId],
-        exceptions: exceptionsByAssistant?.[aId],
+        viewStartSlot: 30, // 07:30
+        viewEndSlot: 76,   // 19:00
+        profiles: aProfiles,
+        exceptions: aExceptions,
         schedulesList: schedules,
         absences,
       });
@@ -866,6 +871,8 @@ export default function PublishSchedulesModal({
           <div className={`w-7 h-7 rounded-full font-bold text-[10px] flex items-center justify-center flex-shrink-0 ${
             ast.absenceReason
               ? "bg-destructive/15 text-destructive ring-1 ring-destructive/30"
+              : isUnscheduled && !ast.shiftStart
+              ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 ring-1 ring-amber-500/40"
               : "bg-primary/10 text-primary"
           }`}>
             {ast.initials}
@@ -885,8 +892,9 @@ export default function PublishSchedulesModal({
                 <span>Turno {ast.shiftStart}–{ast.shiftEnd}</span>
               </p>
             ) : (
-              <p className="text-[10px] font-mono text-muted-foreground/60 flex items-center gap-1 mt-0.5">
-                <span>Sem turno atribuído</span>
+              <p className="text-[10px] font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-0.5">
+                <AlertTriangle size={9} className="flex-shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>Sem horário atribuído</span>
               </p>
             )}
           </div>
