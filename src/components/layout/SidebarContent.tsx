@@ -73,19 +73,14 @@ export default function SidebarContent({
   return (
     <div className="flex flex-col h-full bg-sidebar select-none">
       {/* SGDE Brand Logo Horizontal */}
-      <div className="px-5 h-16 flex items-center justify-between border-b border-sidebar-border flex-shrink-0">
-        <div className="flex items-center gap-2.5 py-1">
+      <div className="px-5 h-16 flex items-center border-b border-sidebar-border flex-shrink-0">
+        <div className="flex items-center gap-2.5">
           <img
             src={logoHorizontal}
             alt="SGDE - Sistema de Gestão de Escalas"
-            className="h-8 w-auto max-w-[160px] object-contain"
+            className="h-10 w-auto max-w-[185px] object-contain"
           />
         </div>
-        {isStaff && (
-          <span className="text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 uppercase tracking-wider">
-            Staff
-          </span>
-        )}
       </div>
 
       {/* Navigation */}
