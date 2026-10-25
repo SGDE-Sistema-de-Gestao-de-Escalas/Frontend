@@ -120,6 +120,33 @@ export function getDateInfo(dayOffset: number): DateInfo & { isoDate: string } {
   };
 }
 
+/**
+ * Devolve o offset em dias para a Segunda-feira da semana correspondente ao dayOffset indicado.
+ * Convenção ISO: Segunda=0 ... Domingo=6.
+ */
+export function getMondayOffsetFromDayOffset(dayOffset: number): number {
+  const dow = getDateInfo(dayOffset).dow;
+  return dayOffset - dow;
+}
+
+/**
+ * Devolve o intervalo [startIso, endIso] de 3 semanas completas (Segunda a Domingo):
+ * - Semana Anterior (-1)
+ * - Semana Atual (0)
+ * - Semana Seguinte (+1)
+ * Total: 21 dias contínuos (Segunda da semana anterior até Domingo da semana seguinte).
+ */
+export function getThreeWeeksWindowIso(dayOffset: number): {
+  startIso: string;
+  endIso: string;
+  mondayOffset: number;
+} {
+  const mondayOffset = getMondayOffsetFromDayOffset(dayOffset);
+  const startIso = getIsoDateFromOffset(mondayOffset - 7);
+  const endIso = getIsoDateFromOffset(mondayOffset + 13);
+  return { startIso, endIso, mondayOffset };
+}
+
 export interface DashboardMonthMeta {
   name: string;
   label: string;

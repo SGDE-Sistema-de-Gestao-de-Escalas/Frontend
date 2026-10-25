@@ -44,13 +44,15 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
   const canSwitchSchool = isAdmin;
 
   const [schoolsList, setSchoolsList] = useState<School[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | string | null>(() => {
     const stored = localStorage.getItem("selected_school_id") || null;
     if (stored) {
       apiClient.defaults.headers.common["X-School-ID"] = stored;
     }
     return stored;
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    return !Boolean(localStorage.getItem("selected_school_id"));
   });
   const [operatingHours, setOperatingHours] = useState<OperatingHours>({
     startHour: 7,
@@ -137,6 +139,7 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
 
   const selectedSchool =
     schoolsList.find((s) => String(s.id) === String(selectedSchoolId)) ||
+    (selectedSchoolId ? ({ id: selectedSchoolId, name: "Escola Ativa", active: true } as School) : null) ||
     (schoolsList.length > 0 ? schoolsList[0] : null);
 
   function setSchoolId(id: number | string) {

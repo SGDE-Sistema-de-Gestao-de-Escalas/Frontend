@@ -27,6 +27,7 @@ import { useHolidaysList } from "../../hooks/api/useHolidays";
 import {
   buildDayMatrixFromApi,
   getDateInfo,
+  getThreeWeeksWindowIso,
   getSchedulePublishStatusForDate,
   hasGeneratedScheduleForDate,
   resolveSchoolDayStatusByIsoDate,
@@ -49,22 +50,22 @@ export default function WeekMatrixView({
     [weekStart]
   );
 
-  const startInfo = getDateInfo(weekOffsets[0]);
-  const endInfo = getDateInfo(weekOffsets[6]);
+  const weekWindow = useMemo(() => getThreeWeeksWindowIso(weekStart), [weekStart]);
 
   const { data: assistants = [] } = useAssistantsList();
   const { data: schedules = [] } = useSchedulesList({
-    start_date: startInfo.isoDate,
-    end_date: endInfo.isoDate,
+    start_date: weekWindow.startIso,
+    end_date: weekWindow.endIso,
+    per_page: 200,
   });
   const { data: absencesRes } = useAbsencesList({
-    start_date: startInfo.isoDate,
-    end_date: endInfo.isoDate,
+    start_date: weekWindow.startIso,
+    end_date: weekWindow.endIso,
     per_page: 200,
   });
   const { data: calendarDays = [] } = useOperatingCalendar(
-    startInfo.isoDate,
-    endInfo.isoDate
+    weekWindow.startIso,
+    weekWindow.endIso
   );
   const { data: operatingRules = [] } = useOperatingRules();
   const { data: operatingExceptions = [] } = useOperatingExceptions();

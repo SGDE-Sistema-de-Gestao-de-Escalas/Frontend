@@ -73,32 +73,21 @@ import {
   formatDurationSlots,
   slotsToBlocks,
   TIME_SLOTS,
+  type MergedScheduleBlockMeta,
 } from "./blockStyles";
-import { useQueries } from "@tanstack/react-query";
 import { useSchool } from "../../context/SchoolContext";
 import { schoolScopedKey } from "../../lib/queryClient";
-import { useAssistantsList } from "../../hooks/api/useAssistants";
-import { useSchedulesList, useSaveScheduleDays } from "../../hooks/api/useSchedules";
-import type { SaveScheduleDayPayload, SaveScheduleDayEntryPayload } from "../../api/services/schedules.service";
-import { useAbsencesList } from "../../hooks/api/useAbsences";
-import { useScheduleRulesList } from "../../hooks/api/useScheduleRules";
-import { useActivityTypesList } from "../../hooks/api/useActivityTypes";
-import {
-  useOperatingCalendar,
-  useOperatingExceptions,
-  useOperatingRules,
-} from "../../hooks/api/useOperatingHours";
-import { useHolidaysList } from "../../hooks/api/useHolidays";
-import { useAssistantTemporaryAssignmentsList } from "../../hooks/api/useAssistantTemporaryAssignments";
-import assistantSchedulesService from "../../api/services/assistantSchedules.service";
-import assistantExceptionsService from "../../api/services/assistantExceptions.service";
-import { ASSISTANT_SCHEDULES_KEY, useAllAssistantSchedules } from "../../hooks/api/useAssistantSchedules";
-import { ASSISTANT_EXCEPTIONS_KEY, useAllAssistantExceptions } from "../../hooks/api/useAssistantExceptions";
+import { useDashboardBootstrap } from "../../hooks/api/useDashboardBootstrap";
+import { useSaveScheduleDays } from "../../hooks/api/useSchedules";
 import type {
   AssistantScheduleProfileApi,
   AssistantExceptionApi,
 } from "../../types/assistantSchedule.types";
-import type { LunchBlockApi } from "../../api/services/schedules.service";
+import type {
+  LunchBlockApi,
+  SaveScheduleDayPayload,
+  SaveScheduleDayEntryPayload,
+} from "../../api/services/schedules.service";
 import PublishSchedulesModal from "./PublishSchedulesModal";
 import {
   buildDayMatrixFromApi,
@@ -108,6 +97,8 @@ import {
   getDateInfo,
   getIsoDateFromOffset,
   getOffsetFromIsoDate,
+  getMondayOffsetFromDayOffset,
+  getThreeWeeksWindowIso,
   getSchedulePublishStatusForDate,
   getShiftBoundsFromRow,
   hasGeneratedScheduleForDate,
@@ -157,6 +148,15 @@ function cloneMatrix(m: ScheduleMatrix): ScheduleMatrix {
   return c;
 }
 
+function areRowsEqual(r1?: BlockState[], r2?: BlockState[]): boolean {
+  if (!r1 || !r2) return r1 === r2;
+  if (r1.length !== r2.length) return false;
+  for (let i = 0; i < r1.length; i++) {
+    if (r1[i] !== r2[i]) return false;
+  }
+  return true;
+}
+
 export default function MatrixGrid({
   onSelectAssistant,
   dayOffset = 0,
@@ -185,12 +185,21 @@ export default function MatrixGrid({
     Record<number, { sourceOffset: number; sourcePlannedMatrix: ScheduleMatrix }>
   >({});
 
+  // Baseline das matrizes do servidor no momento em que a edição/rascunho começou (para deteção cirúrgica de conflitos)
+  const baselineMatricesRef = useRef<Record<number, ScheduleMatrix>>({});
+  // Conflitos detetados entre o servidor e rascunhos locais ativos
+  const [conflictsByDay, setConflictsByDay] = useState<
+    Record<number, { assistantNames: string[]; freshServerMatrix: ScheduleMatrix }>
+  >({});
+
   // Resetar estados de edição e rascunhos quando o admin troca de escola
   useEffect(() => {
     setDraftMatricesByDay({});
     setDraftSlotMetaByDay({});
     setSavedMatricesByDay({});
     setCopiedFromByDay({});
+    setConflictsByDay({});
+    baselineMatricesRef.current = {};
     setEditMode(false);
     setIsPainting(false);
     setPaintAid(null);
@@ -223,6 +232,8 @@ export default function MatrixGrid({
       setDraftMatricesByDay({});
       setDraftSlotMetaByDay({});
       setCopiedFromByDay({});
+      setConflictsByDay({});
+      baselineMatricesRef.current = {};
       setEditMode(false);
       setIsPainting(false);
       setPaintAid(null);
@@ -244,99 +255,55 @@ const [publishModalState, setPublishModalState] = useState<{
   const todayIso = useMemo(() => getIsoDateFromOffset(0), []);
   const dayInfo = getDateInfo(dayOffset);
 
-  // Janela de datas mantida em cache. Não altera as chaves de query enquanto a navegação
-  // ocorrer dentro do intervalo já carregado (-7 dias a +14 dias), tornando a navegação de dias instantânea (0 pedidos).
-  const [loadedRange, setLoadedRange] = useState<{ start: string; end: string }>(() => ({
-    start: queryStartDate || getIsoDateFromOffset(-7),
-    end: queryEndDate || getIsoDateFromOffset(14),
-  }));
+  // Segunda-feira de referência da semana do dia ativo (Segunda=0 ... Domingo=6)
+  const currentWeekMondayOffset = getMondayOffsetFromDayOffset(dayOffset);
 
-  // Sincronizar quando o utilizador definir um intervalo explícito no header
-  useEffect(() => {
-    if (queryStartDate && queryEndDate) {
-      setLoadedRange((prev) => {
-        if (prev.start === queryStartDate && prev.end === queryEndDate) return prev;
-        return { start: queryStartDate, end: queryEndDate };
-      });
+  // Janela de 3 semanas (Semana Anterior, Semana Atual, Semana Seguinte - 21 dias contínuos).
+  // Ancorada à Segunda-feira: enquanto o utilizador navegar entre dias da MESMA semana,
+  // o mondayOffset não muda e a janela permanece fixa (ZERO pedidos HTTP à rede).
+  const currentWeekWindow = useMemo(() => {
+    return getThreeWeeksWindowIso(dayOffset);
+  }, [currentWeekMondayOffset]);
+
+  // Se o utilizador tiver definido um intervalo personalizado no filtro do cabeçalho,
+  // esse intervalo tem prioridade. Caso contrário, usa a janela de 3 semanas.
+  const effectiveRangeStartIso = useMemo(() => {
+    if (queryStartDate && queryEndDate) return queryStartDate;
+    let start = currentWeekWindow.startIso;
+    if (copyPickerIsoDate && copyPickerIsoDate < start) {
+      start = copyPickerIsoDate;
     }
-  }, [queryStartDate, queryEndDate]);
+    return start;
+  }, [queryStartDate, queryEndDate, currentWeekWindow.startIso, copyPickerIsoDate]);
 
-  // Se o utilizador navegar para uma data fora do intervalo já carregado, expandir a janela
-  useEffect(() => {
-    const targetIso = dayInfo.isoDate;
-    const copyIso = copyPickerIsoDate;
+  const effectiveRangeEndIso = useMemo(() => {
+    if (queryStartDate && queryEndDate) return queryEndDate;
+    let end = currentWeekWindow.endIso;
+    if (copyPickerIsoDate && copyPickerIsoDate > end) {
+      end = copyPickerIsoDate;
+    }
+    return end;
+  }, [queryStartDate, queryEndDate, currentWeekWindow.endIso, copyPickerIsoDate]);
 
-    setLoadedRange((prev) => {
-      let newStart = prev.start;
-      let newEnd = prev.end;
+  // Carregamento consolidado de arranque: 1 único pedido HTTP que traz todo o estado de uma só vez
+  const { data: bootstrapData, isLoading: isBootstrapLoading } = useDashboardBootstrap(
+    effectiveRangeStartIso,
+    effectiveRangeEndIso
+  );
 
-      if (targetIso < newStart) {
-        const targetOffset = getOffsetFromIsoDate(targetIso);
-        newStart = getIsoDateFromOffset(targetOffset - 7);
-      }
-      if (targetIso > newEnd) {
-        const targetOffset = getOffsetFromIsoDate(targetIso);
-        newEnd = getIsoDateFromOffset(targetOffset + 14);
-      }
+  const assistantsList = bootstrapData?.assistants?.data || [];
+  const schedulesList = bootstrapData?.schedules || [];
+  const absencesRes = bootstrapData?.absences;
+  const scheduleRules = bootstrapData?.schedule_rules || [];
+  const activityTypes = bootstrapData?.activity_types || [];
+  const calendarDays = bootstrapData?.operating_calendar || [];
+  const operatingRules = bootstrapData?.operating_rules || [];
+  const operatingExceptions = bootstrapData?.operating_exceptions || [];
+  const holidays = bootstrapData?.holidays || [];
+  const temporaryAssignments = bootstrapData?.temporary_assignments || [];
 
-      if (copyIso) {
-        if (copyIso < newStart) newStart = copyIso;
-        if (copyIso > newEnd) newEnd = copyIso;
-      }
-
-      if (newStart === prev.start && newEnd === prev.end) {
-        return prev;
-      }
-
-      return { start: newStart, end: newEnd };
-    });
-  }, [dayInfo.isoDate, copyPickerIsoDate]);
-
-  const effectiveRangeStartIso = loadedRange.start;
-  const effectiveRangeEndIso = loadedRange.end;
-
-  const { data: assistantsList = [], isLoading: isLoadingAssistants } =
-    useAssistantsList();
-  const { data: schedulesList = [], isLoading: isLoadingSchedules } =
-    useSchedulesList({
-      start_date: effectiveRangeStartIso,
-      end_date: effectiveRangeEndIso,
-      per_page: 200,
-    });
-  const { data: absencesRes, isLoading: isLoadingAbsences } = useAbsencesList({
-    start_date: effectiveRangeStartIso,
-    end_date: effectiveRangeEndIso,
-    per_page: 200,
-  });
-  const { data: scheduleRules = [] } = useScheduleRulesList();
-  const { data: activityTypes = [] } = useActivityTypesList();
-  const { data: calendarDays = [], isLoading: isLoadingCalendar } =
-    useOperatingCalendar(effectiveRangeStartIso, effectiveRangeEndIso);
-  const { data: operatingRules = [], isLoading: isLoadingOperatingRules } =
-    useOperatingRules();
-  const {
-    data: operatingExceptions = [],
-    isLoading: isLoadingOperatingExceptions,
-  } = useOperatingExceptions();
-  const { data: holidays = [], isLoading: isLoadingHolidays } =
-    useHolidaysList();
-  const { data: temporaryAssignments = [] } =
-    useAssistantTemporaryAssignmentsList({
-      start_date: effectiveRangeStartIso,
-      end_date: effectiveRangeEndIso,
-    });
-
-  const isOperatingLoading =
-    isLoadingCalendar ||
-    isLoadingOperatingRules ||
-    isLoadingOperatingExceptions ||
-    isLoadingHolidays;
-
-  const isDayLoading =
-    isOperatingLoading ||
-    isLoadingSchedules ||
-    isLoadingAssistants ||
-    isLoadingAbsences;
+  const isOperatingLoading = false;
+  const isDayLoading = isBootstrapLoading && assistantsList.length === 0;
 
   const operatingSources = useMemo(
     () => ({
@@ -419,41 +386,22 @@ const [publishModalState, setPublishModalState] = useState<{
     return list;
   }, [assistantsList, temporaryAssignments, schedulesList, selectedSchoolId]);
 
-  // Consulta otimizada em lote de todos os horários e exceções da escola ativa (evita N pedidos HTTP)
-  const { data: allAssistantSchedules = [] } = useAllAssistantSchedules();
-  const { data: allAssistantExceptions = [] } = useAllAssistantExceptions();
-
+  // Perfis de horário e exceções vêm diretamente incorporados na lista de assistentes
   const profilesByAssistant = useMemo(() => {
     const map: Record<string, AssistantScheduleProfileApi[]> = {};
     activeAssistants.forEach((a) => {
-      map[String(a.id)] = [];
-    });
-    allAssistantSchedules.forEach((p) => {
-      const aid = String(p.assistant_id);
-      if (map[aid]) {
-        map[aid].push(p);
-      } else {
-        map[aid] = [p];
-      }
+      map[String(a.id)] = (a as any).schedule_profiles || [];
     });
     return map;
-  }, [activeAssistants, allAssistantSchedules]);
+  }, [activeAssistants]);
 
   const exceptionsByAssistant = useMemo(() => {
     const map: Record<string, AssistantExceptionApi[]> = {};
     activeAssistants.forEach((a) => {
-      map[String(a.id)] = [];
-    });
-    allAssistantExceptions.forEach((e) => {
-      const aid = String(e.assistant_id);
-      if (map[aid]) {
-        map[aid].push(e);
-      } else {
-        map[aid] = [e];
-      }
+      map[String(a.id)] = (a as any).assistant_exceptions || [];
     });
     return map;
-  }, [activeAssistants, allAssistantExceptions]);
+  }, [activeAssistants]);
 
   const dayRulesCatalog: DayRuleConfig[] = useMemo(() => {
     return scheduleRules.map((rule) => {
@@ -649,6 +597,113 @@ const [publishModalState, setPublishModalState] = useState<{
     return buildApiMatrixForOffset(offset);
   }
 
+  // Resolução de conflitos de sincronização
+  function resolveConflictKeepDraft(offset: number) {
+    const conflict = conflictsByDay[offset];
+    if (conflict?.freshServerMatrix) {
+      baselineMatricesRef.current[offset] = cloneMatrix(conflict.freshServerMatrix);
+    }
+    setConflictsByDay((prev) => {
+      const copy = { ...prev };
+      delete copy[offset];
+      return copy;
+    });
+    notify.info(
+      "Rascunho mantido. As suas alterações locais prevalecerão ao gravar.",
+      "Rascunho Preservado"
+    );
+  }
+
+  function resolveConflictUseServer(offset: number) {
+    delete baselineMatricesRef.current[offset];
+    discardDayDraft(offset);
+    setConflictsByDay((prev) => {
+      const copy = { ...prev };
+      delete copy[offset];
+      return copy;
+    });
+    notify.info(
+      "Grelha atualizada com os dados mais recentes do servidor.",
+      "Sincronização Concluída"
+    );
+  }
+
+  // Deteção cirúrgica de conflitos entre o servidor (heartbeat periódico) e rascunhos locais
+  useEffect(() => {
+    if (!bootstrapData) return;
+
+    setDraftMatricesByDay((prevDrafts) => {
+      const draftOffsets = Object.keys(prevDrafts).map(Number);
+      if (draftOffsets.length === 0) return prevDrafts;
+
+      let draftsChanged = false;
+      const nextDrafts = { ...prevDrafts };
+
+      draftOffsets.forEach((offset) => {
+        const baseline = baselineMatricesRef.current[offset];
+        if (!baseline) return;
+
+        const currentDraft = prevDrafts[offset];
+        if (!currentDraft) return;
+
+        const info = getDateInfo(offset);
+        const status = getStatusForIsoDate(info.isoDate);
+        const { matrix: freshServerMatrix } = buildDayMatrixFromApi({
+          isoDate: info.isoDate,
+          isOpen: status.isOpen,
+          assistants: activeAssistants,
+          schedules: bootstrapData.schedules || [],
+          absences: bootstrapData.absences?.data || [],
+          lunchBlocksForDate: lunchBlocksByDate[info.isoDate],
+          profilesByAssistant,
+          exceptionsByAssistant,
+        });
+
+        const collidingAssistants: string[] = [];
+
+        activeAssistants.forEach((ast) => {
+          const aid = ast.id;
+          const draftRow = currentDraft[aid];
+          const baseRow = baseline[aid];
+          const serverRow = freshServerMatrix[aid];
+
+          const userEdited = !areRowsEqual(draftRow, baseRow);
+          const serverChanged = !areRowsEqual(serverRow, baseRow);
+
+          if (serverChanged) {
+            if (userEdited) {
+              collidingAssistants.push(ast.name);
+            } else {
+              // Aplicação cirúrgica e silenciosa: o utilizador não mexeu neste assistente
+              if (!draftsChanged) {
+                nextDrafts[offset] = cloneMatrix(nextDrafts[offset]);
+              }
+              nextDrafts[offset][aid] = [...(serverRow || Array(96).fill("off"))];
+              baseline[aid] = [...(serverRow || Array(96).fill("off"))];
+              draftsChanged = true;
+            }
+          }
+        });
+
+        if (collidingAssistants.length > 0) {
+          setConflictsByDay((prev) => ({
+            ...prev,
+            [offset]: { assistantNames: collidingAssistants, freshServerMatrix },
+          }));
+        } else {
+          setConflictsByDay((prev) => {
+            if (!prev[offset]) return prev;
+            const copy = { ...prev };
+            delete copy[offset];
+            return copy;
+          });
+        }
+      });
+
+      return draftsChanged ? nextDrafts : prevDrafts;
+    });
+  }, [bootstrapData, activeAssistants]);
+
   const baseDayMatrix = useMemo(
     () => (savedMatricesByDay[dayOffset] ? savedMatricesByDay[dayOffset] : currentDayApiData.matrix),
     [savedMatricesByDay, dayOffset, currentDayApiData]
@@ -743,6 +798,9 @@ const [publishModalState, setPublishModalState] = useState<{
 
   function paintSlot(aid: EntityId, slot: number) {
     if (!canEditCurrentDay) return;
+    if (!baselineMatricesRef.current[dayOffset]) {
+      baselineMatricesRef.current[dayOffset] = cloneMatrix(baseDayMatrix);
+    }
     setDraftMatricesByDay((prev) => {
       const currentDayMat = prev[dayOffset] ?? baseDayMatrix;
       const nextDayMat = cloneMatrix(currentDayMat);
@@ -798,6 +856,13 @@ const [publishModalState, setPublishModalState] = useState<{
   }
 
   function discardDayDraft(offsetToDiscard: number) {
+    delete baselineMatricesRef.current[offsetToDiscard];
+    setConflictsByDay((prev) => {
+      if (!prev[offsetToDiscard]) return prev;
+      const copy = { ...prev };
+      delete copy[offsetToDiscard];
+      return copy;
+    });
     setDraftMatricesByDay((prev) => {
       const copy = { ...prev };
       delete copy[offsetToDiscard];
@@ -920,6 +985,10 @@ const [publishModalState, setPublishModalState] = useState<{
         nextTargetDraft[a.id] = [...effectiveSourceTasks];
       }
     });
+
+    if (!baselineMatricesRef.current[targetOffset]) {
+      baselineMatricesRef.current[targetOffset] = cloneMatrix(getCommittedMatrixForDay(targetOffset));
+    }
 
     setDraftMatricesByDay((prev) => ({
       ...prev,
@@ -1505,6 +1574,8 @@ const [publishModalState, setPublishModalState] = useState<{
       }));
       setDraftMatricesByDay({});
       setDraftSlotMetaByDay({});
+      setConflictsByDay({});
+      baselineMatricesRef.current = {};
       setShowFinishModal(false);
       setEditMode(false);
       setIsPainting(false);
@@ -2646,6 +2717,42 @@ const [publishModalState, setPublishModalState] = useState<{
           /* CASE 3: SCHOOL IS OPEN AND SCHEDULE EXISTS (OR IN EDIT MODE)        */
           /* =================================================================== */
           <>
+            {/* Conflict Detection Banner */}
+            {conflictsByDay[dayOffset] && (
+              <div className="px-4 py-3 bg-[#FEF3C7] dark:bg-amber-950/40 border-b border-amber-500/40 flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">
+                      Conflito de Sincronização Detetado
+                    </p>
+                    <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                      Foram detetadas alterações no servidor que colidem com as suas edições em curso
+                      {conflictsByDay[dayOffset].assistantNames.length > 0 &&
+                        ` (${conflictsByDay[dayOffset].assistantNames.join(", ")})`}
+                      .
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => resolveConflictKeepDraft(dayOffset)}
+                    className="px-2.5 py-1.5 rounded-md border border-amber-500/40 bg-card hover:bg-muted text-xs font-medium text-foreground transition-colors cursor-pointer"
+                  >
+                    Manter Rascunho
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => resolveConflictUseServer(dayOffset)}
+                    className="px-2.5 py-1.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium transition-colors cursor-pointer"
+                  >
+                    Atualizar com Dados do Servidor
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Past day read-only notice */}
             {isPastDay && (
               <div className="px-4 py-2.5 bg-[#FEF9EC] dark:bg-amber-950/30 border-b border-[#D97706]/30 flex items-center justify-between gap-3 flex-wrap">
@@ -3564,7 +3671,10 @@ const [publishModalState, setPublishModalState] = useState<{
               type="button"
               onClick={() => {
                 setDraftMatricesByDay({});
+                setDraftSlotMetaByDay({});
                 setCopiedFromByDay({});
+                setConflictsByDay({});
+                baselineMatricesRef.current = {};
                 setShowFinishModal(false);
                 setEditMode(false);
               }}
@@ -3635,6 +3745,8 @@ const [publishModalState, setPublishModalState] = useState<{
                 setDraftMatricesByDay({});
                 setDraftSlotMetaByDay({});
                 setCopiedFromByDay({});
+                setConflictsByDay({});
+                baselineMatricesRef.current = {};
                 setShowDiscardConfirmModal(false);
                 setEditMode(false);
                 setIsPainting(false);

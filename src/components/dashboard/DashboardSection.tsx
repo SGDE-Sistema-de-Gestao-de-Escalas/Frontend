@@ -18,6 +18,7 @@ import MonthDashboardView from "./MonthDashboardView";
 import RecalculateModal from "./RecalculateModal";
 import WeekMatrixView from "./WeekMatrixView";
 import { usePendingRecalculations } from "../../hooks/api/useSchedules";
+import { useDashboardBootstrap } from "../../hooks/api/useDashboardBootstrap";
 import type { GenerateScheduleResponse } from "../../api/services/schedules.service";
 import type { EntityId } from "../../types";
 import {
@@ -25,6 +26,7 @@ import {
   getIsoDateFromOffset,
   getOffsetFromIsoDate,
   getRealMonthsRange,
+  getThreeWeeksWindowIso,
 } from "../../utils/scheduleMatrixUtils";
 
 export type DashViewMode = "day" | "week" | "month";
@@ -32,6 +34,59 @@ export type DashViewMode = "day" | "week" | "month";
 interface DashboardSectionProps {
   onSelectAssistant: (id: EntityId, offset?: number) => void;
   currentSchoolId?: EntityId;
+}
+
+function SyncIndicator({
+  isFetching,
+  dataUpdatedAt,
+  onRefresh,
+}: {
+  isFetching: boolean;
+  dataUpdatedAt: number;
+  onRefresh: () => void;
+}) {
+  const [timeAgoText, setTimeAgoText] = useState("agora mesmo");
+
+  useEffect(() => {
+    function updateText() {
+      if (!dataUpdatedAt) {
+        setTimeAgoText("agora");
+        return;
+      }
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - dataUpdatedAt) / 1000));
+      if (elapsedSeconds < 15) {
+        setTimeAgoText("agora mesmo");
+      } else if (elapsedSeconds < 60) {
+        setTimeAgoText(`há ${elapsedSeconds}s`);
+      } else {
+        const mins = Math.floor(elapsedSeconds / 60);
+        setTimeAgoText(`há ${mins} min`);
+      }
+    }
+
+    updateText();
+    const interval = setInterval(updateText, 5_000);
+    return () => clearInterval(interval);
+  }, [dataUpdatedAt]);
+
+  return (
+    <ActionTooltip content="Sincronização em segundo plano ativa (a cada 2 min). Clique para atualizar agora.">
+      <button
+        type="button"
+        onClick={onRefresh}
+        disabled={isFetching}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground text-xs font-medium transition-colors cursor-pointer disabled:opacity-70"
+      >
+        <RefreshCw
+          size={12}
+          className={isFetching ? "animate-spin text-primary" : "text-muted-foreground"}
+        />
+        <span className="hidden sm:inline">
+          {isFetching ? "A sincronizar..." : `Sincronizado ${timeAgoText}`}
+        </span>
+      </button>
+    </ActionTooltip>
+  );
 }
 
 export default function DashboardSection({
@@ -43,8 +98,9 @@ export default function DashboardSection({
 
   const monthsList = useMemo(() => getRealMonthsRange(3, 6), []);
 
-  const defaultStartIso = useMemo(() => getIsoDateFromOffset(-7), []);
-  const defaultEndIso = useMemo(() => getIsoDateFromOffset(14), []);
+  const initial3Weeks = useMemo(() => getThreeWeeksWindowIso(0), []);
+  const defaultStartIso = initial3Weeks.startIso;
+  const defaultEndIso = initial3Weeks.endIso;
 
   const [queryStartDate, setQueryStartDate] = useState<string>(defaultStartIso);
   const [queryEndDate, setQueryEndDate] = useState<string>(defaultEndIso);
@@ -61,6 +117,12 @@ export default function DashboardSection({
     useState<GenerateScheduleResponse | null>(null);
 
   const { data: pendingRecalculations } = usePendingRecalculations();
+
+  const {
+    isFetching: isSyncing,
+    dataUpdatedAt,
+    refetch: refetchBootstrap,
+  } = useDashboardBootstrap(queryStartDate, queryEndDate);
 
   // Limpar resultados de geração e modais ao mudar de escola
   useEffect(() => {
@@ -183,6 +245,13 @@ export default function DashboardSection({
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Indicador discreto de Sincronização em segundo plano */}
+          <SyncIndicator
+            isFetching={isSyncing}
+            dataUpdatedAt={dataUpdatedAt}
+            onRefresh={() => refetchBootstrap()}
+          />
+
           {/* Date Range Filter (Pedir ao Backend Entre Datas) */}
           <Popover open={rangePopoverOpen} onOpenChange={setRangePopoverOpen}>
             <ActionTooltip content="Definir intervalo de datas a consultar no servidor (padrão: ±1 mês)">

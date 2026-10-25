@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notify } from "../../components/common/FeedbackNotification";
 import absencesService, {
   BackendAbsenceResource,
@@ -24,6 +24,7 @@ export function useAbsencesList(filters?: AbsenceFilterParams) {
     queryFn: async (): Promise<PaginatedAbsencesResult> => {
       return await absencesService.getAll(filters);
     },
+    placeholderData: keepPreviousData,
     enabled: !!selectedSchoolId,
   });
 }
@@ -61,6 +62,7 @@ export function useCreateAbsence() {
     onSuccess: (data: BackendAbsenceResource) => {
       queryClient.invalidateQueries({ queryKey: ABSENCES_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       if (data?.impact?.requires_recalculation) {
         notify.warning(
           `Esta ausência afeta a escala gerada em ${data.impact.affected_dates.length} dia(s). É necessário recalcular o horário.`,
@@ -92,6 +94,7 @@ export function useUpdateAbsence() {
     onSuccess: (data: BackendAbsenceResource) => {
       queryClient.invalidateQueries({ queryKey: ABSENCES_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       if (data?.impact?.requires_recalculation) {
         notify.warning(
           `Esta ausência afeta a escala gerada em ${data.impact.affected_dates.length} dia(s). É necessário recalcular o horário.`,
@@ -128,6 +131,7 @@ export function useUpdateAbsenceStatus() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ABSENCES_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       const isJustified =
         variables.status === "justified" || variables.status === "justificada";
       notify.success(
@@ -190,6 +194,7 @@ export function useDeleteAbsence() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ABSENCES_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("A ausência foi eliminada com sucesso.", "Ausência Eliminada");
     },
     onError: (error: any) => {

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notify } from "../../components/common/FeedbackNotification";
 import schedulesService, {
   type BackendScheduleResource,
@@ -50,6 +50,7 @@ export function useSchedulesList(params?: ListSchedulesParams) {
     queryFn: async (): Promise<BackendScheduleResource[]> => {
       return await schedulesService.getAll(params);
     },
+    placeholderData: keepPreviousData,
     enabled: !!selectedSchoolId,
   });
 }
@@ -66,6 +67,7 @@ export function useGenerateSchedules() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: SCHEDULES_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       if (data.conflicts?.length > 0) {
         notify.warning(
           `Escala gerada com ${data.conflicts.length} ${
@@ -111,6 +113,7 @@ export function usePublishSchedules() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: SCHEDULES_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success(
         `${data.published_schedules_count} ${
           data.published_schedules_count === 1 ? "escala publicada" : "escalas publicadas"
@@ -137,6 +140,7 @@ export function useSaveScheduleDays() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: SCHEDULES_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
     },
   });
 }

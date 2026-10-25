@@ -119,6 +119,7 @@ export function useCreateAssistant() {
     mutationFn: (data: CreateAssistantPayload | FormData) => assistantsService.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("O assistente foi registado com sucesso.", "Assistente Criado");
     },
     onError: (error: any) => {
@@ -139,6 +140,7 @@ export function useUpdateAssistant() {
       assistantsService.update(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({
         queryKey: [...ASSISTANTS_QUERY_KEY, "detail", variables.id],
       });
@@ -207,6 +209,7 @@ export function useToggleAssistantStatus() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ASSISTANTS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({
         queryKey: [...ASSISTANTS_QUERY_KEY, "detail", variables.assistantId],
       });

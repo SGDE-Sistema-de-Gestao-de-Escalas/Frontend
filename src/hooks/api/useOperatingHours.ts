@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notify } from "../../components/common/FeedbackNotification";
 import operatingHoursService from "../../api/services/operatingHours.service";
 import { useSchool } from "../../context/SchoolContext";
@@ -278,6 +278,7 @@ export function useOperatingCalendar(from?: string, to?: string) {
       if (Array.isArray((res as any)?.data)) return (res as any).data;
       return [];
     },
+    placeholderData: keepPreviousData,
     enabled: !!schoolId && !!from && !!to,
   });
 }
