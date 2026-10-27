@@ -261,6 +261,7 @@ export default function AbsenceManagement() {
     setFormAssistantId(String(absence.assistant_id || absence.assistant?.id || ""));
     setFormAbsenceTypeId(String(absence.absence_type_id || absence.absence_type?.id || ""));
     setFormStartDate(formatToIsoDate(absence.valid_from) || todayStr);
+    setFormIsFullDay(!absence.start_time && !absence.end_time);
     setFormStartTime(absence.start_time || "08:00");
     setFormEndDate(formatToIsoDate(absence.valid_until) || todayStr);
     setFormEndTime(absence.end_time || "17:00");
@@ -280,8 +281,8 @@ export default function AbsenceManagement() {
       absence_type_id: formAbsenceTypeId,
       valid_from: formStartDate,
       valid_until: formEndDate,
-      start_time: formStartTime,
-      end_time: formEndTime,
+      start_time: formIsFullDay ? null : formStartTime,
+      end_time: formIsFullDay ? null : formEndTime,
       notes: formNote.trim() || null,
       document_path: formDocumentName.trim() || null,
       document: formDocumentFile,
