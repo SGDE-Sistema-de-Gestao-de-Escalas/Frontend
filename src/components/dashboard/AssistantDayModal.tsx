@@ -29,7 +29,7 @@ interface AssistantDayModalProps {
   lunchBlocksByDate?: Record<string, Record<string, LunchBlockApi>>;
   onClose: () => void;
   onViewProfile: () => void;
-  onMarkAbsence: (assistantName: string) => void;
+  onMarkAbsence: (assistantName: string, dateIso?: string) => void;
 }
 
 export default function AssistantDayModal({
@@ -325,7 +325,7 @@ export default function AssistantDayModal({
             type="button"
             onClick={() => {
               onClose();
-              onMarkAbsence(assistant.name);
+              onMarkAbsence(assistant.name, dayInfo.isoDate);
             }}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-destructive/10 text-destructive border border-destructive/20 text-sm font-medium hover:bg-destructive/20 transition-colors cursor-pointer"
           >

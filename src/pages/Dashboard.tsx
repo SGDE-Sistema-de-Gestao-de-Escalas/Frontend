@@ -13,7 +13,10 @@ export default function Dashboard() {
     id: EntityId;
     dayOffset: number;
   } | null>(null);
-  const [absenceFor, setAbsenceFor] = useState<string | null>(null);
+  const [absenceFor, setAbsenceFor] = useState<{
+    name: string;
+    dateIso?: string;
+  } | null>(null);
   const { currentSchoolId, selectedSchool } = useSchool();
   const navigate = useNavigate();
 
@@ -47,9 +50,9 @@ export default function Dashboard() {
             setSelectedAssistantData(null);
             navigate(aid ? `/profile/${aid}` : "/profile");
           }}
-          onMarkAbsence={(name) => {
+          onMarkAbsence={(name, dateIso) => {
             setSelectedAssistantData(null);
-            setAbsenceFor(name);
+            setAbsenceFor({ name, dateIso });
           }}
         />
       )}
@@ -57,7 +60,8 @@ export default function Dashboard() {
       {/* Quick Absence Modal */}
       {absenceFor !== null && (
         <QuickAbsenceModal
-          assistantName={absenceFor}
+          assistantName={absenceFor.name}
+          initialDate={absenceFor.dateIso}
           onClose={() => setAbsenceFor(null)}
           currentSchoolId={currentSchoolId}
         />

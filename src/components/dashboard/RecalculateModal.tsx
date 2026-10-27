@@ -96,10 +96,24 @@ export default function RecalculateModal({
   }, []);
 
   const [startDate, setStartDate] = useState(initialStartDate || todayIso);
-  const [endDate, setEndDate] = useState(initialEndDate || defaultEndIso);
+  const [endDate, setEndDate] = useState(initialEndDate || initialStartDate || defaultEndIso);
   const [strategy, setStrategy] = useState<"auto" | "fill" | "full">("auto");
   const [respectExceptions, setRespectExceptions] = useState(true);
   const [step, setStep] = useState<"form" | "gap" | "done">("form");
+
+  useEffect(() => {
+    if (open) {
+      const defaultStart = initialStartDate || todayIso;
+      const defaultEnd = initialEndDate || initialStartDate || defaultStart;
+      setStartDate(defaultStart);
+      setEndDate(defaultEnd);
+      setStep("form");
+      setGenerationResult(null);
+      setApprovedTransfers([]);
+      setSelectedSubstituteId(null);
+      setDateErrors({});
+    }
+  }, [open, initialStartDate, initialEndDate, todayIso]);
 
   // Resultado real devolvido pelo motor do Backend
   const [generationResult, setGenerationResult] =

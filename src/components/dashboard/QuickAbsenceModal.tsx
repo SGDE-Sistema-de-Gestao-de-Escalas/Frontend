@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Check, Clock, Loader2, X } from "lucide-react";
 import {
   Dialog,
@@ -20,12 +20,14 @@ import type { EntityId } from "../../types";
 
 interface QuickAbsenceModalProps {
   assistantName: string | null;
+  initialDate?: string;
   onClose: () => void;
   currentSchoolId?: EntityId;
 }
 
 export default function QuickAbsenceModal({
   assistantName,
+  initialDate,
   onClose,
   currentSchoolId = 1,
 }: QuickAbsenceModalProps) {
@@ -35,9 +37,10 @@ export default function QuickAbsenceModal({
   const createAbsenceMutation = useCreateAbsence();
 
   const todayIso = useMemo(() => new Date().toISOString().split("T")[0], []);
-  const [start, setStart] = useState(todayIso);
+  const defaultDate = initialDate || todayIso;
+  const [start, setStart] = useState(defaultDate);
   const [startTime, setStartTime] = useState("08:00");
-  const [end, setEnd] = useState(todayIso);
+  const [end, setEnd] = useState(defaultDate);
   const [endTime, setEndTime] = useState("17:00");
   const [isFullDay, setIsFullDay] = useState(true);
   const [status, setStatus] = useState<"pending" | "justified" | "unjustified">("pending");
@@ -48,6 +51,16 @@ export default function QuickAbsenceModal({
     end?: string;
     type?: string;
   }>({});
+
+  useEffect(() => {
+    if (assistantName) {
+      const d = initialDate || todayIso;
+      setStart(d);
+      setEnd(d);
+      setIsFullDay(true);
+      setDateErrors({});
+    }
+  }, [assistantName, initialDate, todayIso]);
 
   if (!assistantName) return null;
 
