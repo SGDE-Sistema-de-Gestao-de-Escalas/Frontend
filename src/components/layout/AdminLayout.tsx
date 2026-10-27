@@ -82,7 +82,6 @@ export default function AdminLayout({
       <Sidebar
         currentPage={activePage}
         onNavigate={handleNavigate}
-        onSwitchRole={onSwitchRole}
         onLogout={onLogout}
       />
 
@@ -96,8 +95,7 @@ export default function AdminLayout({
             currentPage={activePage}
             onNavigate={handleNavigate}
             onCloseMobile={() => setMobileMenuOpen(false)}
-            onSwitchRole={onSwitchRole}
-            onLogout={onLogout}
+                        onLogout={onLogout}
           />
         </SheetContent>
       </Sheet>
@@ -109,7 +107,6 @@ export default function AdminLayout({
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
           onPlatformSettings={() => handleNavigate("platform-settings")}
           onAccount={() => handleNavigate("account")}
-          onSwitchRole={onSwitchRole}
           onLogout={onLogout}
         />
 

@@ -58,7 +58,6 @@ export default function StaffLayout({
       <Sidebar
         currentPage={activePage}
         onNavigate={handleNavigate}
-        onSwitchRole={onSwitchRole}
         onLogout={onLogout}
       />
 
@@ -72,8 +71,7 @@ export default function StaffLayout({
             currentPage={activePage}
             onNavigate={handleNavigate}
             onCloseMobile={() => setMobileMenuOpen(false)}
-            onSwitchRole={onSwitchRole}
-            onLogout={onLogout}
+                        onLogout={onLogout}
           />
         </SheetContent>
       </Sheet>
@@ -84,7 +82,6 @@ export default function StaffLayout({
           currentPageTitle={currentTitle}
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
           onAccount={() => handleNavigate("account")}
-          onSwitchRole={onSwitchRole}
           onLogout={onLogout}
         />
 

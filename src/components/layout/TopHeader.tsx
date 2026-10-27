@@ -18,7 +18,6 @@ interface TopHeaderProps {
   onOpenMobileMenu?: () => void;
   onPlatformSettings?: () => void;
   onAccount?: () => void;
-  onSwitchRole?: () => void;
   onLogout?: () => void;
 }
 
@@ -108,7 +107,6 @@ export default function TopHeader({
         <AvatarMenu
           onAccount={onAccount}
           onPlatformSettings={onPlatformSettings}
-          onSwitchRole={switchRole}
           onLogout={logout}
         />
       </div>
