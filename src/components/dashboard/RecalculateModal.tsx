@@ -625,7 +625,7 @@ export default function RecalculateModal({
   return (
     <>
       <Dialog open={open} onOpenChange={(val) => !val && handleClose()}>
-        <DialogContent className="max-w-xl max-h-[90vh] flex flex-col p-0 overflow-hidden sm:rounded-xl">
+        <DialogContent className={`${step === "gap" ? "max-w-2xl" : "max-w-xl"} max-h-[90vh] flex flex-col p-0 overflow-hidden sm:rounded-xl transition-all duration-200`}>
         {/* Header com Stepper por baixo dos títulos (idêntico à modal de CSV) */}
         <DialogHeader className="px-6 pt-5 pb-4 border-b border-border bg-card">
           <div className="flex items-center gap-3 pr-8">
@@ -1492,6 +1492,7 @@ export default function RecalculateModal({
                 size="sm"
                 onClick={handleClose}
                 disabled={isRunning}
+                className="cursor-pointer"
               >
                 Cancelar
               </Button>
@@ -1500,18 +1501,15 @@ export default function RecalculateModal({
                 size="sm"
                 disabled={isRunning}
                 onClick={handleRunGeneration}
-                className="gap-2"
+                className="cursor-pointer"
               >
                 {isRunning ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" />
+                    <Loader2 size={14} className="animate-spin mr-1.5" />
                     A calcular escala...
                   </>
                 ) : (
-                  <>
-                    <RefreshCw size={14} />
-                    Executar Geração
-                  </>
+                  "Executar Geração"
                 )}
               </Button>
             </>
@@ -1525,6 +1523,7 @@ export default function RecalculateModal({
                 size="sm"
                 disabled={isRunning}
                 onClick={() => handleAdvanceFromConflict(null)}
+                className="cursor-pointer"
               >
                 {conflicts.length > 1 ? "Saltar este Défice" : "Ignorar Défice e Concluir"}
               </Button>
@@ -1534,18 +1533,15 @@ export default function RecalculateModal({
                 size="sm"
                 onClick={() => selectedSub && handleAdvanceFromConflict(selectedSub)}
                 disabled={!selectedSub || isRunning}
-                className="gap-2"
+                className="cursor-pointer"
               >
                 {isRunning ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" />
+                    <Loader2 size={14} className="animate-spin mr-1.5" />
                     A validar e recalcular...
                   </>
                 ) : (
-                  <>
-                    <Check size={14} />
-                    Confirmar Designação
-                  </>
+                  "Confirmar Designação"
                 )}
               </Button>
             </div>
@@ -1558,6 +1554,7 @@ export default function RecalculateModal({
                 variant="outline"
                 size="sm"
                 onClick={handleClose}
+                className="cursor-pointer"
               >
                 Fechar
               </Button>
@@ -1567,18 +1564,15 @@ export default function RecalculateModal({
                   size="sm"
                   disabled={isPublishing}
                   onClick={handlePublishGeneratedSchedules}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
                 >
                   {isPublishing ? (
                     <>
-                      <Loader2 size={14} className="animate-spin" />
+                      <Loader2 size={14} className="animate-spin mr-1.5" />
                       A publicar...
                     </>
                   ) : (
-                    <>
-                      <Send size={14} />
-                      Publicar Escalas ({generationResult.schedules_count})
-                    </>
+                    `Publicar Escalas (${generationResult.schedules_count})`
                   )}
                 </Button>
               )}
@@ -1616,25 +1610,25 @@ export default function RecalculateModal({
           </p>
         </div>
 
-        <DialogFooter className="px-5 py-3 border-t border-border bg-muted/5 flex items-center justify-end gap-2">
+        <DialogFooter className="px-6 py-4 border-t border-border bg-card flex items-center justify-end gap-2.5">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => setShowPublishOverwriteConfirm(false)}
+            className="cursor-pointer"
           >
             Cancelar
           </Button>
           <Button
             type="button"
             size="sm"
-            className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5"
+            className="bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
             onClick={() => {
               setShowPublishOverwriteConfirm(false);
               executeGeneration();
             }}
           >
-            <RefreshCw size={13} />
             Sim, Recalcular e Tornar Rascunho
           </Button>
         </DialogFooter>

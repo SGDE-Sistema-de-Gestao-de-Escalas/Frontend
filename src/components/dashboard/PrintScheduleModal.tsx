@@ -598,9 +598,8 @@ export default function PrintScheduleModal({
               variant="outline"
               size="sm"
               onClick={handleExportCsv}
-              className="hidden sm:flex items-center gap-1.5 text-xs font-medium border-border text-foreground hover:bg-muted hover:text-foreground cursor-pointer"
+              className="hidden sm:flex items-center text-xs font-medium border-border text-foreground hover:bg-muted hover:text-foreground cursor-pointer"
             >
-              <FileSpreadsheet size={13} className="text-muted-foreground" />
               Descarregar CSV / Excel
             </Button>
           </div>
@@ -884,9 +883,8 @@ export default function PrintScheduleModal({
               variant="outline"
               size="sm"
               onClick={handleExportCsv}
-              className="sm:hidden text-xs"
+              className="sm:hidden text-xs cursor-pointer"
             >
-              <Download size={13} className="mr-1.5" />
               CSV
             </Button>
 
@@ -897,7 +895,6 @@ export default function PrintScheduleModal({
                 onClick={handlePrintWall}
                 className="text-xs font-semibold bg-primary text-primary-foreground shadow-xs cursor-pointer"
               >
-                <Printer size={13} className="mr-1.5" />
                 Imprimir Escala de Afixação
               </Button>
             ) : (
@@ -907,7 +904,6 @@ export default function PrintScheduleModal({
                 onClick={handlePrintIndividual}
                 className="text-xs font-semibold bg-primary text-primary-foreground shadow-xs cursor-pointer"
               >
-                <Printer size={13} className="mr-1.5" />
                 Imprimir Fichas Individuais ({filteredWorkingAssistants.length})
               </Button>
             )}

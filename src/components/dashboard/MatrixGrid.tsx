@@ -50,6 +50,7 @@ import PrintScheduleModal, {
 } from "./PrintScheduleModal";
 import type { Assistant, BlockState, EntityId, ScheduleMatrix } from "../../types";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Checkbox } from "../ui/checkbox";
 import {
@@ -3528,7 +3529,7 @@ const [publishModalState, setPublishModalState] = useState<{
       {/* MODAL 1: COPIAR HORÁRIO ENTRE DIAS (COM DATEPICKER & DIAS FECHADOS)   */}
       {/* ===================================================================== */}
       <Dialog open={showCopyModal} onOpenChange={setShowCopyModal}>
-        <DialogContent className="w-full max-w-md p-0 overflow-visible rounded-xl border border-border bg-card shadow-2xl">
+        <DialogContent className="w-full max-w-lg p-0 overflow-visible rounded-xl border border-border bg-card shadow-2xl">
           <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10">
             <DialogTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Copy size={15} className="text-primary" />
@@ -3668,25 +3669,27 @@ const [publishModalState, setPublishModalState] = useState<{
             </div>
           </div>
 
-          <DialogFooter className="px-5 py-3 border-t border-border bg-muted/5">
-            <button
+          <DialogFooter className="px-6 py-4 border-t border-border bg-card flex items-center justify-end gap-2.5">
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setShowCopyModal(false)}
-              className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+              className="cursor-pointer text-xs"
             >
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              size="sm"
               disabled={!copyPickerIsoDate || !copyPickerStatus?.isOpen}
               onClick={handleConfirmCopySchedule}
-              className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors flex items-center gap-1.5"
+              className="cursor-pointer text-xs"
             >
-              <Copy size={12} />
               {copyDirection === "to_future"
                 ? "Copiar para Dia Selecionado"
                 : "Copiar para Este Dia"}
-            </button>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3695,8 +3698,8 @@ const [publishModalState, setPublishModalState] = useState<{
       {/* MODAL 2: VALIDAÇÃO E CONFIRMAÇÃO AO CONCLUIR EDIÇÃO                   */}
       {/* ===================================================================== */}
       <Dialog open={showFinishModal} onOpenChange={setShowFinishModal}>
-        <DialogContent className="w-full max-w-lg p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-          <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10">
+        <DialogContent className="w-full max-w-2xl p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+          <DialogHeader className="px-6 py-4 border-b border-border bg-muted/10">
             <DialogTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
               <CheckCircle2 size={16} className="text-primary" />
               Confirmar e Guardar Alterações de Escala
@@ -3772,9 +3775,8 @@ const [publishModalState, setPublishModalState] = useState<{
                       <button
                         type="button"
                         onClick={() => discardDayDraft(item.offset)}
-                        className="text-[11px] text-destructive hover:underline flex items-center gap-1 cursor-pointer"
+                        className="text-[11px] text-destructive hover:underline cursor-pointer"
                       >
-                        <Trash2 size={11} />
                         Descartar este dia
                       </button>
                     </ActionTooltip>
@@ -3814,9 +3816,11 @@ const [publishModalState, setPublishModalState] = useState<{
             )}
           </div>
 
-          <DialogFooter className="px-5 py-3 border-t border-border bg-muted/5 flex items-center justify-between gap-2">
-            <button
+          <DialogFooter className="px-6 py-4 border-t border-border bg-card flex items-center justify-between gap-3 w-full">
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => {
                 setDraftMatricesByDay({});
                 setDraftSlotMetaByDay({});
@@ -3826,37 +3830,38 @@ const [publishModalState, setPublishModalState] = useState<{
                 setShowFinishModal(false);
                 setEditMode(false);
               }}
-              className="px-3 py-1.5 rounded-lg border border-destructive/30 text-xs text-destructive hover:bg-destructive/10 transition-colors"
+              className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive whitespace-nowrap cursor-pointer text-xs"
             >
               Descartar Tudo e Sair
-            </button>
-            <div className="flex items-center gap-2">
-              <button
+            </Button>
+            <div className="flex items-center gap-2.5 flex-shrink-0">
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => setShowFinishModal(false)}
-                className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="whitespace-nowrap cursor-pointer text-xs"
               >
                 Continuar a Editar
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                size="sm"
                 onClick={handleConfirmSaveAllEdits}
                 disabled={modifiedDaysSummary.length === 0 || saveDaysMutation.isPending}
-                className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="whitespace-nowrap cursor-pointer text-xs"
               >
                 {saveDaysMutation.isPending ? (
-                  <Loader2 size={13} className="animate-spin" />
+                  <>
+                    <Loader2 size={13} className="animate-spin mr-1.5" />
+                    A gravar...
+                  </>
+                ) : hasAnyIncompleteWarnings ? (
+                  `Guardar Rascunho Mesmo Assim (${modifiedDaysSummary.length})`
                 ) : (
-                  <Check size={13} />
+                  `Guardar Rascunho e Sair (${modifiedDaysSummary.length})`
                 )}
-                <span>
-                  {saveDaysMutation.isPending
-                    ? "A gravar..."
-                    : hasAnyIncompleteWarnings
-                    ? `Guardar Rascunho Mesmo Assim (${modifiedDaysSummary.length})`
-                    : `Guardar Rascunho e Sair (${modifiedDaysSummary.length})`}
-                </span>
-              </button>
+              </Button>
             </div>
           </DialogFooter>
         </DialogContent>
@@ -3879,16 +3884,20 @@ const [publishModalState, setPublishModalState] = useState<{
               concluir a edição, todas as alterações pendentes serão perdidas.
             </p>
           </DialogHeader>
-          <DialogFooter className="px-5 py-3 border-t border-border bg-muted/5 flex items-center justify-end gap-2">
-            <button
+          <DialogFooter className="px-6 py-4 border-t border-border bg-card flex items-center justify-end gap-2.5">
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setShowDiscardConfirmModal(false)}
-              className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              className="cursor-pointer text-xs"
             >
               Continuar a Editar
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="destructive"
+              size="sm"
               onClick={() => {
                 setDraftMatricesByDay({});
                 setDraftSlotMetaByDay({});
@@ -3901,10 +3910,10 @@ const [publishModalState, setPublishModalState] = useState<{
                 setPaintAid(null);
                 notify.info("Alterações descartadas.", "Edição Cancelada");
               }}
-              className="px-3.5 py-1.5 rounded-lg bg-destructive text-destructive-foreground text-xs font-medium hover:bg-destructive/90 transition-colors cursor-pointer"
+              className="cursor-pointer text-xs"
             >
               Descartar e Sair
-            </button>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

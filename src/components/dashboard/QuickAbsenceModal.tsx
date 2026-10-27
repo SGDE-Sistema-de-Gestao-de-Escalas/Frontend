@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Check, Clock, Loader2, X } from "lucide-react";
+import { Button } from "../ui/button";
 import {
   Dialog,
   DialogContent,
@@ -312,29 +313,32 @@ export default function QuickAbsenceModal({
               className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring resize-none placeholder:text-muted-foreground/50"
             />
           </div>
-
-          <DialogFooter>
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={createAbsenceMutation.isPending}
-              className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={submit}
-              disabled={createAbsenceMutation.isPending}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs disabled:opacity-50"
-            >
-              {createAbsenceMutation.isPending && (
-                <Loader2 size={13} className="animate-spin" />
-              )}
-              Registar Ausência
-            </button>
-          </DialogFooter>
         </div>
+
+        <DialogFooter className="px-6 py-4 border-t border-border bg-card flex items-center justify-end gap-2.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            disabled={createAbsenceMutation.isPending}
+            className="cursor-pointer text-xs"
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={submit}
+            disabled={createAbsenceMutation.isPending}
+            className="cursor-pointer text-xs"
+          >
+            {createAbsenceMutation.isPending && (
+              <Loader2 size={13} className="animate-spin mr-1.5" />
+            )}
+            Registar Ausência
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

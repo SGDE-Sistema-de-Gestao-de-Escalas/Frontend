@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { Eye, Loader2, Lock, UserX } from "lucide-react";
 import type { BlockState, EntityId } from "../../types";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "../ui/sheet";
 import { BLOCK_STYLES, formatDurationSlots, slotsToBlocks, TIME_SLOTS } from "./blockStyles";
 import { useAssistantsList } from "../../hooks/api/useAssistants";
@@ -320,29 +321,31 @@ export default function AssistantDayModal({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-border space-y-2 bg-muted/10">
-          <button
+        <div className="px-6 py-4 border-t border-border space-y-2 bg-card">
+          <Button
             type="button"
+            variant="outline"
+            size="default"
             onClick={() => {
               onClose();
               onMarkAbsence(assistant.name, dayInfo.isoDate);
             }}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-destructive/10 text-destructive border border-destructive/20 text-sm font-medium hover:bg-destructive/20 transition-colors cursor-pointer"
+            className="w-full text-destructive border-destructive/20 hover:bg-destructive/10 hover:text-destructive cursor-pointer"
           >
-            <UserX size={14} />
             Marcar Falta
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="default"
+            size="default"
             onClick={() => {
               onClose();
               onViewProfile();
             }}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors cursor-pointer"
+            className="w-full cursor-pointer"
           >
-            <Eye size={14} />
             Ver Perfil Completo
-          </button>
+          </Button>
         </div>
       </SheetContent>
     </Sheet>

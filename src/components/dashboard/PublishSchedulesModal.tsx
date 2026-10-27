@@ -1684,10 +1684,9 @@ export default function PublishSchedulesModal({
                 variant="outline"
                 size="sm"
                 onClick={() => setPreviewDate(null)}
-                className="gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
               >
-                <ArrowLeft size={13} />
-                <span>Voltar à lista</span>
+                Voltar à lista
               </Button>
             )}
           </div>
@@ -1710,18 +1709,15 @@ export default function PublishSchedulesModal({
                 size="sm"
                 disabled={selectedDates.length === 0 || isPublishing}
                 onClick={handleConfirmPublish}
-                className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 font-medium cursor-pointer"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 font-medium cursor-pointer"
               >
                 {isPublishing ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" />
+                    <Loader2 size={14} className="animate-spin mr-1.5" />
                     A publicar...
                   </>
                 ) : (
-                  <>
-                    <Send size={14} />
-                    Publicar {selectedDates.length} {selectedDates.length === 1 ? "Dia" : "Dias"}
-                  </>
+                  `Publicar ${selectedDates.length} ${selectedDates.length === 1 ? "Dia" : "Dias"}`
                 )}
               </Button>
             )}
