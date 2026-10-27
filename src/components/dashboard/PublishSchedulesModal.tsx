@@ -48,6 +48,10 @@ import {
   TIME_SLOTS,
   AssistantScheduleProfileApi,
   AssistantExceptionApi,
+  resolveSchoolDayStatusByIsoDate,
+  buildTimelineHourSegments,
+  timeToSlotIndex,
+  type OperatingStatusSources,
 } from "../../utils/scheduleMatrixUtils";
 import { useAllAssistantSchedules } from "../../hooks/api/useAssistantSchedules";
 import { useAllAssistantExceptions } from "../../hooks/api/useAssistantExceptions";
@@ -64,6 +68,7 @@ interface PublishSchedulesModalProps {
   onSuccess?: () => void;
   profilesByAssistant?: Record<string, AssistantScheduleProfileApi[]>;
   exceptionsByAssistant?: Record<string, AssistantExceptionApi[]>;
+  operatingSources?: OperatingStatusSources;
 }
 
 interface DraftWeekGroup {
@@ -160,13 +165,18 @@ function getDayScheduleDetails(
   temporaryAssignments: AssistantTemporaryAssignmentApi[] = [],
   selectedSchoolId?: string | number,
   profilesByAssistant?: Record<string, AssistantScheduleProfileApi[]>,
-  exceptionsByAssistant?: Record<string, AssistantExceptionApi[]>
+  exceptionsByAssistant?: Record<string, AssistantExceptionApi[]>,
+  operatingSources?: OperatingStatusSources
 ): {
   assistants: AssistantDaySchedule[];
   totalEntries: number;
 } {
   const assistantsMap = new Map<string, AssistantDaySchedule>();
   let totalEntries = 0;
+
+  const schoolStatus = resolveSchoolDayStatusByIsoDate(isoDate, operatingSources);
+  const dayViewStartSlot = schoolStatus.viewStartSlot ?? 30;
+  const dayViewEndSlot = schoolStatus.viewEndSlot ?? 76;
 
   // Agrupar todas as entradas por assistente para esta data
   const entriesByAssistant = new Map<string, any[]>();
@@ -280,8 +290,8 @@ function getDayScheduleDetails(
         assistantId: aId,
         isoDate,
         dow,
-        viewStartSlot: 30, // 07:30
-        viewEndSlot: 76,   // 19:00
+        viewStartSlot: dayViewStartSlot,
+        viewEndSlot: dayViewEndSlot,
         profiles: aProfiles,
         exceptions: aExceptions,
         schedulesList: schedules,
@@ -429,8 +439,8 @@ function getDayScheduleDetails(
         assistantId: aId,
         isoDate,
         dow,
-        viewStartSlot: 30, // 07:30
-        viewEndSlot: 76,   // 19:00
+        viewStartSlot: dayViewStartSlot,
+        viewEndSlot: dayViewEndSlot,
         profiles: aProfiles,
         exceptions: aExceptions,
         schedulesList: schedules,
@@ -490,7 +500,8 @@ function validateDayForPublish(
   temporaryAssignments: AssistantTemporaryAssignmentApi[] = [],
   selectedSchoolId?: string | number,
   profilesByAssistant?: Record<string, AssistantScheduleProfileApi[]>,
-  exceptionsByAssistant?: Record<string, AssistantExceptionApi[]>
+  exceptionsByAssistant?: Record<string, AssistantExceptionApi[]>,
+  operatingSources?: OperatingStatusSources
 ): {
   canPublish: boolean;
   isPast: boolean;
@@ -498,6 +509,10 @@ function validateDayForPublish(
   reason: string | null;
   reasons: string[];
 } {
+  const schoolStatus = resolveSchoolDayStatusByIsoDate(isoDate, operatingSources);
+  const dayViewStartSlot = schoolStatus.viewStartSlot ?? 30;
+  const dayViewEndSlot = schoolStatus.viewEndSlot ?? 76;
+
   const today = new Date();
   const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const isPast = isoDate < todayIso;
@@ -639,8 +654,8 @@ function validateDayForPublish(
         assistantId: astId,
         isoDate,
         dow,
-        viewStartSlot: 30,
-        viewEndSlot: 76,
+        viewStartSlot: dayViewStartSlot,
+        viewEndSlot: dayViewEndSlot,
         profiles: aProfiles,
         exceptions: aExceptions,
         schedulesList: schedules,
@@ -731,6 +746,7 @@ export default function PublishSchedulesModal({
   onSuccess,
   profilesByAssistant: profilesByAssistantProp,
   exceptionsByAssistant: exceptionsByAssistantProp,
+  operatingSources,
 }: PublishSchedulesModalProps) {
   const { data: allAssistantSchedules = [] } = useAllAssistantSchedules();
   const { data: allAssistantExceptions = [] } = useAllAssistantExceptions();
@@ -786,11 +802,12 @@ export default function PublishSchedulesModal({
         temporaryAssignments,
         selectedSchoolId,
         computedProfilesByAssistant,
-        computedExceptionsByAssistant
+        computedExceptionsByAssistant,
+        operatingSources
       );
     });
     return map;
-  }, [draftDays, schedules, assistants, absences, temporaryAssignments, selectedSchoolId, computedProfilesByAssistant, computedExceptionsByAssistant]);
+  }, [draftDays, schedules, assistants, absences, temporaryAssignments, selectedSchoolId, computedProfilesByAssistant, computedExceptionsByAssistant, operatingSources]);
 
   const publishableDates = useMemo(
     () =>
@@ -915,7 +932,8 @@ export default function PublishSchedulesModal({
       temporaryAssignments,
       selectedSchoolId,
       computedProfilesByAssistant,
-      computedExceptionsByAssistant
+      computedExceptionsByAssistant,
+      operatingSources
     );
   }, [
     previewDate,
@@ -926,6 +944,7 @@ export default function PublishSchedulesModal({
     selectedSchoolId,
     computedProfilesByAssistant,
     computedExceptionsByAssistant,
+    operatingSources,
   ]);
 
   const previewSummary = useMemo(() => {
@@ -944,60 +963,49 @@ export default function PublishSchedulesModal({
       ? draftDays[currentPreviewIndex + 1].isoDate
       : null;
 
-  // Régua de horários e limites dinâmicos para a timeline do dia
-  const timelineRange = useMemo(() => {
-    if (!previewDetails || previewDetails.assistants.length === 0) {
+  // Janela de funcionamento da escola para o dia em pré-visualização (alinhado rigorosamente com o Dashboard)
+  const previewSchoolStatus = useMemo(() => {
+    if (!previewDate) {
       return {
-        startHour: 7,
-        endHour: 19,
-        minM: 7 * 60,
-        maxM: 19 * 60,
-        totalMinutes: 12 * 60,
-        hours: [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+        viewStartSlot: 30,
+        viewEndSlot: 76,
+        operatingWindowStr: "07:30–19:00",
       };
     }
-
-    let minMinutes = 7 * 60; // 07:00 base
-    let maxMinutes = 19 * 60; // 19:00 base
-
-    previewDetails.assistants.forEach((ast) => {
-      if (ast.shiftStart) {
-        const sm = parseTimeToMinutes(ast.shiftStart);
-        if (sm < minMinutes) minMinutes = Math.floor(sm / 60) * 60;
-      }
-      if (ast.shiftEnd) {
-        const em = parseTimeToMinutes(ast.shiftEnd);
-        if (em > maxMinutes) maxMinutes = Math.ceil(em / 60) * 60;
-      }
-      ast.entries.forEach((e) => {
-        const sm = parseTimeToMinutes(e.startTime);
-        const em = parseTimeToMinutes(e.endTime);
-        if (sm < minMinutes) minMinutes = Math.floor(sm / 60) * 60;
-        if (em > maxMinutes) maxMinutes = Math.ceil(em / 60) * 60;
-      });
-    });
-
-    if (maxMinutes - minMinutes < 8 * 60) {
-      maxMinutes = minMinutes + 8 * 60;
-    }
-
-    const startHour = Math.floor(minMinutes / 60);
-    const endHour = Math.ceil(maxMinutes / 60);
-    const totalMinutes = (endHour - startHour) * 60;
-    const hours = Array.from(
-      { length: endHour - startHour + 1 },
-      (_, i) => startHour + i
-    );
-
+    const status = resolveSchoolDayStatusByIsoDate(previewDate, operatingSources);
+    const startSlot = status.viewStartSlot ?? 30;
+    const endSlot = status.viewEndSlot ?? 76;
+    const windowStr = `${TIME_SLOTS[startSlot] ?? "07:30"}–${TIME_SLOTS[endSlot] ?? "19:00"}`;
     return {
-      startHour,
-      endHour,
-      minM: startHour * 60,
-      maxM: endHour * 60,
-      totalMinutes,
-      hours,
+      ...status,
+      viewStartSlot: startSlot,
+      viewEndSlot: endSlot,
+      operatingWindowStr: windowStr,
     };
-  }, [previewDetails]);
+  }, [previewDate, operatingSources]);
+
+  const viewStartSlot = previewSchoolStatus.viewStartSlot;
+  const viewEndSlot = previewSchoolStatus.viewEndSlot;
+  const viewSlotsCount = Math.max(1, viewEndSlot - viewStartSlot);
+
+  // Segmentos horários dinâmicos baseados no horário de funcionamento (idêntico ao Dashboard)
+  const hourSegments = useMemo(
+    () => buildTimelineHourSegments(viewStartSlot, viewEndSlot),
+    [viewStartSlot, viewEndSlot]
+  );
+
+  function getTimeRangePct(startTime: string, endTime: string): { leftPct: number; widthPct: number } {
+    const s = timeToSlotIndex(startTime);
+    const e = timeToSlotIndex(endTime);
+    const clipStart = Math.max(s, viewStartSlot);
+    const clipEnd = Math.min(e, viewEndSlot);
+    if (clipEnd <= clipStart) {
+      return { leftPct: 0, widthPct: 0 };
+    }
+    const leftPct = ((clipStart - viewStartSlot) / viewSlotsCount) * 100;
+    const widthPct = ((clipEnd - clipStart) / viewSlotsCount) * 100;
+    return { leftPct, widthPct };
+  }
 
   // Lista de atividades únicas presentes no dia para a legenda
   const dayActivities = useMemo(() => {
@@ -1111,46 +1119,36 @@ export default function PublishSchedulesModal({
 
         {/* Coluna da Linha do Tempo / Escala */}
         <div className="relative flex-1 h-12 px-0 flex items-center bg-muted/5">
-          {/* Linhas verticais guia de cada hora */}
-          {timelineRange.hours.map((hour) => {
-            const leftPct =
-              ((hour - timelineRange.startHour) /
-                (timelineRange.endHour - timelineRange.startHour)) *
-              100;
-            return (
+          {/* Linhas verticais guia da janela de funcionamento da escola */}
+          <div className="absolute inset-0 flex pointer-events-none">
+            {hourSegments.map((seg) => (
               <div
-                key={hour}
-                className="absolute top-0 bottom-0 border-l border-dashed border-border/25 pointer-events-none"
-                style={{ left: `${leftPct}%` }}
+                key={seg.startSlot}
+                className="flex-none h-full border-r border-border/30 last:border-r-0"
+                style={{ width: `${seg.widthPct}%` }}
               />
-            );
-          })}
+            ))}
+          </div>
 
           {/* Sombra do Turno Total do Assistente */}
-          {ast.shiftStart && ast.shiftEnd && (
-            <div
-              className="absolute top-1.5 bottom-1.5 rounded-lg bg-primary/[0.04] border border-primary/15 pointer-events-none"
-              style={{
-                left: `${Math.max(
-                  0,
-                  ((parseTimeToMinutes(ast.shiftStart) -
-                    timelineRange.minM) /
-                    timelineRange.totalMinutes) *
-                    100
-                )}%`,
-                width: `${Math.min(
-                  100,
-                  ((parseTimeToMinutes(ast.shiftEnd) -
-                    parseTimeToMinutes(ast.shiftStart)) /
-                    timelineRange.totalMinutes) *
-                    100
-                )}%`,
-              }}
-            />
-          )}
+          {ast.shiftStart && ast.shiftEnd && (() => {
+            const { leftPct, widthPct } = getTimeRangePct(ast.shiftStart, ast.shiftEnd);
+            if (widthPct <= 0) return null;
+            return (
+              <div
+                className="absolute top-1.5 bottom-1.5 rounded-lg bg-primary/[0.04] border border-primary/15 pointer-events-none"
+                style={{
+                  left: `${leftPct}%`,
+                  width: `${widthPct}%`,
+                }}
+              />
+            );
+          })()}
 
           {/* Blocos de Espaços Vazios / Por Preencher no Turno */}
           {ast.unfilledGaps?.map((gap, gi) => {
+            const { leftPct, widthPct } = getTimeRangePct(gap.start, gap.end);
+            if (widthPct <= 0) return null;
             const gStartMin = parseTimeToMinutes(gap.start);
             const gEndMin = parseTimeToMinutes(gap.end);
             const gapDurationMin = gEndMin - gStartMin;
@@ -1160,18 +1158,6 @@ export default function PublishSchedulesModal({
                     gapDurationMin % 60 > 0 ? ` ${gapDurationMin % 60}m` : ""
                   }`
                 : `${gapDurationMin}m`;
-
-            const leftPct = Math.max(
-              0,
-              ((gStartMin - timelineRange.minM) / timelineRange.totalMinutes) * 100
-            );
-            const widthPct = Math.max(
-              1,
-              Math.min(
-                100 - leftPct,
-                ((gEndMin - gStartMin) / timelineRange.totalMinutes) * 100
-              )
-            );
 
             return (
               <Tooltip key={`gap-${gi}`}>
@@ -1185,7 +1171,7 @@ export default function PublishSchedulesModal({
                   >
                     <span className="text-[10px] font-semibold truncate flex items-center gap-1 drop-shadow-2xs">
                       <AlertTriangle size={10} className="shrink-0" />
-                      Vazio (${gap.start}–${gap.end})
+                      Vazio ({gap.start}–{gap.end})
                     </span>
                   </div>
                 </TooltipTrigger>
@@ -1226,51 +1212,33 @@ export default function PublishSchedulesModal({
           })}
 
           {/* Faixa de Ausência se existir */}
-          {ast.absenceReason && (
-            <div
-              className="absolute top-2 bottom-2 rounded-md bg-destructive/15 border border-destructive/30 text-destructive flex items-center px-2 z-10"
-              style={{
-                left: `${Math.max(
-                  0,
-                  ((parseTimeToMinutes(ast.shiftStart || "08:00") -
-                    timelineRange.minM) /
-                    timelineRange.totalMinutes) *
-                    100
-                )}%`,
-                width: `${Math.min(
-                  100,
-                  ((parseTimeToMinutes(ast.shiftEnd || "17:00") -
-                    parseTimeToMinutes(ast.shiftStart || "08:00")) /
-                    timelineRange.totalMinutes) *
-                    100
-                )}%`,
-              }}
-            >
-              <span className="text-[11px] font-medium truncate">
-                {ast.absenceReason}
-              </span>
-            </div>
-          )}
+          {ast.absenceReason && (() => {
+            const { leftPct, widthPct } = getTimeRangePct(
+              ast.shiftStart || "08:00",
+              ast.shiftEnd || "17:00"
+            );
+            if (widthPct <= 0) return null;
+            return (
+              <div
+                className="absolute top-2 bottom-2 rounded-md bg-destructive/15 border border-destructive/30 text-destructive flex items-center px-2 z-10"
+                style={{
+                  left: `${leftPct}%`,
+                  width: `${widthPct}%`,
+                }}
+              >
+                <span className="text-[11px] font-medium truncate">
+                  {ast.absenceReason}
+                </span>
+              </div>
+            );
+          })()}
 
           {/* Cápsulas de Atividades */}
           {ast.entries.map((ent, i) => {
+            const { leftPct, widthPct } = getTimeRangePct(ent.startTime, ent.endTime);
+            if (widthPct <= 0) return null;
             const entStartMin = parseTimeToMinutes(ent.startTime);
             const entEndMin = parseTimeToMinutes(ent.endTime);
-            const leftPct = Math.max(
-              0,
-              ((entStartMin - timelineRange.minM) /
-                timelineRange.totalMinutes) *
-                100
-            );
-            const widthPct = Math.max(
-              1,
-              Math.min(
-                100 - leftPct,
-                ((entEndMin - entStartMin) /
-                  timelineRange.totalMinutes) *
-                  100
-              )
-            );
 
             const prevEnt = i > 0 ? ast.entries[i - 1] : null;
             const nextEnt = i < ast.entries.length - 1 ? ast.entries[i + 1] : null;
@@ -1570,38 +1538,26 @@ export default function PublishSchedulesModal({
                   <div className="border border-border rounded-xl bg-card overflow-hidden shadow-2xs">
                     <div className="overflow-x-auto">
                       <div className="min-w-[700px]">
-                        {/* Régua Superior de Horas */}
+                        {/* Régua Superior de Horas alinhada com o horário de funcionamento da escola */}
                         <div className="flex items-center border-b border-border bg-muted/40">
-                          <div className="w-48 sm:w-56 px-3 py-2 text-[11px] font-semibold text-muted-foreground border-r border-border/60 uppercase tracking-wider flex-shrink-0">
-                            Assistente & Turno
+                          <div className="w-48 sm:w-56 px-3 py-2 text-[11px] font-semibold text-muted-foreground border-r border-border/60 uppercase tracking-wider flex items-center justify-between flex-shrink-0">
+                            <span>Assistente & Turno</span>
+                            <span className="text-[10px] font-mono text-primary font-semibold lowercase">
+                              {previewSchoolStatus.operatingWindowStr}
+                            </span>
                           </div>
-                          <div className="relative flex-1 h-8">
-                            {timelineRange.hours.map((hour, idx) => {
-                              const leftPct =
-                                ((hour - timelineRange.startHour) /
-                                  (timelineRange.endHour - timelineRange.startHour)) *
-                                100;
-                              return (
-                                <div
-                                  key={hour}
-                                  className="absolute top-0 bottom-0 flex flex-col justify-between"
-                                  style={{
-                                    left: `${leftPct}%`,
-                                    transform:
-                                      idx === 0
-                                        ? "none"
-                                        : idx === timelineRange.hours.length - 1
-                                        ? "translateX(-100%)"
-                                        : "translateX(-50%)",
-                                  }}
-                                >
-                                  <span className="text-[10px] font-mono font-medium text-muted-foreground pt-1.5 px-1">
-                                    {String(hour).padStart(2, "0")}h
-                                  </span>
-                                  <div className="w-px h-1.5 bg-border mx-auto" />
-                                </div>
-                              );
-                            })}
+                          <div className="flex flex-1 relative">
+                            {hourSegments.map((seg) => (
+                              <div
+                                key={seg.startSlot}
+                                className="flex-none border-r border-border/50 text-center last:border-r-0 overflow-hidden"
+                                style={{ width: `${seg.widthPct}%` }}
+                              >
+                                <span className="text-[10px] font-mono text-muted-foreground px-0.5 py-1.5 block font-medium truncate">
+                                  {seg.label}
+                                </span>
+                              </div>
+                            ))}
                           </div>
                         </div>
 

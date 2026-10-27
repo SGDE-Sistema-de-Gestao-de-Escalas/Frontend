@@ -4236,6 +4236,7 @@ function paintSlot(aid: EntityId, slot: number) {
         initialSelectedDate={publishModalState.preselectedDate}
         profilesByAssistant={profilesByAssistant}
         exceptionsByAssistant={exceptionsByAssistant}
+        operatingSources={operatingSources}
       />
     </TooltipProvider>
   );
