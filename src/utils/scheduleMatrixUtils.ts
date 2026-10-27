@@ -1369,35 +1369,33 @@ export function buildDayMatrixFromApi(params: {
     if (lunch && lunch.start_time && lunch.end_time) {
       const ls = timeToSlotIndex(lunch.start_time);
       const le = timeToSlotIndex(lunch.end_time);
-      if (le > ls && ls >= 46 && le <= 64) {
+      if (le > ls) {
         lunchS = ls;
         lunchE = le;
       }
     }
 
     // Fonte B: Perfil de horário contratual / exceções do assistente
-    if (lunchS === null && profilesByAssistant && profilesByAssistant[String(assistant.id)]) {
-      const dow = (new Date(isoDate + "T12:00:00Z").getDay() + 6) % 7;
-      const bounds = resolveAssistantShiftBounds({
-        assistantId: assistant.id,
-        isoDate,
-        dow,
-        viewStartSlot: 0,
-        viewEndSlot: 96,
-        profiles: profilesByAssistant[String(assistant.id)],
-        exceptions: exceptionsByAssistant?.[String(assistant.id)],
-        schedulesList: schedules,
-        lunchBlocksForDate,
-        absences,
-      });
-      if (bounds.lunchStartSlot !== null && bounds.lunchEndSlot !== null) {
-        lunchS = bounds.lunchStartSlot;
-        lunchE = bounds.lunchEndSlot;
-      }
+    const dow = (new Date(isoDate + "T12:00:00Z").getDay() + 6) % 7;
+    const bounds = resolveAssistantShiftBounds({
+      assistantId: assistant.id,
+      isoDate,
+      dow,
+      viewStartSlot: 0,
+      viewEndSlot: 96,
+      profiles: profilesByAssistant?.[String(assistant.id)],
+      exceptions: exceptionsByAssistant?.[String(assistant.id)],
+      schedulesList: schedules,
+      lunchBlocksForDate,
+      absences,
+    });
+    if (lunchS === null && bounds.lunchStartSlot !== null && bounds.lunchEndSlot !== null) {
+      lunchS = bounds.lunchStartSlot;
+      lunchE = bounds.lunchEndSlot;
     }
 
     // Fonte C: Heurística entre tarefas/ausências
-    // Se não há perfil ou lunchBlock, inferir a partir do intervalo livre entre entradas e ausências
+    // Se não há perfil ou lunchBlock, inferir a partir do intervalo livre entre entradas e ausências dentro do turno
     if (lunchS === null && entriesForDay.length >= 1) {
       const absInfo = checkAssistantAbsenceOnDate(assistant, isoDate, absences);
       const absStart = absInfo.absent && absInfo.startSlot !== undefined ? absInfo.startSlot : -1;
@@ -1412,11 +1410,14 @@ export function buildDayMatrixFromApi(params: {
       }
       busyIntervals.sort((a, b) => a.start - b.start);
 
+      const minLunchSlot = bounds.lunchStartSlot ?? bounds.startSlot;
+      const maxLunchSlot = bounds.lunchEndSlot ?? bounds.endSlot;
+
       for (let idx = 0; idx < busyIntervals.length - 1; idx++) {
         const gapStart = busyIntervals[idx].end;
         const gapEnd = busyIntervals[idx + 1].start;
         const gapSlots = gapEnd - gapStart;
-        if (gapSlots >= 2 && gapSlots <= 6 && gapStart >= 46 && gapEnd <= 62) {
+        if (gapSlots >= 2 && gapSlots <= 6 && gapStart >= minLunchSlot && gapEnd <= maxLunchSlot) {
           lunchS = gapStart;
           lunchE = gapEnd;
           break;

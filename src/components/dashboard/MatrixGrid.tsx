@@ -1524,13 +1524,17 @@ function paintSlot(aid: EntityId, slot: number) {
       // 2. Obrigatoriedade de pausa de almoço:
       // Apenas se a jornada de trabalho contínua ultrapassar 5h ou totalizar mais de 5h sem ausência no período de refeição
       const absInfoForLunch = checkAssistantAbsenceOnDate(a, info.isoDate, absencesRes?.data || []);
-      const schoolLunchStart = targetStatus.lunchStartSlot ?? 48; // 12:00
-      const schoolLunchEnd = targetStatus.lunchEndSlot ?? 56;     // 14:00
+      const assistantLunchStart = fixedBounds?.lunchStartSlot ?? targetStatus.lunchStartSlot;
+      const assistantLunchEnd = fixedBounds?.lunchEndSlot ?? targetStatus.lunchEndSlot;
       const absenceCoversLunch =
         absInfoForLunch.absent &&
         absInfoForLunch.startSlot !== undefined &&
         absInfoForLunch.endSlot !== undefined &&
-        Math.min(schoolLunchEnd, absInfoForLunch.endSlot) > Math.max(schoolLunchStart, absInfoForLunch.startSlot);
+        assistantLunchStart !== null &&
+        assistantLunchStart !== undefined &&
+        assistantLunchEnd !== null &&
+        assistantLunchEnd !== undefined &&
+        Math.min(assistantLunchEnd, absInfoForLunch.endSlot) > Math.max(assistantLunchStart, absInfoForLunch.startSlot);
 
       if (!absenceCoversLunch && actualWorkSlots > 20 && lunchSlotsCount < 2) {
         warnings.push({
@@ -1545,23 +1549,30 @@ function paintSlot(aid: EntityId, slot: number) {
         });
       }
 
-      // 3. Pausa de almoço fora da janela de funcionamento da escola
-      const typicalStart = targetStatus.lunchStartSlot ? Math.max(0, targetStatus.lunchStartSlot - 2) : 46;
-      const typicalEnd = targetStatus.lunchEndSlot ? Math.min(96, targetStatus.lunchEndSlot + 2) : 60;
+      // 3. Pausa de almoço fora da janela de funcionamento da escola ou do turno do assistente
+      if (
+        assistantLunchStart !== null &&
+        assistantLunchStart !== undefined &&
+        assistantLunchEnd !== null &&
+        assistantLunchEnd !== undefined
+      ) {
+        const typicalStart = Math.max(0, assistantLunchStart - 2);
+        const typicalEnd = Math.min(96, assistantLunchEnd + 2);
 
-      lunchRanges.forEach((lr, lIdx) => {
-        if (lr.start < typicalStart || lr.end > typicalEnd) {
-          const lsStr = TIME_SLOTS[lr.start] ?? "00:00";
-          const leStr = TIME_SLOTS[Math.min(lr.end, 95)] ?? "24:00";
-          const expectedStr = `${TIME_SLOTS[typicalStart] ?? "11:30"}–${TIME_SLOTS[typicalEnd] ?? "15:00"}`;
-          warnings.push({
-            id: `lunch-odd-${a.id}-${lIdx}`,
-            severity: "warning",
-            title: `Pausa de almoço em horário atípico: ${a.name}`,
-            detail: `Pausa de almoço marcada das ${lsStr} às ${leStr}. O intervalo previsto para refeição na escola é de ${expectedStr}.`,
-          });
-        }
-      });
+        lunchRanges.forEach((lr, lIdx) => {
+          if (lr.start < typicalStart || lr.end > typicalEnd) {
+            const lsStr = TIME_SLOTS[lr.start] ?? "00:00";
+            const leStr = TIME_SLOTS[Math.min(lr.end, 95)] ?? "24:00";
+            const expectedStr = `${TIME_SLOTS[assistantLunchStart]}–${TIME_SLOTS[assistantLunchEnd]}`;
+            warnings.push({
+              id: `lunch-odd-${a.id}-${lIdx}`,
+              severity: "warning",
+              title: `Pausa de almoço em horário atípico: ${a.name}`,
+              detail: `Pausa de almoço marcada das ${lsStr} às ${leStr}. O intervalo previsto para refeição é de ${expectedStr}.`,
+            });
+          }
+        });
+      }
     });
 
     // 4. Detetar espaços em branco / horário incompleto para assistentes escalados
