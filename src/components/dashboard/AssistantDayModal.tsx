@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { Eye, Loader2, Lock, UserX } from "lucide-react";
 import type { BlockState, EntityId } from "../../types";
 import { Badge } from "../ui/badge";
-import { Sheet, SheetContent } from "../ui/sheet";
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "../ui/sheet";
 import { BLOCK_STYLES, formatDurationSlots, slotsToBlocks, TIME_SLOTS } from "./blockStyles";
 import { useAssistantsList } from "../../hooks/api/useAssistants";
 import { useSchedulesList } from "../../hooks/api/useSchedules";
@@ -171,12 +171,12 @@ export default function AssistantDayModal({
             </span>
           </div>
           <div className="flex-1 min-w-0 pr-6">
-            <h3 className="font-semibold text-foreground text-sm truncate">
+            <SheetTitle className="font-semibold text-foreground text-sm truncate">
               {assistant.name}
-            </h3>
-            <p className="text-xs text-muted-foreground font-mono mt-0.5">
+            </SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground font-mono mt-0.5">
               {dayInfo.dateStr} ({dayInfo.dayName}) · Horário do dia
-            </p>
+            </SheetDescription>
             {assistant.exception && (
               <div className="mt-1">
                 <Badge

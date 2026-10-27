@@ -3,6 +3,7 @@ import { Check, Clock, Loader2, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -110,9 +111,9 @@ export default function QuickAbsenceModal({
           <DialogTitle className="font-semibold text-foreground text-sm">
             Registar Ausência
           </DialogTitle>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <DialogDescription className="text-xs text-muted-foreground mt-0.5">
             Marcar falta a um assistente
-          </p>
+          </DialogDescription>
         </DialogHeader>
 
         <div className="p-5 space-y-4">

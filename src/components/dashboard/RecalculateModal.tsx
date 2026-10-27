@@ -110,6 +110,9 @@ export default function RecalculateModal({
   const [selectedSubstituteId, setSelectedSubstituteId] = useState<
     EntityId | null
   >(null);
+  const [transferTimeMode, setTransferTimeMode] = useState<"deficit" | "full_day" | "custom">("deficit");
+  const [transferCustomStart, setTransferCustomStart] = useState<string>("");
+  const [transferCustomEnd, setTransferCustomEnd] = useState<string>("");
   const [substituteSchoolFilter, setSubstituteSchoolFilter] = useState<
     EntityId | "all"
   >("all");
@@ -203,6 +206,9 @@ export default function RecalculateModal({
     setStep("form");
     setSelectedSubstituteId(null);
     setSubstituteSchoolFilter("all");
+    setTransferTimeMode("deficit");
+    setTransferCustomStart("");
+    setTransferCustomEnd("");
     setCurrentConflictIdx(0);
     setApprovedTransfers([]);
     setDateErrors({});
@@ -230,6 +236,9 @@ export default function RecalculateModal({
     setApprovedTransfers([]);
     setCurrentConflictIdx(0);
     setSelectedSubstituteId(null);
+    setTransferTimeMode("deficit");
+    setTransferCustomStart("");
+    setTransferCustomEnd("");
 
     try {
       const preserveLocked = strategy !== "full" && respectExceptions;
@@ -266,23 +275,48 @@ export default function RecalculateModal({
   ) {
     let nextTransfers = [...approvedTransfers];
     if (chosenCandidate && activeConflict) {
+      let startTime: string | null = null;
+      let endTime: string | null = null;
+      let periodLabel = "";
+
+      if (transferTimeMode === "deficit") {
+        startTime = activeConflict.period_start;
+        endTime = activeConflict.period_end;
+        periodLabel = `${startTime}–${endTime}`;
+      } else if (transferTimeMode === "custom") {
+        startTime = transferCustomStart || activeConflict.period_start;
+        endTime = transferCustomEnd || activeConflict.period_end;
+        periodLabel = `${startTime}–${endTime}`;
+      } else {
+        startTime = null;
+        endTime = null;
+        periodLabel = chosenCandidate.shift_start
+          ? `Dia Inteiro (${chosenCandidate.shift_start}–${chosenCandidate.shift_end})`
+          : "Dia Inteiro";
+      }
+
       nextTransfers.push({
         assistant_id: String(chosenCandidate.assistant_id),
         date: activeConflict.date,
         rule_id: activeConflict.rule_id,
+        start_time: startTime,
+        end_time: endTime,
         notes: `Designação de cobertura inter-escolar para ${
           activeConflict.activity_name ?? "regra obrigatória"
-        } (${activeConflict.period_start}–${activeConflict.period_end})`,
+        } (${periodLabel})`,
         assistant_name: chosenCandidate.name,
         origin_school_name:
           chosenCandidate.origin_school_name ?? "Escola do Agrupamento",
-        period: `${activeConflict.period_start}–${activeConflict.period_end}`,
+        period: periodLabel,
       });
       setApprovedTransfers(nextTransfers);
     }
 
     setSelectedSubstituteId(null);
     setSubstituteSchoolFilter("all");
+    setTransferTimeMode("deficit");
+    setTransferCustomStart("");
+    setTransferCustomEnd("");
 
     // Se houver mais défices por rever, avança para o próximo défice na mesma modal
     if (currentConflictIdx + 1 < conflicts.length) {
@@ -302,6 +336,8 @@ export default function RecalculateModal({
             assistant_id: t.assistant_id,
             date: t.date,
             rule_id: t.rule_id,
+            start_time: t.start_time,
+            end_time: t.end_time,
             notes: t.notes,
           })),
         });
