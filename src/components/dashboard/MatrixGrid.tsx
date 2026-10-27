@@ -406,7 +406,7 @@ const [publishModalState, setPublishModalState] = useState<{
   }, [activeAssistants]);
 
   const dayRulesCatalog: DayRuleConfig[] = useMemo(() => {
-    return scheduleRules.map((rule) => {
+    const rules: DayRuleConfig[] = scheduleRules.map((rule) => {
       const actType = activityTypes.find(
         (at) => String(at.id) === String(rule.activity_type_id)
       );
@@ -427,8 +427,14 @@ const [publishModalState, setPublishModalState] = useState<{
       };
     });
 
-    // Adiciona a atividade de Fallback (ex: Apoio Escola) para estar disponível na lista de regras para pintar
-    const fallbackActivities = activityTypes.filter((at) => at.is_fallback);
+    // Adiciona a atividade de Fallback (ex: Apoio Escola / Apoio Turmas/escola) para estar disponível na lista de regras para pintar
+    const fallbackActivities = activityTypes.filter(
+      (at) =>
+        Boolean(at.is_fallback) ||
+        (at.is_fallback as any) === 1 ||
+        (at.is_fallback as any) === "1"
+    );
+
     if (fallbackActivities.length > 0) {
       fallbackActivities.forEach((fbAct) => {
         rules.push({
@@ -445,9 +451,16 @@ const [publishModalState, setPublishModalState] = useState<{
         });
       });
     } else {
+      // Se não houver explicitamente is_fallback = true na BD, procura pelo nome "Apoio" ou usa a predefinida
+      const fallbackByName = activityTypes.find(
+        (at) =>
+          at.name?.toLowerCase().includes("apoio escola") ||
+          at.name?.toLowerCase().includes("apoio geral") ||
+          at.name?.toLowerCase().includes("apoio turmas")
+      );
       rules.push({
-        id: "fallback-default",
-        title: "Apoio Escola",
+        id: fallbackByName ? `fallback-${fallbackByName.id}` : "fallback-default",
+        title: fallbackByName?.name || "Apoio Escola",
         state: "work",
         startSlot: 24,
         endSlot: 84,
