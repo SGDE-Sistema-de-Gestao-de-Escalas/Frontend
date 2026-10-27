@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -117,6 +117,9 @@ export default function RecalculateModal({
   const [substituteSchoolFilter, setSubstituteSchoolFilter] = useState<
     EntityId | "all"
   >("all");
+  const [ignoredConflictKeys, setIgnoredConflictKeys] = useState<Set<string>>(
+    new Set()
+  );
   const [dateErrors, setDateErrors] = useState<{
     start?: string;
     end?: string;
@@ -133,10 +136,34 @@ export default function RecalculateModal({
     selectedSchool ||
     contextSchools.find((s) => String(s.id) === String(currentSchoolId));
 
-  // Lista de conflitos reais devolvidos pela API
+  // Função auxiliar para testar se um défice é coberto por uma transferência
+  function isConflictCoveredByTransfer(
+    conflict: ScheduleConflictApi,
+    transfer: { date: string; start_time?: string | null; end_time?: string | null }
+  ): boolean {
+    if (transfer.date !== conflict.date) return false;
+    // Se a transferência for de dia inteiro, cobre qualquer horário no mesmo dia
+    if (!transfer.start_time || !transfer.end_time) return true;
+    // Período específico: o défice tem de estar compreendido dentro da janela da cedência
+    return (
+      transfer.start_time <= conflict.period_start &&
+      transfer.end_time >= conflict.period_end
+    );
+  }
+
+  // Lista de conflitos reais não satisfeitos e não ignorados
   const conflicts: ScheduleConflictApi[] = useMemo(() => {
-    return generationResult?.conflicts ?? [];
-  }, [generationResult]);
+    const raw = generationResult?.conflicts ?? [];
+    return raw.filter((c) => {
+      const key = `${c.date}_${c.rule_id}_${c.period_start}`;
+      if (ignoredConflictKeys.has(key)) return false;
+      // Se já existe uma transferência aprovada que cobre este horário na mesma data, não volta a pedir
+      if (approvedTransfers.some((t) => isConflictCoveredByTransfer(c, t))) {
+        return false;
+      }
+      return true;
+    });
+  }, [generationResult, ignoredConflictKeys, approvedTransfers]);
 
   const activeConflict =
     conflicts[Math.min(currentConflictIdx, Math.max(0, conflicts.length - 1))];
@@ -172,6 +199,50 @@ export default function RecalculateModal({
   const selectedSub = candidatesForActiveConflict.find(
     (c) => String(c.assistant_id) === String(selectedSubstituteId)
   );
+
+  const prospectiveTransfer = useMemo(() => {
+    if (!activeConflict || !selectedSub) return null;
+    let startTime: string | null = null;
+    let endTime: string | null = null;
+    if (transferTimeMode === "deficit") {
+      startTime = activeConflict.period_start;
+      endTime = activeConflict.period_end;
+    } else if (transferTimeMode === "custom") {
+      startTime = transferCustomStart || activeConflict.period_start;
+      endTime = transferCustomEnd || activeConflict.period_end;
+    } else {
+      startTime = null;
+      endTime = null;
+    }
+    return {
+      date: activeConflict.date,
+      start_time: startTime,
+      end_time: endTime,
+    };
+  }, [activeConflict, selectedSub, transferTimeMode, transferCustomStart, transferCustomEnd]);
+
+  // Outros conflitos pendentes que esta transferência também cobrirá de imediato
+  const coveredOtherConflicts = useMemo(() => {
+    if (!prospectiveTransfer || !activeConflict) return [];
+    return conflicts.filter((c) => {
+      if (c === activeConflict) return false;
+      return isConflictCoveredByTransfer(c, prospectiveTransfer);
+    });
+  }, [prospectiveTransfer, activeConflict, conflicts]);
+
+  const willResolveAllRemaining = useMemo(() => {
+    if (!prospectiveTransfer || !activeConflict) return false;
+    return conflicts.every(
+      (c) => c === activeConflict || isConflictCoveredByTransfer(c, prospectiveTransfer)
+    );
+  }, [prospectiveTransfer, activeConflict, conflicts]);
+
+  // Se todos os défices foram resolvidos e estamos no passo "gap", avança imediatamente para "done"
+  useEffect(() => {
+    if (step === "gap" && conflicts.length === 0 && !generateMutation.isPending) {
+      setStep("done");
+    }
+  }, [step, conflicts.length, generateMutation.isPending]);
 
   function applyDatePreset(preset: "this-week" | "next-week" | "next-month") {
     const now = new Date();
@@ -212,6 +283,7 @@ export default function RecalculateModal({
     setTransferCustomEnd("");
     setCurrentConflictIdx(0);
     setApprovedTransfers([]);
+    setIgnoredConflictKeys(new Set());
     setDateErrors({});
     setIsPublished(false);
     onClose();
@@ -235,6 +307,7 @@ export default function RecalculateModal({
 
     setDateErrors({});
     setApprovedTransfers([]);
+    setIgnoredConflictKeys(new Set());
     setCurrentConflictIdx(0);
     setSelectedSubstituteId(null);
     setTransferTimeMode("deficit");
@@ -274,44 +347,75 @@ export default function RecalculateModal({
   async function handleAdvanceFromConflict(
     chosenCandidate: TransferCandidateApi | null
   ) {
-    let nextTransfers = [...approvedTransfers];
-    if (chosenCandidate && activeConflict) {
-      let startTime: string | null = null;
-      let endTime: string | null = null;
-      let periodLabel = "";
+    if (!chosenCandidate || !activeConflict) {
+      if (activeConflict) {
+        const key = `${activeConflict.date}_${activeConflict.rule_id}_${activeConflict.period_start}`;
+        const newIgnored = new Set(ignoredConflictKeys);
+        newIgnored.add(key);
+        setIgnoredConflictKeys(newIgnored);
 
-      if (transferTimeMode === "deficit") {
-        startTime = activeConflict.period_start;
-        endTime = activeConflict.period_end;
-        periodLabel = `${startTime}–${endTime}`;
-      } else if (transferTimeMode === "custom") {
-        startTime = transferCustomStart || activeConflict.period_start;
-        endTime = transferCustomEnd || activeConflict.period_end;
-        periodLabel = `${startTime}–${endTime}`;
-      } else {
-        startTime = null;
-        endTime = null;
-        periodLabel = chosenCandidate.shift_start
-          ? `Dia Inteiro (${chosenCandidate.shift_start}–${chosenCandidate.shift_end})`
-          : "Dia Inteiro";
+        const remaining = conflicts.filter(
+          (c) => `${c.date}_${c.rule_id}_${c.period_start}` !== key
+        );
+
+        if (remaining.length === 0) {
+          await handleFinalizeWithTransfers(approvedTransfers);
+          return;
+        }
+
+        if (currentConflictIdx >= remaining.length) {
+          setCurrentConflictIdx(Math.max(0, remaining.length - 1));
+        }
       }
-
-      nextTransfers.push({
-        assistant_id: String(chosenCandidate.assistant_id),
-        date: activeConflict.date,
-        rule_id: activeConflict.rule_id,
-        start_time: startTime,
-        end_time: endTime,
-        notes: `Designação de cobertura inter-escolar para ${
-          activeConflict.activity_name ?? "regra obrigatória"
-        } (${periodLabel})`,
-        assistant_name: chosenCandidate.name,
-        origin_school_name:
-          chosenCandidate.origin_school_name ?? "Escola do Agrupamento",
-        period: periodLabel,
-      });
-      setApprovedTransfers(nextTransfers);
+      setSelectedSubstituteId(null);
+      setSubstituteSchoolFilter("all");
+      setTransferTimeMode("deficit");
+      setTransferCustomStart("");
+      setTransferCustomEnd("");
+      return;
     }
+
+    let startTime: string | null = null;
+    let endTime: string | null = null;
+    let periodLabel = "";
+
+    if (transferTimeMode === "deficit") {
+      startTime = activeConflict.period_start;
+      endTime = activeConflict.period_end;
+      periodLabel = `${startTime}–${endTime}`;
+    } else if (transferTimeMode === "custom") {
+      startTime = transferCustomStart || activeConflict.period_start;
+      endTime = transferCustomEnd || activeConflict.period_end;
+      periodLabel = `${startTime}–${endTime}`;
+    } else {
+      startTime = null;
+      endTime = null;
+      periodLabel = chosenCandidate.shift_start
+        ? `Dia Inteiro (${chosenCandidate.shift_start}–${chosenCandidate.shift_end})`
+        : "Dia Inteiro";
+    }
+
+    const newTransfer: ApprovedTransferPayload & {
+      assistant_name: string;
+      origin_school_name: string;
+      period: string;
+    } = {
+      assistant_id: String(chosenCandidate.assistant_id),
+      date: activeConflict.date,
+      rule_id: activeConflict.rule_id,
+      start_time: startTime,
+      end_time: endTime,
+      notes: `Designação de cobertura inter-escolar para ${
+        activeConflict.activity_name ?? "regra obrigatória"
+      } (${periodLabel})`,
+      assistant_name: chosenCandidate.name,
+      origin_school_name:
+        chosenCandidate.origin_school_name ?? "Escola do Agrupamento",
+      period: periodLabel,
+    };
+
+    const nextTransfers = [...approvedTransfers, newTransfer];
+    setApprovedTransfers(nextTransfers);
 
     setSelectedSubstituteId(null);
     setSubstituteSchoolFilter("all");
@@ -319,13 +423,53 @@ export default function RecalculateModal({
     setTransferCustomStart("");
     setTransferCustomEnd("");
 
-    // Se houver mais défices por rever, avança para o próximo défice na mesma modal
-    if (currentConflictIdx + 1 < conflicts.length) {
-      setCurrentConflictIdx((idx) => idx + 1);
-      return;
-    }
+    // Recalcula no backend com a nova lista acumulada de transferências
+    try {
+      const preserveLocked = strategy !== "full" && respectExceptions;
+      const updatedResult = await generateMutation.mutateAsync({
+        start_date: startDate,
+        end_date: endDate,
+        preserve_locked: preserveLocked,
+        transfers: nextTransfers.map((t) => ({
+          assistant_id: t.assistant_id,
+          date: t.date,
+          rule_id: t.rule_id,
+          start_time: t.start_time,
+          end_time: t.end_time,
+          notes: t.notes,
+        })),
+      });
 
-    await handleFinalizeWithTransfers(nextTransfers);
+      setGenerationResult(updatedResult);
+      onGenerated?.(updatedResult);
+
+      const remainingFromApi = (updatedResult.conflicts ?? []).filter((c) => {
+        const key = `${c.date}_${c.rule_id}_${c.period_start}`;
+        if (ignoredConflictKeys.has(key)) return false;
+        if (nextTransfers.some((t) => isConflictCoveredByTransfer(c, t))) return false;
+        return true;
+      });
+
+      if (remainingFromApi.length === 0) {
+        setStep("done");
+        return;
+      }
+
+      setCurrentConflictIdx(0);
+    } catch {
+      // Fallback de contingência local se o backend falhar
+      const nextRemaining = conflicts.filter((c) => {
+        if (c === activeConflict) return false;
+        if (isConflictCoveredByTransfer(c, newTransfer)) return false;
+        return true;
+      });
+
+      if (nextRemaining.length === 0) {
+        setStep("done");
+      } else {
+        setCurrentConflictIdx(0);
+      }
+    }
   }
 
   async function handleFinalizeWithTransfers(
@@ -354,7 +498,7 @@ export default function RecalculateModal({
         setGenerationResult(updatedResult);
         onGenerated?.(updatedResult);
       } catch {
-        // Mantém o resultado anterior caso falhe a segunda chamada
+        // Mantém o resultado anterior
       }
     }
 
@@ -1009,6 +1153,20 @@ export default function RecalculateModal({
                       <Info size={11} className="flex-shrink-0 text-primary" />
                       A pausa de almoço de 1h é adaptada e garantida pelo motor antes ou depois da cedência.
                     </p>
+
+                    {coveredOtherConflicts.length > 0 && (
+                      <div className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 text-[11px] flex items-start gap-2 animate-in fade-in-50">
+                        <CheckCircle2 size={14} className="flex-shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+                        <div className="space-y-0.5">
+                          <p className="font-semibold text-emerald-900 dark:text-emerald-200">
+                            Cobre automaticamente outros {coveredOtherConflicts.length} défice(s) no mesmo dia ({activeConflict.date}):
+                          </p>
+                          <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
+                            {coveredOtherConflicts.map((c) => `${c.activity_name ?? "Regra"} (${c.period_start}–${c.period_end})`).join(", ")}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1237,11 +1395,11 @@ export default function RecalculateModal({
                 disabled={isRunning}
                 onClick={() => handleAdvanceFromConflict(null)}
               >
-                {currentConflictIdx + 1 < conflicts.length ? "Saltar este Défice" : "Ignorar Défice e Concluir"}
+                {conflicts.length > 1 ? "Saltar este Défice" : "Ignorar Défice e Concluir"}
               </Button>
 
               <div className="flex items-center gap-2">
-                {approvedTransfers.length > 0 && currentConflictIdx + 1 < conflicts.length && (
+                {approvedTransfers.length > 0 && conflicts.length > 1 && (
                   <Button
                     type="button"
                     variant="outline"
@@ -1269,17 +1427,17 @@ export default function RecalculateModal({
                   {isRunning ? (
                     <>
                       <Loader2 size={14} className="animate-spin" />
-                      A aplicar...
+                      A validar e recalcular...
                     </>
-                  ) : currentConflictIdx + 1 < conflicts.length ? (
-                    <>
-                      <span>Guardar e Próximo Défice</span>
-                      <ArrowRight size={14} />
-                    </>
-                  ) : (
+                  ) : willResolveAllRemaining || conflicts.length <= 1 ? (
                     <>
                       <Check size={14} />
                       Confirmar e Gerar Escala
+                    </>
+                  ) : (
+                    <>
+                      <span>Guardar e Próximo Défice</span>
+                      <ArrowRight size={14} />
                     </>
                   )}
                 </Button>
