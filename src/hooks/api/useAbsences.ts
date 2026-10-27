@@ -47,7 +47,6 @@ export function useAbsenceCounts(filters?: Omit<AbsenceFilterParams, "page" | "p
       return await absencesService.getCounts(filters);
     },
     enabled: !!selectedSchoolId,
-    staleTime: 30000,
   });
 }
 

@@ -56,6 +56,7 @@ export function useCreateActivityType() {
     mutationFn: (data: ActivityTypePayload) => activityTypesService.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ACTIVITY_TYPES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("O tipo de atividade foi criado com sucesso.", "Tipo de Atividade Criado");
     },
     onError: (error: any) => {
@@ -79,6 +80,7 @@ export function useUpdateActivityType() {
       activityTypesService.update(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ACTIVITY_TYPES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({
         queryKey: [...ACTIVITY_TYPES_QUERY_KEY, "detail", variables.id],
       });
@@ -107,6 +109,7 @@ export function useDeleteActivityType() {
     mutationFn: (id: string) => activityTypesService.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ACTIVITY_TYPES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success(
         "O tipo de atividade foi eliminado com sucesso.",
         "Tipo de Atividade Eliminado"

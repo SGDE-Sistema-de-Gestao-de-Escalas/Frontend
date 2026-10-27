@@ -29,7 +29,6 @@ export function useAllAssistantSchedules() {
     queryKey: schoolScopedKey("assistant-schedules", selectedSchoolId, "all"),
     queryFn: () => assistantSchedulesService.getAll(),
     enabled: !!selectedSchoolId,
-    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -40,9 +39,9 @@ export function useCreateAssistantSchedule() {
     mutationFn: (payload: CreateAssistantScheduleProfilePayload) =>
       assistantSchedulesService.create(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ASSISTANT_SCHEDULES_KEY,
-      });
+      queryClient.invalidateQueries({ queryKey: ASSISTANT_SCHEDULES_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("Horário padrão configurado com sucesso.", "Horário Guardado");
     },
     onError: (error: any) => {
@@ -66,9 +65,9 @@ export function useUpdateAssistantSchedule() {
       assistantId: string;
     }) => assistantSchedulesService.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ASSISTANT_SCHEDULES_KEY,
-      });
+      queryClient.invalidateQueries({ queryKey: ASSISTANT_SCHEDULES_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("Vigência do horário atualizada com sucesso.", "Horário Atualizado");
     },
     onError: (error: any) => {
@@ -90,9 +89,9 @@ export function useDeleteAssistantSchedule() {
       assistantId: string;
     }) => assistantSchedulesService.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ASSISTANT_SCHEDULES_KEY,
-      });
+      queryClient.invalidateQueries({ queryKey: ASSISTANT_SCHEDULES_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("Horário eliminado com sucesso.", "Horário Eliminado");
     },
     onError: (error: any) => {
