@@ -367,6 +367,10 @@ export interface SchoolDayStatus {
   detail?: string;
   openingTime?: string | null;
   closingTime?: string | null;
+  lunchStart?: string | null;
+  lunchEnd?: string | null;
+  lunchStartSlot?: number | null;
+  lunchEndSlot?: number | null;
   viewStartSlot: number;
   viewEndSlot: number;
   scheduleSourceLabel?: string | null;
@@ -504,10 +508,27 @@ export function resolveSchoolDayStatusByIsoDate(
       sourceLabel = `Horário Fixo (em vigor desde ${activeRuleForDate.valid_from.slice(0, 10)})`;
     }
 
+    const lunchStart =
+      matchingException?.lunch_start ||
+      calDay?.lunch_start ||
+      ruleDayEntry?.lunch_start ||
+      null;
+    const lunchEnd =
+      matchingException?.lunch_end ||
+      calDay?.lunch_end ||
+      ruleDayEntry?.lunch_end ||
+      null;
+    const lunchStartSlot = lunchStart ? timeToSlotIndex(lunchStart) : null;
+    const lunchEndSlot = lunchEnd ? timeToSlotIndex(lunchEnd) : null;
+
     return {
       isOpen: true,
       openingTime: openTime,
       closingTime: closeTime,
+      lunchStart,
+      lunchEnd,
+      lunchStartSlot,
+      lunchEndSlot,
       viewStartSlot: bounds.viewStartSlot,
       viewEndSlot: bounds.viewEndSlot,
       scheduleSourceLabel: sourceLabel,
@@ -548,10 +569,16 @@ export function resolveSchoolDayStatusByIsoDate(
     const closeTime =
       matchingException.closing_time || ruleDayEntry?.closing_time || null;
     const bounds = resolveBoundsFromTimes(openTime, closeTime);
+    const lunchStart = matchingException.lunch_start || ruleDayEntry?.lunch_start || null;
+    const lunchEnd = matchingException.lunch_end || ruleDayEntry?.lunch_end || null;
     return {
       isOpen: true,
       openingTime: openTime,
       closingTime: closeTime,
+      lunchStart,
+      lunchEnd,
+      lunchStartSlot: lunchStart ? timeToSlotIndex(lunchStart) : null,
+      lunchEndSlot: lunchEnd ? timeToSlotIndex(lunchEnd) : null,
       viewStartSlot: bounds.viewStartSlot,
       viewEndSlot: bounds.viewEndSlot,
       scheduleSourceLabel: `Exceção: ${matchingException.name}`,
@@ -575,10 +602,16 @@ export function resolveSchoolDayStatusByIsoDate(
       ruleDayEntry.opening_time,
       ruleDayEntry.closing_time
     );
+    const lunchStart = ruleDayEntry.lunch_start || null;
+    const lunchEnd = ruleDayEntry.lunch_end || null;
     return {
       isOpen: true,
       openingTime: ruleDayEntry.opening_time,
       closingTime: ruleDayEntry.closing_time,
+      lunchStart,
+      lunchEnd,
+      lunchStartSlot: lunchStart ? timeToSlotIndex(lunchStart) : null,
+      lunchEndSlot: lunchEnd ? timeToSlotIndex(lunchEnd) : null,
       viewStartSlot: bounds.viewStartSlot,
       viewEndSlot: bounds.viewEndSlot,
       scheduleSourceLabel:
@@ -1203,6 +1236,22 @@ export function resolveAssistantShiftBounds(params: {
     }
   }
 
+  // 10. Prioridade de Ausências sobre Almoço:
+  // Se a ausência cobre ou coincide com o período de almoço, a ausência absorve a refeição ("esquece o almoço")
+  if (
+    lunchStartSlot !== null &&
+    lunchEndSlot !== null &&
+    absenceStartSlot !== null &&
+    absenceEndSlot !== null
+  ) {
+    const overlapStart = Math.max(lunchStartSlot, absenceStartSlot);
+    const overlapEnd = Math.min(lunchEndSlot, absenceEndSlot);
+    if (overlapEnd > overlapStart) {
+      lunchStartSlot = null;
+      lunchEndSlot = null;
+    }
+  }
+
   return {
     startSlot: finalStart,
     endSlot: finalEnd,
@@ -1372,6 +1421,19 @@ export function buildDayMatrixFromApi(params: {
           lunchE = gapEnd;
           break;
         }
+      }
+    }
+
+    // Se o assistente tem ausência registada que coincida com o horário de almoço, a falta absorve a refeição
+    const absInfoForLunch = checkAssistantAbsenceOnDate(assistant, isoDate, absences);
+    const absStartForLunch = absInfoForLunch.absent && absInfoForLunch.startSlot !== undefined ? absInfoForLunch.startSlot : -1;
+    const absEndForLunch = absInfoForLunch.absent && absInfoForLunch.endSlot !== undefined ? absInfoForLunch.endSlot : -1;
+    if (absInfoForLunch.absent && absStartForLunch >= 0 && absEndForLunch > absStartForLunch && lunchS !== null && lunchE !== null) {
+      const overlapStart = Math.max(lunchS, absStartForLunch);
+      const overlapEnd = Math.min(lunchE, absEndForLunch);
+      if (overlapEnd > overlapStart) {
+        lunchS = null;
+        lunchE = null;
       }
     }
 
