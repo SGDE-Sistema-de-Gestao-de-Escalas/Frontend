@@ -11,7 +11,7 @@ import {
 } from "../ui/dialog";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
-import CustomSelect from "../common/CustomSelect";
+import SearchableSelect from "../common/SearchableSelect";
 import { Checkbox } from "../ui/checkbox";
 import { useAssistantsList } from "../../hooks/api/useAssistants";
 import { useAbsenceTypesList } from "../../hooks/api/useAbsenceTypes";
@@ -234,19 +234,22 @@ export default function QuickAbsenceModal({
             <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
               Motivo *
             </label>
-            <CustomSelect
+            <SearchableSelect
               value={effectiveTypeId}
-              onValueChange={(val) => {
+              onChange={(val) => {
                 setSelectedTypeId(val);
                 if (dateErrors.type) {
                   setDateErrors((p) => ({ ...p, type: undefined }));
                 }
               }}
               placeholder="Selecionar motivo..."
+              searchPlaceholder="Pesquisar motivo da falta..."
+              emptyMessage="Nenhum motivo de falta encontrado."
               options={absenceTypes.map((t) => ({
                 value: String(t.id),
                 label: t.name,
               }))}
+              hasError={!!dateErrors.type}
             />
             {dateErrors.type && (
               <p className="text-[11px] text-destructive mt-1 font-medium">

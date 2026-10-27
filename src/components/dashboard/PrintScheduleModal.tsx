@@ -12,13 +12,7 @@ import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import DatePicker from "../common/DatePicker";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../ui/select";
+import AssistantSelect from "../common/AssistantSelect";
 import { notify } from "../common/FeedbackNotification";
 import { cn } from "../ui/utils";
 import type { Assistant } from "../../types";
@@ -1159,30 +1153,14 @@ export default function PrintScheduleModal({
                 <label className="text-xs font-medium text-foreground block">
                   Assistente a emitir:
                 </label>
-                <Select
+                <AssistantSelect
                   value={selectedAssistantFilter}
-                  onValueChange={setSelectedAssistantFilter}
-                >
-                  <SelectTrigger className="w-full bg-card">
-                    <SelectValue placeholder="Selecione o assistente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">
-                      <span className="font-semibold text-foreground">
-                        Todos os assistentes em serviço
-                      </span>
-                    </SelectItem>
-                    {allAssistantsList.map((assistant) => (
-                      <SelectItem
-                        key={String(assistant.id)}
-                        value={String(assistant.id)}
-                      >
-                        {assistant.name}
-                        {assistant.role ? ` · ${assistant.role}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(val) => setSelectedAssistantFilter(val)}
+                  assistants={allAssistantsList}
+                  includeAllOption={true}
+                  allOptionLabel="Todos os assistentes em serviço"
+                  placeholder="Pesquisar assistente por nome, nº ou email..."
+                />
                 <p className="text-[11px] text-muted-foreground">
                   {selectedAssistantFilter === "all"
                     ? "Serão geradas fichas de entrega para todos os assistentes em serviço no período."
