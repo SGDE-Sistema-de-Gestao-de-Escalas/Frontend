@@ -29,7 +29,6 @@ export function useAllAssistantExceptions() {
     queryKey: schoolScopedKey("assistant-exceptions", selectedSchoolId, "all"),
     queryFn: () => assistantExceptionsService.getAll(),
     enabled: !!selectedSchoolId,
-    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -40,9 +39,9 @@ export function useCreateAssistantException() {
     mutationFn: (payload: CreateAssistantExceptionPayload) =>
       assistantExceptionsService.create(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ASSISTANT_EXCEPTIONS_KEY,
-      });
+      queryClient.invalidateQueries({ queryKey: ASSISTANT_EXCEPTIONS_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("Regra de exceção registada com sucesso.", "Exceção Criada");
     },
     onError: (error: any) => {
@@ -66,9 +65,9 @@ export function useUpdateAssistantException() {
       assistantId: string;
     }) => assistantExceptionsService.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ASSISTANT_EXCEPTIONS_KEY,
-      });
+      queryClient.invalidateQueries({ queryKey: ASSISTANT_EXCEPTIONS_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("Regra de exceção atualizada com sucesso.", "Exceção Atualizada");
     },
     onError: (error: any) => {
@@ -90,9 +89,9 @@ export function useDeleteAssistantException() {
       assistantId: string;
     }) => assistantExceptionsService.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ASSISTANT_EXCEPTIONS_KEY,
-      });
+      queryClient.invalidateQueries({ queryKey: ASSISTANT_EXCEPTIONS_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("Regra de exceção eliminada com sucesso.", "Exceção Eliminada");
     },
     onError: (error: any) => {

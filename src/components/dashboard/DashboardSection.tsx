@@ -128,7 +128,7 @@ export default function DashboardSection({
   useEffect(() => {
     setLastGenerationResult(null);
     setShowRecalcModal(false);
-  }, [currentSchoolId]);
+  }, [currentSchoolId, queryStartDate, queryEndDate]);
 
   const isCustomDateRange =
     queryStartDate !== defaultStartIso || queryEndDate !== defaultEndIso;

@@ -236,6 +236,7 @@ export default function RecalculateModal({
         start_date: startDate,
         end_date: endDate,
         preserve_locked: preserveLocked,
+        idempotency_key: crypto.randomUUID(),
       });
 
       setGenerationResult(result);
@@ -297,6 +298,7 @@ export default function RecalculateModal({
           start_date: startDate,
           end_date: endDate,
           preserve_locked: preserveLocked,
+          idempotency_key: crypto.randomUUID(),
           transfers: nextTransfers.map((t) => ({
             assistant_id: t.assistant_id,
             date: t.date,

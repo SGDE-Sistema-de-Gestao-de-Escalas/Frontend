@@ -11,9 +11,9 @@ import { QueryClient } from "@tanstack/react-query";
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
+      staleTime: 0, // Sem cache por defeito: todas as páginas fora do dashboard pedem sempre dados frescos
       retry: 1,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
     },
   },
 });

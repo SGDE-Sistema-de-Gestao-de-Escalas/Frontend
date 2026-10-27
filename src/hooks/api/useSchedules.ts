@@ -28,7 +28,6 @@ export function usePendingRecalculations() {
       return await schedulesService.getPendingRecalculations(selectedSchoolId ?? undefined);
     },
     enabled: !!selectedSchoolId,
-    staleTime: 10000,
   });
 }
 

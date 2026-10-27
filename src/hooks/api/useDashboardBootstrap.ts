@@ -96,7 +96,7 @@ export function useDashboardBootstrap(startDate: string, endDate: string) {
     enabled: !!selectedSchoolId && !!startDate && !!endDate,
     staleTime: 30000,
     gcTime: 5 * 60 * 1000, // 5 minutos de retenção em cache
-    refetchInterval: 120_000, // Heartbeat de 2 minutos
+    refetchInterval: 60_000, // Heartbeat de 1 minuto
     refetchIntervalInBackground: false,
   });
 }

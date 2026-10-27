@@ -18,7 +18,6 @@ export function useAbsenceTypesList() {
       }
       return [];
     },
-    staleTime: 5 * 60 * 1000,
   });
 }
 
