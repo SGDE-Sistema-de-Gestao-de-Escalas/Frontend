@@ -2446,12 +2446,6 @@ function paintSlot(aid: EntityId, slot: number) {
                                     <span className="font-semibold text-xs text-foreground">
                                       {displayLabel}
                                     </span>
-                                    {b.activityName &&
-                                      b.activityName !== styleConfig.label && (
-                                        <span className="text-[10px] text-muted-foreground">
-                                          ({styleConfig.label})
-                                        </span>
-                                      )}
                                   </div>
                                   {isLocked && (
                                     <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
@@ -3749,12 +3743,6 @@ function paintSlot(aid: EntityId, slot: number) {
                                       <div className="mt-1.5 pt-1.5 border-t border-border/60 space-y-0.5">
                                         <p className="text-xs font-semibold text-foreground">
                                           Teria a cargo: {displayLabel}
-                                          {b.activityName &&
-                                            b.activityName !== styleConfig.label && (
-                                              <span className="text-[10px] text-muted-foreground font-normal ml-1">
-                                                ({styleConfig.label})
-                                              </span>
-                                            )}
                                         </p>
                                         <p className="text-[11px] font-mono text-muted-foreground">
                                           {startTimeStr} – {endTimeStr} (

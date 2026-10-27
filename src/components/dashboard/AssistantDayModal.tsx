@@ -300,9 +300,11 @@ export default function AssistantDayModal({
                     <span>
                       {startTime} – {endTime}
                     </span>
-                    <span className="uppercase text-[9px] tracking-wide text-muted-foreground/80 font-sans">
-                      {styleConfig.label}
-                    </span>
+                    {!block.activityName && (
+                      <span className="uppercase text-[9px] tracking-wide text-muted-foreground/80 font-sans">
+                        {styleConfig.label}
+                      </span>
+                    )}
                   </div>
                 </div>
               );

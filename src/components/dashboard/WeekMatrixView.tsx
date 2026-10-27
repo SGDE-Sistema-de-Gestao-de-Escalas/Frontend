@@ -419,12 +419,6 @@ export default function WeekMatrixView({
                                     <span className="font-semibold text-xs text-foreground">
                                       {displayLabel}
                                     </span>
-                                    {b.activityName &&
-                                      b.activityName !== styleConfig.label && (
-                                        <span className="text-[10px] text-muted-foreground">
-                                          ({styleConfig.label})
-                                        </span>
-                                      )}
                                   </div>
                                   <p className="text-[11px] font-mono text-muted-foreground mt-0.5">
                                     {info.dayShort} {info.dateStr} · {startTimeStr}–
