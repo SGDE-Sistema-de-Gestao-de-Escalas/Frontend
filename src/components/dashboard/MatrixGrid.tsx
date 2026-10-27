@@ -1590,10 +1590,10 @@ const [publishModalState, setPublishModalState] = useState<{
         );
       } else {
         notify.success(
-          `Alterações guardadas com sucesso na base de dados para ${daysToSave.length} ${
+          `Alterações guardadas como Rascunho para ${daysToSave.length} ${
             daysToSave.length === 1 ? "dia" : "dias"
-          }.`,
-          "Escala Gravada"
+          }. Lembre-se de publicar a escala novamente para que entre em vigor.`,
+          "Rascunho Guardado"
         );
       }
     } catch (err: any) {
@@ -2587,7 +2587,7 @@ const [publishModalState, setPublishModalState] = useState<{
                   <Edit2 size={11} />
                   {editMode
                     ? modifiedDaysSummary.length > 0
-                      ? `Concluir Edição (${modifiedDaysSummary.length} ${
+                      ? `Sair da Edição (${modifiedDaysSummary.length} ${
                           modifiedDaysSummary.length === 1
                             ? "dia alterado"
                             : "dias alterados"
@@ -3567,7 +3567,7 @@ const [publishModalState, setPublishModalState] = useState<{
           <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10">
             <DialogTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
               <CheckCircle2 size={16} className="text-primary" />
-              Confirmar e Validar Alterações de Escala
+              Confirmar e Guardar Alterações de Escala
             </DialogTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
               Revê os dias que vão ser alterados antes de guardar para garantir
@@ -3576,6 +3576,22 @@ const [publishModalState, setPublishModalState] = useState<{
           </DialogHeader>
 
           <div className="p-5 space-y-3 max-h-96 overflow-y-auto">
+            {/* Aviso Obrigatório: Escala Ficará em Rascunho e Terá de ser Novamente Publicada */}
+            <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
+              <AlertTriangle
+                size={16}
+                className="mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-400"
+              />
+              <div className="space-y-1">
+                <p className="font-semibold text-foreground">
+                  Aviso: O horário ficará como Rascunho (Draft)
+                </p>
+                <p className="leading-relaxed opacity-90">
+                  Ao confirmar e guardar as alterações efetuadas, a escala dos dias modificados passará para o estado de <strong>Rascunho</strong> e deixará de estar em vigor. Terá de ser <strong>novamente publicada</strong> para que as novas alterações fiquem visíveis para as equipas.
+                </p>
+              </div>
+            </div>
+
             {hasAnyIncompleteWarnings && (
               <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
                 <AlertTriangle
@@ -3706,7 +3722,7 @@ const [publishModalState, setPublishModalState] = useState<{
                     ? "A gravar..."
                     : hasAnyIncompleteWarnings
                     ? `Guardar Rascunho Mesmo Assim (${modifiedDaysSummary.length})`
-                    : `Confirmar e Guardar (${modifiedDaysSummary.length})`}
+                    : `Guardar Rascunho e Sair (${modifiedDaysSummary.length})`}
                 </span>
               </button>
             </div>

@@ -37,6 +37,7 @@ import CustomSelect from "../common/CustomSelect";
 import {
   useGenerateSchedules,
   usePublishSchedules,
+  useSchedulesList,
 } from "../../hooks/api/useSchedules";
 import { useSchool } from "../../context/SchoolContext";
 import type {
@@ -87,6 +88,7 @@ export default function RecalculateModal({
   const { selectedSchool, schools: contextSchools } = useSchool();
   const generateMutation = useGenerateSchedules();
   const publishMutation = usePublishSchedules();
+  const { data: existingSchedules = [] } = useSchedulesList();
 
   const todayIso = useMemo(() => new Date().toISOString().split("T")[0], []);
   const defaultEndIso = useMemo(() => {
@@ -100,6 +102,30 @@ export default function RecalculateModal({
   const [strategy, setStrategy] = useState<"auto" | "fill" | "full">("auto");
   const [respectExceptions, setRespectExceptions] = useState(true);
   const [step, setStep] = useState<"form" | "gap" | "done">("form");
+  const [showPublishOverwriteConfirm, setShowPublishOverwriteConfirm] = useState(false);
+
+  const hasPublishedSchedulesInRange = useMemo(() => {
+    if (!startDate || !endDate || existingSchedules.length === 0) return false;
+    const cleanStart = startDate.slice(0, 10);
+    const cleanEnd = endDate.slice(0, 10);
+
+    return existingSchedules.some((sc) => {
+      if (sc.status !== "published" && !sc.published_at) return false;
+
+      const ws = (sc.week_start || "").slice(0, 10);
+      const we = (sc.week_end || "").slice(0, 10);
+      if (ws && we && ws <= cleanEnd && we >= cleanStart) {
+        if (sc.entries && sc.entries.length > 0) {
+          return sc.entries.some((e) => {
+            const ed = (e.date || "").slice(0, 10);
+            return ed >= cleanStart && ed <= cleanEnd;
+          });
+        }
+        return true;
+      }
+      return false;
+    });
+  }, [existingSchedules, startDate, endDate]);
 
   useEffect(() => {
     if (open) {
@@ -371,6 +397,16 @@ export default function RecalculateModal({
       return;
     }
 
+    // Se o período já contiver horários publicados, pede confirmação explícita ao administrador
+    if (hasPublishedSchedulesInRange) {
+      setShowPublishOverwriteConfirm(true);
+      return;
+    }
+
+    await executeGeneration();
+  }
+
+  async function executeGeneration() {
     setDateErrors({});
     setApprovedTransfers([]);
     setIgnoredConflictKeys(new Set());
@@ -587,8 +623,9 @@ export default function RecalculateModal({
   const isPublishing = publishMutation.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={(val) => !val && handleClose()}>
-      <DialogContent className="max-w-xl max-h-[90vh] flex flex-col p-0 overflow-hidden sm:rounded-xl">
+    <>
+      <Dialog open={open} onOpenChange={(val) => !val && handleClose()}>
+        <DialogContent className="max-w-xl max-h-[90vh] flex flex-col p-0 overflow-hidden sm:rounded-xl">
         {/* Header com Stepper por baixo dos títulos (idêntico à modal de CSV) */}
         <DialogHeader className="px-6 pt-5 pb-4 border-b border-border bg-card">
           <div className="flex items-center gap-3 pr-8">
@@ -859,6 +896,24 @@ export default function RecalculateModal({
                   </p>
                 </div>
               </label>
+
+              {/* Alerta se o período já se encontra publicado */}
+              {hasPublishedSchedulesInRange && (
+                <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5 animate-in fade-in-50">
+                  <AlertTriangle
+                    size={16}
+                    className="text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0"
+                  />
+                  <div className="space-y-1">
+                    <p className="font-semibold text-foreground">
+                      Atenção: Horário deste período já se encontra publicado
+                    </p>
+                    <p className="leading-relaxed opacity-90">
+                      O período selecionado ({startDate === endDate ? startDate : `${startDate} a ${endDate}`}) já possui uma escala publicada. Ao recalcular, esta escala passará para o estado de <strong>Rascunho (Draft)</strong> e deixará de estar em vigor até ser novamente publicada.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Caixa Informativa sobre as Fases do Motor (Estilo idêntico ao modelo CSV) */}
               <div className="rounded-lg border border-border bg-muted/30 p-3.5 space-y-2 text-xs">
@@ -1532,5 +1587,59 @@ export default function RecalculateModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Modal de Confirmação para Recalcular Horário Publicado */}
+    <Dialog
+      open={showPublishOverwriteConfirm}
+      onOpenChange={setShowPublishOverwriteConfirm}
+    >
+      <DialogContent className="max-w-md p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+        <DialogHeader className="px-5 py-4 border-b border-border bg-amber-500/10">
+          <DialogTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <AlertTriangle size={17} className="text-amber-600 dark:text-amber-400" />
+            Recalcular Horário Já Publicado?
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground mt-1">
+            A escala do período de <strong>{startDate === endDate ? startDate : `${startDate} a ${endDate}`}</strong> já está atualmente <strong>publicada</strong>.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="p-5 text-xs text-foreground space-y-2.5 leading-relaxed">
+          <p>
+            Ao proceder ao recálculo, o horário existente será substituído e passará para o estado de <strong>Rascunho (Draft)</strong>.
+          </p>
+          <p className="text-muted-foreground">
+            O novo horário gerado <strong>não estará em vigor nem visível para as equipas</strong> até ser revisto e novamente publicado por um administrador.
+          </p>
+          <p className="font-medium text-foreground pt-1">
+            Tem a certeza de que deseja avançar com o recálculo?
+          </p>
+        </div>
+
+        <DialogFooter className="px-5 py-3 border-t border-border bg-muted/5 flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowPublishOverwriteConfirm(false)}
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5"
+            onClick={() => {
+              setShowPublishOverwriteConfirm(false);
+              executeGeneration();
+            }}
+          >
+            <RefreshCw size={13} />
+            Sim, Recalcular e Tornar Rascunho
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </>
   );
 }
