@@ -192,9 +192,6 @@ function getDayScheduleDetails(
       a.start_time.localeCompare(b.start_time)
     );
 
-    const shiftStart = sortedEntries[0].start_time.slice(0, 5);
-    const shiftEnd = sortedEntries[sortedEntries.length - 1].end_time.slice(0, 5);
-
     const matchedAssistant = assistantsList.find(
       (a) => String(a.id) === aId
     );
@@ -213,10 +210,23 @@ function getDayScheduleDetails(
         .slice(0, 2)
         .toUpperCase();
 
-    const entriesWithLunch: AssistantDaySchedule["entries"] = [];
+    // Obter ausências parciais/registadas para este assistente nesta data
+    const matchingAbsences = absences.filter((abs) => {
+      if (String(abs.assistant_id) !== aId) return false;
+      const from = (abs.valid_from || abs.start_date || "").slice(0, 10);
+      const until = (abs.valid_until || abs.end_date || from).slice(0, 10);
+      return from <= isoDate && isoDate <= until;
+    });
 
-    for (let idx = 0; idx < sortedEntries.length; idx++) {
-      const e = sortedEntries[idx];
+    const rawItems: Array<{
+      id: string;
+      activityName: string;
+      activityColor?: string;
+      startTime: string;
+      endTime: string;
+      isLocked: boolean;
+      isFallback: boolean;
+    }> = sortedEntries.map((e) => {
       const actName =
         e.activity_name || (e.is_fallback ? "Apoio Turmas/escola" : "Atividade");
       const isLunchAct =
@@ -224,7 +234,7 @@ function getDayScheduleDetails(
         actName.toLowerCase().includes("almoco") ||
         actName.toLowerCase().includes("pausa");
 
-      entriesWithLunch.push({
+      return {
         id: String(e.id),
         activityName: actName,
         activityColor: e.activity_color || (isLunchAct ? "#F97316" : "#3B82F6"),
@@ -232,12 +242,51 @@ function getDayScheduleDetails(
         endTime: e.end_time.slice(0, 5),
         isLocked: Boolean(e.is_locked),
         isFallback: Boolean(e.is_fallback),
-      });
+      };
+    });
 
-      if (idx < sortedEntries.length - 1) {
-        const next = sortedEntries[idx + 1];
-        const gapStart = e.end_time.slice(0, 5);
-        const gapEnd = next.start_time.slice(0, 5);
+    // Inserir ausências como blocos visíveis (vermelho) idênticos ao dashboard
+    matchingAbsences.forEach((abs) => {
+      const s = (abs.start_time || "").slice(0, 5);
+      const e = (abs.end_time || "").slice(0, 5);
+      const absName =
+        abs.absence_type?.name || abs.justification || "Falta / Ausência";
+      if (s && e && e > s) {
+        rawItems.push({
+          id: `absence-${abs.id || aId}-${s}`,
+          activityName: absName,
+          activityColor: "#EF4444",
+          startTime: s,
+          endTime: e,
+          isLocked: true,
+          isFallback: false,
+        });
+      }
+    });
+
+    const sortedItems = [...rawItems].sort((a, b) =>
+      a.startTime.localeCompare(b.startTime)
+    );
+
+    const shiftStart =
+      (sc?.shift_start ? sc.shift_start.slice(0, 5) : null) ||
+      sortedItems[0]?.startTime ||
+      "08:00";
+    const shiftEnd =
+      (sc?.shift_end ? sc.shift_end.slice(0, 5) : null) ||
+      sortedItems[sortedItems.length - 1]?.endTime ||
+      "17:00";
+
+    const entriesWithLunch: AssistantDaySchedule["entries"] = [];
+
+    for (let idx = 0; idx < sortedItems.length; idx++) {
+      const cur = sortedItems[idx];
+      entriesWithLunch.push(cur);
+
+      if (idx < sortedItems.length - 1) {
+        const next = sortedItems[idx + 1];
+        const gapStart = cur.endTime;
+        const gapEnd = next.startTime;
         const gapStartMin = parseTimeToMinutes(gapStart);
         const gapEndMin = parseTimeToMinutes(gapEnd);
         const gapDuration = gapEndMin - gapStartMin;
@@ -479,12 +528,53 @@ function validateDayForPublish(
     const ast = assistants.find((a) => String(a.id) === astId);
     const astName = ast?.name || `Assistente #${astId.slice(0, 6)}`;
     const astEntries = allDayEntries.filter((e) => e.assistantId === astId);
-    const sorted = [...astEntries].sort((a, b) => a.start_time.localeCompare(b.start_time));
+
+    // Obter também ausências deste assistente nesta data
+    const astAbsences = absences.filter((abs) => {
+      if (String(abs.assistant_id) !== astId) return false;
+      const from = (abs.valid_from || abs.start_date || "").slice(0, 10);
+      const until = (abs.valid_until || abs.end_date || from).slice(0, 10);
+      return from <= isoDate && isoDate <= until;
+    });
+
+    const busyBlocks: Array<{ start: string; end: string }> = [
+      ...astEntries.map((e) => ({
+        start: e.start_time.slice(0, 5),
+        end: e.end_time.slice(0, 5),
+      })),
+    ];
+
+    astAbsences.forEach((abs) => {
+      const s = (abs.start_time || "").slice(0, 5);
+      const e = (abs.end_time || "").slice(0, 5);
+      if (s && e && e > s) {
+        busyBlocks.push({ start: s, end: e });
+      }
+    });
+
+    const sorted = [...busyBlocks].sort((a, b) => a.start.localeCompare(b.start));
+
+    // Fundir intervalos sobrepostos ou adjacentes
+    const mergedBlocks: Array<{ start: string; end: string }> = [];
+    sorted.forEach((block) => {
+      if (mergedBlocks.length === 0) {
+        mergedBlocks.push({ ...block });
+      } else {
+        const last = mergedBlocks[mergedBlocks.length - 1];
+        if (block.start <= last.end) {
+          if (block.end > last.end) {
+            last.end = block.end;
+          }
+        } else {
+          mergedBlocks.push({ ...block });
+        }
+      }
+    });
 
     let lunchCount = 0;
-    for (let i = 0; i < sorted.length - 1; i++) {
-      const curEnd = sorted[i].end_time.slice(0, 5);
-      const nextStart = sorted[i + 1].start_time.slice(0, 5);
+    for (let i = 0; i < mergedBlocks.length - 1; i++) {
+      const curEnd = mergedBlocks[i].end;
+      const nextStart = mergedBlocks[i + 1].start;
       if (nextStart > curEnd) {
         const gapStartM = parseTimeToMinutes(curEnd);
         const gapEndM = parseTimeToMinutes(nextStart);
@@ -498,14 +588,14 @@ function validateDayForPublish(
       }
     }
 
-    let totalWorkMin = 0;
-    sorted.forEach((e) => {
-      totalWorkMin += parseTimeToMinutes(e.end_time) - parseTimeToMinutes(e.start_time);
+    let totalCoveredMin = 0;
+    mergedBlocks.forEach((e) => {
+      totalCoveredMin += parseTimeToMinutes(e.end) - parseTimeToMinutes(e.start);
     });
 
-    // Apenas assistentes residentes têm obrigatoriedade de turno normal >= 4h; transferidos podem vir para apoios pontuais
-    if (!ast?.is_temporary_transfer && sorted.length > 0 && totalWorkMin < 4 * 60) {
-      gapReasons.push(`${astName} (apenas ${Math.floor(totalWorkMin / 60)}h atribuídas)`);
+    // Apenas assistentes residentes têm obrigatoriedade de turno normal >= 4h; transferidos ou com falta podem ter menos horas
+    if (!ast?.is_temporary_transfer && mergedBlocks.length > 0 && totalCoveredMin < 4 * 60 && astAbsences.length === 0) {
+      gapReasons.push(`${astName} (apenas ${Math.floor(totalCoveredMin / 60)}h atribuídas)`);
     }
   });
 
@@ -869,7 +959,7 @@ export default function PublishSchedulesModal({
           isUnscheduled ? "bg-card/40 group-hover:bg-card" : "bg-card/60 group-hover:bg-card"
         }`}>
           <div className={`w-7 h-7 rounded-full font-bold text-[10px] flex items-center justify-center flex-shrink-0 ${
-            ast.absenceReason
+            ast.absenceReason || ast.entries.some((e) => e.activityColor === "#EF4444")
               ? "bg-destructive/15 text-destructive ring-1 ring-destructive/30"
               : isUnscheduled && !ast.shiftStart
               ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 ring-1 ring-amber-500/40"
@@ -885,6 +975,14 @@ export default function PublishSchedulesModal({
               <p className="text-[10px] font-medium text-destructive flex items-center gap-1 mt-0.5">
                 <AlertTriangle size={9} className="flex-shrink-0 text-destructive" />
                 <span className="truncate">Ausência: {ast.absenceReason}</span>
+              </p>
+            ) : ast.entries.some((e) => e.activityColor === "#EF4444") ? (
+              <p className="text-[10px] font-mono text-muted-foreground flex items-center gap-1 mt-0.5 flex-wrap">
+                <Clock size={9} className="text-primary/70 flex-shrink-0" />
+                <span>Turno {ast.shiftStart}–{ast.shiftEnd}</span>
+                <span className="text-[9px] font-sans font-medium px-1 py-0.2 bg-destructive/10 text-destructive rounded border border-destructive/20 ml-0.5">
+                  Falta parcial
+                </span>
               </p>
             ) : ast.shiftStart && ast.shiftEnd ? (
               <p className="text-[10px] font-mono text-muted-foreground flex items-center gap-1 mt-0.5">

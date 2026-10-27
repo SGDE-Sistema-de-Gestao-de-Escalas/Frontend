@@ -3948,7 +3948,7 @@ const [publishModalState, setPublishModalState] = useState<{
         absentAssistants={printableAbsentAssistants}
       />
 
-<PublishSchedulesModal
+      <PublishSchedulesModal
         open={publishModalState.open}
         onClose={() => setPublishModalState({ open: false })}
         schedules={schedulesList}
@@ -3957,6 +3957,8 @@ const [publishModalState, setPublishModalState] = useState<{
         temporaryAssignments={temporaryAssignments}
         selectedSchoolId={selectedSchoolId}
         initialSelectedDate={publishModalState.preselectedDate}
+        profilesByAssistant={profilesByAssistant}
+        exceptionsByAssistant={exceptionsByAssistant}
       />
     </TooltipProvider>
   );
