@@ -325,15 +325,24 @@ export default function RecalculateModal({
       return;
     }
 
-    // Se foram confirmadas designações de transferência, re-executar com as transferências aprovadas
-    if (nextTransfers.length > 0 && generationResult) {
+    await handleFinalizeWithTransfers(nextTransfers);
+  }
+
+  async function handleFinalizeWithTransfers(
+    transfersToApply: (ApprovedTransferPayload & {
+      assistant_name: string;
+      origin_school_name: string;
+      period: string;
+    })[]
+  ) {
+    if (transfersToApply.length > 0 && generationResult) {
       try {
         const preserveLocked = strategy !== "full" && respectExceptions;
         const updatedResult = await generateMutation.mutateAsync({
           start_date: startDate,
           end_date: endDate,
           preserve_locked: preserveLocked,
-          transfers: nextTransfers.map((t) => ({
+          transfers: transfersToApply.map((t) => ({
             assistant_id: t.assistant_id,
             date: t.date,
             rule_id: t.rule_id,
@@ -659,6 +668,63 @@ export default function RecalculateModal({
           {/* ========================================================= */}
           {step === "gap" && activeConflict && (
             <div className="space-y-4">
+              {/* Barra de Progresso e Navegação dos Défices */}
+              {conflicts.length > 1 && (
+                <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-muted/40 border border-border/70 text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-semibold text-foreground">
+                      Défice {currentConflictIdx + 1} de {conflicts.length}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {conflicts.map((_, idx) => (
+                        <div
+                          key={idx}
+                          className={`h-2 rounded-full transition-all ${
+                            idx === currentConflictIdx
+                              ? "w-6 bg-primary shadow-xs"
+                              : idx < currentConflictIdx
+                              ? "w-2.5 bg-emerald-500"
+                              : "w-2.5 bg-muted-foreground/30"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  {approvedTransfers.length > 0 && (
+                    <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                      ✓ {approvedTransfers.length} {approvedTransfers.length === 1 ? "designada" : "designadas"}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Banner Informativo de Transferências já Aprovadas com Ação Imediata */}
+              {approvedTransfers.length > 0 && (
+                <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 text-xs flex items-center justify-between gap-2.5 animate-in fade-in-50">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <CheckCircle2 size={16} className="text-primary flex-shrink-0" />
+                    <div className="truncate">
+                      <span className="font-semibold text-foreground mr-1.5">
+                        {approvedTransfers.length} {approvedTransfers.length === 1 ? "transferência configurada" : "transferências configuradas"}:
+                      </span>
+                      <span className="text-muted-foreground text-[11px] truncate">
+                        {approvedTransfers.map((t) => `${t.assistant_name} (${t.period})`).join(", ")}
+                      </span>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isRunning}
+                    onClick={() => handleFinalizeWithTransfers(approvedTransfers)}
+                    className="h-7 px-2.5 text-[11px] border-primary/40 text-primary hover:bg-primary/10 flex-shrink-0 font-medium"
+                  >
+                    Aplicar agora →
+                  </Button>
+                </div>
+              )}
+
               {/* Alerta de Falha de Cobertura */}
               <div className="p-3.5 rounded-xl border border-rose-300 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/30 flex items-start gap-3 text-xs text-rose-800 dark:text-rose-200">
                 <div className="w-8 h-8 rounded-full bg-rose-500/15 flex items-center justify-center flex-shrink-0 text-rose-600 dark:text-rose-400">
@@ -1163,7 +1229,7 @@ export default function RecalculateModal({
           )}
 
           {step === "gap" && (
-            <>
+            <div className="flex items-center justify-between w-full gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -1171,28 +1237,54 @@ export default function RecalculateModal({
                 disabled={isRunning}
                 onClick={() => handleAdvanceFromConflict(null)}
               >
-                {currentConflictIdx + 1 < conflicts.length ? "Ignorar e Avançar" : "Ignorar Défice"}
+                {currentConflictIdx + 1 < conflicts.length ? "Saltar este Défice" : "Ignorar Défice e Concluir"}
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => selectedSub && handleAdvanceFromConflict(selectedSub)}
-                disabled={!selectedSub || isRunning}
-                className="gap-2"
-              >
-                {isRunning ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    A aplicar...
-                  </>
-                ) : (
-                  <>
-                    <Check size={14} />
-                    Confirmar Designação
-                  </>
+
+              <div className="flex items-center gap-2">
+                {approvedTransfers.length > 0 && currentConflictIdx + 1 < conflicts.length && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isRunning}
+                    onClick={() => handleFinalizeWithTransfers(approvedTransfers)}
+                    className="border-primary/40 text-primary hover:bg-primary/5"
+                  >
+                    {isRunning ? (
+                      <Loader2 size={13} className="animate-spin mr-1.5" />
+                    ) : (
+                      <Check size={13} className="mr-1.5" />
+                    )}
+                    Aplicar já ({approvedTransfers.length})
+                  </Button>
                 )}
-              </Button>
-            </>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => selectedSub && handleAdvanceFromConflict(selectedSub)}
+                  disabled={!selectedSub || isRunning}
+                  className="gap-2"
+                >
+                  {isRunning ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      A aplicar...
+                    </>
+                  ) : currentConflictIdx + 1 < conflicts.length ? (
+                    <>
+                      <span>Guardar e Próximo Défice</span>
+                      <ArrowRight size={14} />
+                    </>
+                  ) : (
+                    <>
+                      <Check size={14} />
+                      Confirmar e Gerar Escala
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           )}
 
           {step === "done" && (
