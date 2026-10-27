@@ -1,6 +1,6 @@
 import apiClient from "../client";
 import type { ApiResponse } from "../types/api.types";
-import type { EntityId, Holiday } from "../../types";
+import type { EntityId } from "../../types";
 
 export interface HolidayPayload {
   name: string;

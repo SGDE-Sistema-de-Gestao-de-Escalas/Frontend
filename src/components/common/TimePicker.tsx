@@ -1,4 +1,3 @@
-import React from "react";
 import { useSchool } from "../../context/SchoolContext";
 import CustomSelect from "./CustomSelect";
 

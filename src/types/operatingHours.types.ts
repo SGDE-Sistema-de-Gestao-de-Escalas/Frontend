@@ -20,6 +20,7 @@ export interface OperatingRule {
   status: OperatingRuleStatus;
   status_message: string;
   can_edit: boolean;
+  cannot_edit_reason?: string | null;
   can_delete: boolean;
   cannot_delete_reason?: string | null;
   created_at?: string;

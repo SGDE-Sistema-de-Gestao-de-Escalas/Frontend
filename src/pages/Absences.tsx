@@ -1,4 +1,3 @@
-import React from "react";
 import AbsenceManagement from "../components/absences/AbsenceManagement";
 import { useSchool } from "../context/SchoolContext";
 import NoSchoolPlaceholder from "../components/common/NoSchoolPlaceholder";

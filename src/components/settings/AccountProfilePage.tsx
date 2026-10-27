@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
-  AlertTriangle,
   Loader2,
   Save,
   Shield,
-  Upload,
   Download,
   X,
   XCircle,
@@ -204,7 +202,7 @@ export default function AccountProfilePage({
     setSavingProfile(true);
 
     try {
-      const res = await authService.updateProfile(
+      await authService.updateProfile(
         { first_name: fName, last_name: lName, email: mail },
         user.id
       );

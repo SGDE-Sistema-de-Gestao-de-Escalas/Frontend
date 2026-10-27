@@ -25,7 +25,7 @@ export function usePendingRecalculations() {
   return useQuery({
     queryKey: schoolScopedKey("schedules", selectedSchoolId, "pending-recalculations"),
     queryFn: async (): Promise<PendingRecalculationsResponse> => {
-      return await schedulesService.getPendingRecalculations(selectedSchoolId ?? undefined);
+      return await schedulesService.getPendingRecalculations(selectedSchoolId ? String(selectedSchoolId) : undefined);
     },
     enabled: !!selectedSchoolId,
   });

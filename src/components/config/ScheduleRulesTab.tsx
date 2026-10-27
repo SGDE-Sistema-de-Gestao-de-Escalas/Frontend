@@ -1,8 +1,6 @@
 import React, { useState } from "react";
 import {
   AlertTriangle,
-  ArrowUpDown,
-  Check,
   CheckCircle,
   ChevronDown,
   ChevronUp,
@@ -11,7 +9,6 @@ import {
   Loader2,
   Pencil,
   Plus,
-  ShieldAlert,
   Trash2,
   Users,
 } from "lucide-react";
@@ -79,8 +76,7 @@ export default function ScheduleRulesTab() {
   const [showMissingSubstitutesWarning, setShowMissingSubstitutesWarning] = useState(false);
 
   const isEditing = editingRuleId !== null;
-  const selectedActivity = activityTypes.find((a) => a.id === formActivityId);
-  const ruleEligibleActivityTypes = activityTypes.filter(
+    const ruleEligibleActivityTypes = activityTypes.filter(
     (a) => a.active !== false && !isFallbackActivityType(a)
   );
   function toggleDay(i: number) {

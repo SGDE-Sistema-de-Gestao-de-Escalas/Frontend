@@ -1,13 +1,11 @@
 import React, { useMemo, useState } from "react";
 import {
   AlertTriangle,
-  Calendar,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
   Download,
   FileText,
-  Filter,
   Inbox,
   Loader2,
   Paperclip,
@@ -31,9 +29,7 @@ import {
   useUpdateAbsence,
 } from "../../hooks/api/useAbsences";
 import { useAbsenceTypesList } from "../../hooks/api/useAbsenceTypes";
-import absencesService, {
-  type BackendAbsenceResource,
-} from "../../api/services/absences.service";
+import absencesService from "../../api/services/absences.service";
 import { notify } from "../common/FeedbackNotification";
 
 type StatusFilterTab = "all" | "pending" | "justified" | "unjustified";
@@ -74,7 +70,7 @@ export default function StaffAbsenceDetail() {
   });
   const absences = absencesResult?.data || [];
 
-  const { data: absenceTypes = [], isLoading: isLoadingTypes } =
+  const { data: absenceTypes = [], isLoading: _isLoadingTypes } =
     useAbsenceTypesList();
   const createMutation = useCreateAbsence();
   const uploadDocMutation = useUploadAbsenceDocument();
@@ -113,7 +109,7 @@ export default function StaffAbsenceDetail() {
       const isPending = s === "pending" || s === "aguarda_documento";
       const isJustified = s === "justified" || s === "justificada";
       const isUnjustified = s === "unjustified" || s === "injustificada";
-
+  
       if (statusFilter === "pending" && !isPending) return false;
       if (statusFilter === "justified" && !isJustified) return false;
       if (statusFilter === "unjustified" && !isUnjustified) return false;
@@ -270,7 +266,6 @@ export default function StaffAbsenceDetail() {
     const s = (selectedAbsenceDetail.status || "").toLowerCase();
     const isPending = s === "pending" || s === "aguarda_documento";
     const isJustified = s === "justified" || s === "justificada";
-    const isUnjustified = s === "unjustified" || s === "injustificada";
 
     const displayReason =
       selectedAbsenceDetail.absence_type_name ||

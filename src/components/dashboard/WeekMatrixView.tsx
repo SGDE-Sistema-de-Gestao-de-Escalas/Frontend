@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import { Lock } from "lucide-react";
 import type { BlockState, EntityId } from "../../types";
 import { Card } from "../ui/card";
@@ -189,11 +189,11 @@ export default function WeekMatrixView({
                   <ActionTooltip key={offset} content={tooltipText}>
                     <button
                       type="button"
-                      onClick={() => !isClosed && onSelectDay(offset)}
-                      className={`w-full px-2 py-2 text-center border-r border-border/50 last:border-0 transition-colors ${
+                      onClick={() => onSelectDay(offset)}
+                      className={`w-full px-2 py-2 text-center border-r border-border/50 last:border-0 transition-colors cursor-pointer ${
                         isClosed
-                          ? "bg-muted/20 cursor-default"
-                          : "hover:bg-primary/5 cursor-pointer"
+                          ? "bg-muted/15 hover:bg-muted/30"
+                          : "hover:bg-primary/5"
                       } ${isToday ? "bg-primary/10" : ""}`}
                     >
                     <p
@@ -201,7 +201,7 @@ export default function WeekMatrixView({
                         isToday
                           ? "text-primary"
                           : isClosed
-                          ? "text-muted-foreground/50"
+                          ? "text-muted-foreground/60"
                           : "text-muted-foreground"
                       }`}
                     >
@@ -212,7 +212,7 @@ export default function WeekMatrixView({
                         isToday
                           ? "text-primary font-bold"
                           : isClosed
-                          ? "text-muted-foreground/40"
+                          ? "text-muted-foreground/60"
                           : "text-foreground"
                       }`}
                     >
@@ -223,12 +223,24 @@ export default function WeekMatrixView({
                         {hoursLabel}
                       </p>
                     )}
-                    {!isClosed && !hasGenerated && (
+                    {isClosed ? (
+                      <span
+                        className={`inline-block mt-0.5 text-[9px] font-semibold px-1 py-0.2 rounded truncate max-w-[95px] ${
+                          status.reasonType === "exception"
+                            ? "text-destructive bg-destructive/10 border border-destructive/20"
+                            : status.reasonType === "holiday"
+                            ? "text-[#D97706] bg-[#D97706]/10 border border-[#D97706]/20"
+                            : "text-muted-foreground/60"
+                        }`}
+                        title={status.title}
+                      >
+                        {status.closedLabel || (status.reasonType === "exception" ? "Exceção" : "Encerrado")}
+                      </span>
+                    ) : !hasGenerated ? (
                       <span className="inline-block mt-0.5 text-[9px] font-medium text-[#D97706]">
                         Não gerada
                       </span>
-                    )}
-                    {!isClosed && hasGenerated && pubInfo && (
+                    ) : pubInfo ? (
                       pubInfo.isPublished ? (
                         <span className="inline-block mt-0.5 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
                           Publicada
@@ -238,7 +250,7 @@ export default function WeekMatrixView({
                           Rascunho
                         </span>
                       )
-                    )}
+                    ) : null}
                   </button>
                 </ActionTooltip>
               );
@@ -299,16 +311,34 @@ export default function WeekMatrixView({
                     return (
                       <div
                         key={offset}
-                        onClick={() => !isClosed && onSelectDay(offset)}
-                        className={`flex-1 h-10 border-r border-border/50 last:border-0 overflow-hidden transition-colors ${
+                        onClick={() => onSelectDay(offset)}
+                        className={`flex-1 h-10 border-r border-border/50 last:border-0 overflow-hidden transition-colors cursor-pointer ${
                           isClosed
-                            ? "bg-muted/20 cursor-default"
-                            : "hover:bg-muted/20 cursor-pointer"
+                            ? "bg-muted/15 hover:bg-muted/30"
+                            : "hover:bg-muted/20"
                         } ${isToday ? "ring-1 ring-inset ring-primary/30" : ""}`}
                       >
                         <div className="relative w-full h-full">
                           {isToday && (
                             <div className="absolute inset-0 bg-primary/5" />
+                          )}
+                          {isClosed && (
+                            <div
+                              className="w-full h-full flex items-center justify-center px-1 text-center"
+                              title={status.title}
+                            >
+                              <span
+                                className={`text-[10px] font-medium truncate max-w-full px-1.5 py-0.5 rounded ${
+                                  status.reasonType === "exception"
+                                    ? "text-destructive/80 bg-destructive/5 border border-destructive/15"
+                                    : status.reasonType === "holiday"
+                                    ? "text-[#D97706]/80 bg-[#D97706]/5 border border-[#D97706]/15"
+                                    : "text-muted-foreground/40"
+                                }`}
+                              >
+                                {status.closedLabel || (status.reasonType === "exception" ? "Exceção" : "Encerrado")}
+                              </span>
+                            </div>
                           )}
                           {slotsToBlocks(slots, meta).map((b) => {
                             const cs = Math.max(b.start, dayViewStart);
@@ -389,12 +419,6 @@ export default function WeekMatrixView({
                                     <span className="font-semibold text-xs text-foreground">
                                       {displayLabel}
                                     </span>
-                                    {b.activityName &&
-                                      b.activityName !== styleConfig.label && (
-                                        <span className="text-[10px] text-muted-foreground">
-                                          ({styleConfig.label})
-                                        </span>
-                                      )}
                                   </div>
                                   <p className="text-[11px] font-mono text-muted-foreground mt-0.5">
                                     {info.dayShort} {info.dateStr} · {startTimeStr}–

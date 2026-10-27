@@ -3,17 +3,12 @@ import {
   BarChart2,
   Calendar,
   ChevronRight,
-  FileText,
   Inbox,
-  Layers,
-  LogOut,
   Settings,
   SlidersHorizontal,
-  User,
   Users,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import type { AdminPage, StaffPage } from "../../types";
 import logoHorizontal from "../../assets/logo-horizontal.svg";
 
 export interface NavItemConfig {
@@ -54,10 +49,7 @@ export default function SidebarContent({
   onSwitchRole,
   onLogout,
 }: SidebarContentProps) {
-  const { role, user, switchRole: authSwitchRole, logout: authLogout } = useAuth();
-
-  const handleSwitchRole = onSwitchRole || authSwitchRole;
-  const handleLogout = onLogout || authLogout;
+  const { role, user } = useAuth();
 
   const isStaff = role === "staff";
 

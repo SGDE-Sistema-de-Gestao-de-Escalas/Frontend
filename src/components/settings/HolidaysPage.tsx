@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { AlertTriangle, Pencil, Plus, Trash2, Loader2, Calendar } from "lucide-react";
 import type { EntityId } from "../../types";
 import { Card } from "../ui/card";

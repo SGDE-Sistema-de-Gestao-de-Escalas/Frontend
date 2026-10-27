@@ -1,14 +1,12 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   ChevronLeft,
   Download,
   FileCheck,
   FileText,
   Loader2,
-  Save,
   Trash2,
   Upload,
-  User,
   X,
 } from "lucide-react";
 import { Card } from "../ui/card";

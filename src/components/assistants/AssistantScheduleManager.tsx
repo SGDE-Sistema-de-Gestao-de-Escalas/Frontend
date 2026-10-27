@@ -1,15 +1,12 @@
 import React, { useState } from "react";
 import {
   AlertTriangle,
-  BarChart2,
   CheckCircle2,
   Clock,
-  Info,
   Loader2,
   Lock,
   Pencil,
   Plus,
-  Save,
   Trash2,
 } from "lucide-react";
 import { Card } from "../ui/card";
@@ -21,15 +18,7 @@ import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import ActionTooltip from "../common/ActionTooltip";
 import { notify } from "../common/FeedbackNotification";
-import {
-  BLOCK_STYLES,
-  HOUR_LABELS,
-  slotsToBlocks,
-  VIEW_START,
-  VIEW_END,
-  VIEW_SLOTS,
-} from "../dashboard/blockStyles";
-import type { BlockState, EntityId } from "../../types";
+import type { EntityId } from "../../types";
 import {
   useAssistantSchedules,
   useCreateAssistantSchedule,

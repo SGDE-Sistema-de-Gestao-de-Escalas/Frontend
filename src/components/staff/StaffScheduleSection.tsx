@@ -1,6 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
+  ArrowRightLeft,
+  Building2,
+  CalendarOff,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -20,7 +23,6 @@ import { Badge } from "../ui/badge";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "../ui/tooltip";
 import { Button } from "../ui/button";
@@ -135,24 +137,20 @@ function useStaffScheduleData(dayOffset: number) {
       per_page: 250,
     });
 
-  const { data: absencesRes, isLoading: isLoadingAbsences } = useAbsencesList({
+  const { data: absencesRes } = useAbsencesList({
     start_date: loadedRange.start,
     end_date: loadedRange.end,
     assistant_id: user.assistant_id ?? undefined,
     per_page: 100,
   });
 
-  const { data: calendarDays } = useOperatingCalendar({
-    start_date: loadedRange.start,
-    end_date: loadedRange.end,
-  });
+  const { data: calendarDays } = useOperatingCalendar(
+    loadedRange.start,
+    loadedRange.end
+  );
   const { data: holidays } = useHolidaysList();
-  const { data: operatingExceptions } = useOperatingExceptions({
-    status: "all",
-  });
-  const { data: operatingRules } = useOperatingRules({
-    status: "all",
-  });
+  const { data: operatingExceptions } = useOperatingExceptions("all");
+  const { data: operatingRules } = useOperatingRules("all");
 
   const { data: allAssistantSchedules = [] } = useAllAssistantSchedules();
   const { data: allAssistantExceptions = [] } = useAllAssistantExceptions();
@@ -283,23 +281,69 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
     );
   }
 
-  // CASO A: A escola encontra-se encerrada (Feriado, Fim de semana, Férias ou encerramento oficial)
+  // CASO A: A escola encontra-se encerrada (Feriado, Fim de semana, Férias ou encerramento oficial por Exceção)
   if (isSchoolClosed) {
+    const isException = dayStatus.reasonType === "exception";
+    const isHoliday = dayStatus.reasonType === "holiday";
+    const title =
+      dayStatus.title ||
+      (isException
+        ? "Encerramento Excecional"
+        : isHoliday
+        ? "Feriado"
+        : "Dia de Descanso");
+    const detail =
+      dayStatus.detail ||
+      (isException
+        ? `A escola encontra-se encerrada por exceção de funcionamento (${dayStatus.closedLabel || "Exceção"}).`
+        : isHoliday
+        ? `Feriado (${dayStatus.closedLabel || "Feriado"}).`
+        : "Hoje não tem serviço agendado. Desfrute do seu dia de descanso e aproveite o tempo com o que e quem mais gosta.");
+
     return (
       <div className="pt-2 pb-12">
         <div className="bg-card border border-border/80 rounded-2xl p-6 sm:p-8 text-center max-w-lg mx-auto shadow-xs my-6 flex flex-col items-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary mb-3">
-            <Sparkles size={22} className="text-primary" />
+          <div
+            className={`inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-3 ${
+              isException
+                ? "bg-destructive/10 text-destructive border border-destructive/20"
+                : isHoliday
+                ? "bg-[#D97706]/10 text-[#D97706] border border-[#D97706]/20"
+                : "bg-muted text-muted-foreground border border-border"
+            }`}
+          >
+            {isException ? (
+              <Building2 size={22} className="text-destructive" />
+            ) : isHoliday ? (
+              <Sparkles size={22} className="text-[#D97706]" />
+            ) : (
+              <CalendarOff size={22} className="text-muted-foreground" />
+            )}
           </div>
+          {isException && (
+            <Badge
+              variant="outline"
+              className="mb-2 text-destructive border-destructive/30 bg-destructive/5 text-xs font-semibold"
+            >
+              Encerramento Excecional
+            </Badge>
+          )}
+          {isHoliday && (
+            <Badge
+              variant="outline"
+              className="mb-2 text-[#D97706] border-[#D97706]/30 bg-[#D97706]/5 text-xs font-semibold"
+            >
+              Feriado
+            </Badge>
+          )}
           <h3 className="text-lg font-semibold text-foreground">
-            Dia de Descanso
+            {title}
           </h3>
           <p className="text-xs font-mono text-muted-foreground mt-0.5">
             {info.dayName}, {info.dateStr}
           </p>
           <p className="text-sm text-muted-foreground mt-3 leading-relaxed">
-            {dayStatus.closedLabel ||
-              "Hoje não tem serviço agendado. Desfrute do seu dia de descanso e aproveite o tempo com o que e quem mais gosta."}
+            {detail}
           </p>
         </div>
       </div>
@@ -386,8 +430,37 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
   const workloadLabel =
     activeWorkSlots > 0 ? formatDurationSlots(activeWorkSlots) : "—";
 
+  const { user } = useAuth();
+  const daySchedule = schedules.find((sc) => {
+    if (sc.entries && sc.entries.length > 0) {
+      return sc.entries.some((entry) => entry.date?.slice(0, 10) === info.isoDate);
+    }
+    const ws = (sc.week_start || "").slice(0, 10);
+    const we = (sc.week_end || "").slice(0, 10);
+    return Boolean(ws && we && ws <= info.isoDate && info.isoDate <= we);
+  });
+
+  const isTemporaryTransfer = Boolean(
+    daySchedule?.is_temporary_transfer ||
+    (daySchedule?.school_id && user?.school_id && String(daySchedule.school_id) !== String(user.school_id))
+  );
+
   return (
     <div className="pt-2 pb-8 space-y-4">
+      {isTemporaryTransfer && (
+        <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-900 dark:text-amber-200 text-xs sm:text-sm font-medium">
+          <ArrowRightLeft size={16} className="shrink-0 text-amber-600 dark:text-amber-400" />
+          <div>
+            Colocação em <strong>{daySchedule?.school_name || "outra escola"}</strong> (Transferência Temporária)
+            {daySchedule?.origin_school_name && (
+              <span className="text-muted-foreground ml-1.5 font-normal">
+                · Escola de origem: {daySchedule.origin_school_name}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 3 Cartões de Resumo do Dia */}
       <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
         {[
@@ -638,17 +711,13 @@ export function StaffWeekView({
     assistant_id: user.assistant_id ?? undefined,
     per_page: 50,
   });
-  const { data: calendarDays } = useOperatingCalendar({
-    start_date: startInfo.isoDate,
-    end_date: endInfo.isoDate,
-  });
+  const { data: calendarDays } = useOperatingCalendar(
+    startInfo.isoDate,
+    endInfo.isoDate
+  );
   const { data: holidays } = useHolidaysList();
-  const { data: operatingExceptions } = useOperatingExceptions({
-    status: "all",
-  });
-  const { data: operatingRules } = useOperatingRules({
-    status: "all",
-  });
+  const { data: operatingExceptions } = useOperatingExceptions("all");
+  const { data: operatingRules } = useOperatingRules("all");
   const { data: allAssistantSchedules = [] } = useAllAssistantSchedules();
   const { data: allAssistantExceptions = [] } = useAllAssistantExceptions();
 
@@ -795,13 +864,47 @@ export function StaffWeekView({
                     Ausência
                   </Badge>
                 )}
+                {(() => {
+                  const daySchedule = schedules.find((sc) => {
+                    if (sc.entries && sc.entries.length > 0) {
+                      return sc.entries.some((entry) => entry.date?.slice(0, 10) === info.isoDate);
+                    }
+                    const ws = (sc.week_start || "").slice(0, 10);
+                    const we = (sc.week_end || "").slice(0, 10);
+                    return Boolean(ws && we && ws <= info.isoDate && info.isoDate <= we);
+                  });
+                  const isDayTransfer = Boolean(
+                    daySchedule?.is_temporary_transfer ||
+                    (daySchedule?.school_id && user?.school_id && String(daySchedule.school_id) !== String(user.school_id))
+                  );
+                  if (!isDayTransfer) return null;
+                  return (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] py-0 px-1.5 border-amber-500/30 text-amber-700 dark:text-amber-300 bg-amber-500/10 flex items-center gap-1 font-medium"
+                      title={`Colocação em ${daySchedule?.school_name || "outra escola"}`}
+                    >
+                      <ArrowRightLeft size={10} className="shrink-0" />
+                      <span>{daySchedule?.school_name || "Transferência"}</span>
+                    </Badge>
+                  );
+                })()}
               </div>
 
               <div>
                 {isClosed ? (
-                  <span className="text-xs text-muted-foreground">
-                    {status.closedLabel || "Encerrada"}
-                  </span>
+                  <Badge
+                    variant="outline"
+                    className={`text-xs ${
+                      status.reasonType === "exception"
+                        ? "border-destructive/30 text-destructive bg-destructive/10 font-medium"
+                        : status.reasonType === "holiday"
+                        ? "border-amber-500/30 text-amber-700 dark:text-amber-300 bg-amber-500/10 font-medium"
+                        : "border-border text-muted-foreground bg-muted/40"
+                    }`}
+                  >
+                    {status.closedLabel || (status.reasonType === "exception" ? "Exceção" : "Encerrada")}
+                  </Badge>
                 ) : !pubInfo.isPublished ? (
                   <span className="text-[11px] font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
                     {pubInfo.status === "draft" ? "Em preparação" : "Não publicada"}
@@ -982,17 +1085,13 @@ export function StaffMonthView({
 
   const { data: allAssistantSchedules = [] } = useAllAssistantSchedules();
   const { data: allAssistantExceptions = [] } = useAllAssistantExceptions();
-  const { data: calendarDays } = useOperatingCalendar({
-    start_date: month.startIso,
-    end_date: month.endIso,
-  });
+  const { data: calendarDays } = useOperatingCalendar(
+    month.startIso,
+    month.endIso
+  );
   const { data: holidays } = useHolidaysList();
-  const { data: operatingExceptions } = useOperatingExceptions({
-    status: "all",
-  });
-  const { data: operatingRules } = useOperatingRules({
-    status: "all",
-  });
+  const { data: operatingExceptions } = useOperatingExceptions("all");
+  const { data: operatingRules } = useOperatingRules("all");
 
   const targetId = user.assistant_id ?? "staff";
 
@@ -1132,6 +1231,7 @@ export function StaffMonthView({
       info,
       blocks: activeBlocks,
       isClosed,
+      dayStatus,
       closedLabel: dayStatus.closedLabel,
       pubInfo,
       entryTime: entryBlock ? TIME_SLOTS[entryBlock.start] : null,
@@ -1348,10 +1448,45 @@ export function StaffMonthView({
             </Button>
           </div>
 
+          {(() => {
+            const previewDaySchedule = schedules.find((sc) => {
+              if (sc.entries && sc.entries.length > 0) {
+                return sc.entries.some((entry) => entry.date?.slice(0, 10) === previewData.info.isoDate);
+              }
+              const ws = (sc.week_start || "").slice(0, 10);
+              const we = (sc.week_end || "").slice(0, 10);
+              return Boolean(ws && we && ws <= previewData.info.isoDate && previewData.info.isoDate <= we);
+            });
+            const isPreviewTransfer = Boolean(
+              previewDaySchedule?.is_temporary_transfer ||
+              (previewDaySchedule?.school_id && user?.school_id && String(previewDaySchedule.school_id) !== String(user.school_id))
+            );
+            if (!isPreviewTransfer) return null;
+            return (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-900 dark:text-amber-200 text-xs font-medium">
+                <ArrowRightLeft size={14} className="shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>
+                  Colocação em <strong>{previewDaySchedule?.school_name}</strong> (Transferência Temporária)
+                </span>
+              </div>
+            );
+          })()}
+
           {previewData.isClosed ? (
-            <p className="text-xs text-muted-foreground py-1">
-              Dia de descanso (Estabelecimento encerrado).
-            </p>
+            <div className="py-2 flex items-center gap-2">
+              <span
+                className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                  previewData.dayStatus?.reasonType === "exception"
+                    ? "bg-destructive"
+                    : previewData.dayStatus?.reasonType === "holiday"
+                    ? "bg-[#D97706]"
+                    : "bg-muted-foreground/60"
+                }`}
+              />
+              <p className="text-xs font-medium text-foreground">
+                {previewData.dayStatus?.title || "Estabelecimento encerrado."}
+              </p>
+            </div>
           ) : !previewData.pubInfo.isPublished ? (
             <div className="flex items-center gap-2 py-1">
               <span className="inline-block w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />

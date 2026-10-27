@@ -6,7 +6,6 @@ import Sidebar from "./Sidebar";
 import SidebarContent from "./SidebarContent";
 import TopHeader from "./TopHeader";
 import StaffScheduleSection from "../staff/StaffScheduleSection";
-import RegisterAbsence from "../staff/RegisterAbsence";
 import StaffAbsenceDetail from "../staff/StaffAbsenceDetail";
 import AccountProfilePage from "../settings/AccountProfilePage";
 
@@ -59,7 +58,6 @@ export default function StaffLayout({
       <Sidebar
         currentPage={activePage}
         onNavigate={handleNavigate}
-        onSwitchRole={onSwitchRole}
         onLogout={onLogout}
       />
 
@@ -73,8 +71,7 @@ export default function StaffLayout({
             currentPage={activePage}
             onNavigate={handleNavigate}
             onCloseMobile={() => setMobileMenuOpen(false)}
-            onSwitchRole={onSwitchRole}
-            onLogout={onLogout}
+                        onLogout={onLogout}
           />
         </SheetContent>
       </Sheet>
@@ -85,7 +82,6 @@ export default function StaffLayout({
           currentPageTitle={currentTitle}
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
           onAccount={() => handleNavigate("account")}
-          onSwitchRole={onSwitchRole}
           onLogout={onLogout}
         />
 

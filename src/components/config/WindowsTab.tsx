@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
   Clock,
   Calendar as CalendarIcon,
@@ -10,8 +10,6 @@ import {
   ChevronUp,
   History,
   Copy,
-  Layers,
-  Sparkles,
 } from "lucide-react";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -37,7 +35,6 @@ import {
   OperatingRuleDay,
   DayOfWeekNumber,
   OperatingException,
-  CreateOperatingRulePayload,
   CreateOperatingExceptionPayload,
 } from "../../types/operatingHours.types";
 
@@ -56,7 +53,7 @@ const ALL_DAYS: DayOfWeekNumber[] = [0, 1, 2, 3, 4, 5, 6];
 export default function WindowsTab() {
   const { role } = useAuth();
   const isAdmin = role === "admin";
-  const { selectedSchool } = useSchool();
+  useSchool();
 
   // Consultas React Query
   const { data: rawRules, isLoading: isLoadingRules } = useOperatingRules();

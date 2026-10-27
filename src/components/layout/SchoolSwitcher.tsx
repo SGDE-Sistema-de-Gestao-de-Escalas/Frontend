@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Building2, ChevronDown, Check, MapPin, Settings, Plus, Loader2 } from "lucide-react";
 import { useSchool } from "../../context/SchoolContext";
 import { useAuth } from "../../context/AuthContext";

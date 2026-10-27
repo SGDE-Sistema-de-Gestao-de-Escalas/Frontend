@@ -4,13 +4,10 @@ import {
   Calendar,
   CheckCircle,
   HelpCircle,
-  Inbox,
   Loader2,
-  Paperclip,
   Save,
   Upload,
   X,
-  XCircle,
 } from "lucide-react";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";

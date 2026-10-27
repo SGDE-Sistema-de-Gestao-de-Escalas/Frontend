@@ -1,4 +1,3 @@
-import { EntityId } from "./index";
 
 export type ScheduleProfileType = "fixo" | "rotativo";
 export type RotationPeriod = "weekly" | "biweekly" | "monthly";

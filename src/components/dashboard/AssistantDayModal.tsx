@@ -1,8 +1,9 @@
-import React, { useMemo } from "react";
-import { Eye, Loader2, Lock, UserX } from "lucide-react";
+import { useMemo } from "react";
+import { Loader2, Lock } from "lucide-react";
 import type { BlockState, EntityId } from "../../types";
 import { Badge } from "../ui/badge";
-import { Sheet, SheetContent } from "../ui/sheet";
+import { Button } from "../ui/button";
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "../ui/sheet";
 import { BLOCK_STYLES, formatDurationSlots, slotsToBlocks, TIME_SLOTS } from "./blockStyles";
 import { useAssistantsList } from "../../hooks/api/useAssistants";
 import { useSchedulesList } from "../../hooks/api/useSchedules";
@@ -29,7 +30,7 @@ interface AssistantDayModalProps {
   lunchBlocksByDate?: Record<string, Record<string, LunchBlockApi>>;
   onClose: () => void;
   onViewProfile: () => void;
-  onMarkAbsence: (assistantName: string) => void;
+  onMarkAbsence: (assistantName: string, dateIso?: string) => void;
 }
 
 export default function AssistantDayModal({
@@ -127,16 +128,6 @@ export default function AssistantDayModal({
     delivery: "border-l-[#10B981] bg-[#10B981]/8",
   };
 
-  const textMap: Record<BlockState, string> = {
-    work: "text-[#6366F1]",
-    surveillance: "text-[#A855F7]",
-    lunch: "text-[#F59E0B]",
-    absent: "text-destructive",
-    off: "text-muted-foreground",
-    cleaning: "text-[#06B6D4]",
-    collection: "text-[#EC4899]",
-    delivery: "text-[#10B981]",
-  };
 
   const summary = {
     work: 0,
@@ -171,12 +162,12 @@ export default function AssistantDayModal({
             </span>
           </div>
           <div className="flex-1 min-w-0 pr-6">
-            <h3 className="font-semibold text-foreground text-sm truncate">
+            <SheetTitle className="font-semibold text-foreground text-sm truncate">
               {assistant.name}
-            </h3>
-            <p className="text-xs text-muted-foreground font-mono mt-0.5">
+            </SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground font-mono mt-0.5">
               {dayInfo.dateStr} ({dayInfo.dayName}) · Horário do dia
-            </p>
+            </SheetDescription>
             {assistant.exception && (
               <div className="mt-1">
                 <Badge
@@ -309,9 +300,11 @@ export default function AssistantDayModal({
                     <span>
                       {startTime} – {endTime}
                     </span>
-                    <span className="uppercase text-[9px] tracking-wide text-muted-foreground/80 font-sans">
-                      {styleConfig.label}
-                    </span>
+                    {!block.activityName && (
+                      <span className="uppercase text-[9px] tracking-wide text-muted-foreground/80 font-sans">
+                        {styleConfig.label}
+                      </span>
+                    )}
                   </div>
                 </div>
               );
@@ -320,29 +313,31 @@ export default function AssistantDayModal({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-border space-y-2 bg-muted/10">
-          <button
+        <div className="px-6 py-4 border-t border-border space-y-2 bg-card">
+          <Button
             type="button"
+            variant="outline"
+            size="default"
             onClick={() => {
               onClose();
-              onMarkAbsence(assistant.name);
+              onMarkAbsence(assistant.name, dayInfo.isoDate);
             }}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-destructive/10 text-destructive border border-destructive/20 text-sm font-medium hover:bg-destructive/20 transition-colors cursor-pointer"
+            className="w-full text-destructive border-destructive/20 hover:bg-destructive/10 hover:text-destructive cursor-pointer"
           >
-            <UserX size={14} />
             Marcar Falta
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="default"
+            size="default"
             onClick={() => {
               onClose();
               onViewProfile();
             }}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors cursor-pointer"
+            className="w-full cursor-pointer"
           >
-            <Eye size={14} />
             Ver Perfil Completo
-          </button>
+          </Button>
         </div>
       </SheetContent>
     </Sheet>

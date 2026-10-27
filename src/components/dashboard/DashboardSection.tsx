@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CalendarRange,
   CheckCircle2,
@@ -132,6 +132,13 @@ export default function DashboardSection({
 
   const isCustomDateRange =
     queryStartDate !== defaultStartIso || queryEndDate !== defaultEndIso;
+
+  const activeDashboardDate = useMemo(() => {
+    if (viewMode === "week") {
+      return getIsoDateFromOffset(weekStart);
+    }
+    return getIsoDateFromOffset(dayOffset);
+  }, [viewMode, dayOffset, weekStart]);
 
   function switchView(mode: DashViewMode) {
     if (mode === "week") setWeekStart(Math.floor(dayOffset / 7) * 7);
@@ -388,7 +395,13 @@ export default function DashboardSection({
 
           <button
             type="button"
-            onClick={() => setShowRecalcModal(true)}
+            onClick={() => {
+              setRecalcDates({
+                start: activeDashboardDate,
+                end: activeDashboardDate,
+              });
+              setShowRecalcModal(true);
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs sm:text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs"
           >
             <RefreshCw size={14} />
@@ -406,7 +419,10 @@ export default function DashboardSection({
               end: affectedDates[affectedDates.length - 1],
             });
           } else {
-            setRecalcDates({});
+            setRecalcDates({
+              start: activeDashboardDate,
+              end: activeDashboardDate,
+            });
           }
           setShowRecalcModal(true);
         }}
@@ -430,7 +446,13 @@ export default function DashboardSection({
           lunchBlocksByDate={lastGenerationResult?.lunch_blocks}
           queryStartDate={queryStartDate}
           queryEndDate={queryEndDate}
-          onRequestRecalculate={() => setShowRecalcModal(true)}
+          onRequestRecalculate={() => {
+            setRecalcDates({
+              start: activeDashboardDate,
+              end: activeDashboardDate,
+            });
+            setShowRecalcModal(true);
+          }}
         />
       )}
       {viewMode === "week" && (
@@ -465,8 +487,8 @@ export default function DashboardSection({
           setRecalcDates({});
         }}
         currentSchoolId={currentSchoolId}
-        initialStartDate={recalcDates.start}
-        initialEndDate={recalcDates.end}
+        initialStartDate={recalcDates.start || activeDashboardDate}
+        initialEndDate={recalcDates.end || activeDashboardDate}
         onGenerated={(result) => setLastGenerationResult(result)}
       />
     </div>

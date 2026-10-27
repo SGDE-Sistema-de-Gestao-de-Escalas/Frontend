@@ -21,6 +21,12 @@ import type {
   OperatingException,
   OperatingRule,
 } from "../types/operatingHours.types";
+
+export type {
+  AssistantScheduleProfileApi,
+  AssistantExceptionApi,
+};
+
 import { TIME_SLOTS, VIEW_END, VIEW_START } from "../components/dashboard/blockStyles";
 
 const DAY_NAMES_PT = [
@@ -68,7 +74,7 @@ const MONTH_NAMES_PT = [
 /**
  * Devolve a data civil local de hoje à meia-noite (12:00 para evitar desvios DST).
  */
-export function getTodayBaseDate(): Date {
+function getTodayBaseDate(): Date {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
 }
@@ -98,7 +104,7 @@ export function getOffsetFromIsoDate(isoDate: string): number {
  * Obtém a informação formatada de uma data civil real com base no offset em dias (0 = hoje).
  * O campo `dow` segue a convenção Segunda = 0 ... Domingo = 6.
  */
-export function getDateInfo(dayOffset: number): DateInfo & { isoDate: string } {
+export function getDateInfo(dayOffset: number): DateInfo & { isoDate: string; offset: number } {
   const d = getTodayBaseDate();
   d.setDate(d.getDate() + dayOffset);
   const jsDay = d.getDay(); // 0 = Dom ... 6 = Sáb
@@ -116,6 +122,7 @@ export function getDateInfo(dayOffset: number): DateInfo & { isoDate: string } {
     day: dayNum,
     monthLabel: `${MONTH_SHORTS_PT[monthIdx]} ${year}`,
     dow,
+    offset: dayOffset,
     isoDate: `${year}-${mm}-${dd}`,
   };
 }
@@ -360,9 +367,14 @@ export interface SchoolDayStatus {
   detail?: string;
   openingTime?: string | null;
   closingTime?: string | null;
+  lunchStart?: string | null;
+  lunchEnd?: string | null;
+  lunchStartSlot?: number | null;
+  lunchEndSlot?: number | null;
   viewStartSlot: number;
   viewEndSlot: number;
   scheduleSourceLabel?: string | null;
+  closedLabel?: string | null;
 }
 
 export interface OperatingStatusSources {
@@ -447,19 +459,21 @@ export function resolveSchoolDayStatusByIsoDate(
           title: `Estabelecimento Encerrado — ${calDay.reason || "Feriado"}`,
           detail:
             "Feriado registado no calendário global. Todas as atividades letivas e escalas estão suspensas neste dia.",
+          closedLabel: calDay.reason || "Feriado",
           viewStartSlot: VIEW_START,
           viewEndSlot: VIEW_END,
         };
       }
       if (calDay.source === "exception") {
+        const exceptionName = calDay.reason || matchingException?.name || "Exceção de Funcionamento";
         return {
           isOpen: false,
           reasonType: "exception",
-          title: `Estabelecimento Encerrado — ${
-            calDay.reason || matchingException?.name || "Exceção de Funcionamento"
-          }`,
+          title: `Estabelecimento Encerrado — ${exceptionName}`,
           detail:
+            matchingException?.status_message ||
             "Encerramento excecional definido nas regras de funcionamento da escola.",
+          closedLabel: exceptionName,
           viewStartSlot: VIEW_START,
           viewEndSlot: VIEW_END,
         };
@@ -471,6 +485,7 @@ export function resolveSchoolDayStatusByIsoDate(
         detail:
           calDay.reason ||
           "O estabelecimento de ensino encontra-se encerrado neste dia segundo o horário fixo em vigor.",
+        closedLabel: calDay.reason || "Encerramento semanal",
         viewStartSlot: VIEW_START,
         viewEndSlot: VIEW_END,
       };
@@ -496,10 +511,27 @@ export function resolveSchoolDayStatusByIsoDate(
       sourceLabel = `Horário Fixo (em vigor desde ${activeRuleForDate.valid_from.slice(0, 10)})`;
     }
 
+    const lunchStart =
+      matchingException?.lunch_start ||
+      calDay?.lunch_start ||
+      ruleDayEntry?.lunch_start ||
+      null;
+    const lunchEnd =
+      matchingException?.lunch_end ||
+      calDay?.lunch_end ||
+      ruleDayEntry?.lunch_end ||
+      null;
+    const lunchStartSlot = lunchStart ? timeToSlotIndex(lunchStart) : null;
+    const lunchEndSlot = lunchEnd ? timeToSlotIndex(lunchEnd) : null;
+
     return {
       isOpen: true,
       openingTime: openTime,
       closingTime: closeTime,
+      lunchStart,
+      lunchEnd,
+      lunchStartSlot,
+      lunchEndSlot,
       viewStartSlot: bounds.viewStartSlot,
       viewEndSlot: bounds.viewEndSlot,
       scheduleSourceLabel: sourceLabel,
@@ -517,6 +549,7 @@ export function resolveSchoolDayStatusByIsoDate(
       title: `Estabelecimento Encerrado — ${holiday.name}`,
       detail:
         "Feriado registado no calendário global. Todas as atividades letivas e escalas estão suspensas neste dia.",
+      closedLabel: holiday.name || "Feriado",
       viewStartSlot: VIEW_START,
       viewEndSlot: VIEW_END,
     };
@@ -530,7 +563,9 @@ export function resolveSchoolDayStatusByIsoDate(
         reasonType: "exception",
         title: `Estabelecimento Encerrado — ${matchingException.name}`,
         detail:
+          matchingException.status_message ||
           "Encerramento excecional definido nas regras de funcionamento da escola.",
+        closedLabel: matchingException.name || "Exceção de Funcionamento",
         viewStartSlot: VIEW_START,
         viewEndSlot: VIEW_END,
       };
@@ -540,10 +575,16 @@ export function resolveSchoolDayStatusByIsoDate(
     const closeTime =
       matchingException.closing_time || ruleDayEntry?.closing_time || null;
     const bounds = resolveBoundsFromTimes(openTime, closeTime);
+    const lunchStart = matchingException.lunch_start || ruleDayEntry?.lunch_start || null;
+    const lunchEnd = matchingException.lunch_end || ruleDayEntry?.lunch_end || null;
     return {
       isOpen: true,
       openingTime: openTime,
       closingTime: closeTime,
+      lunchStart,
+      lunchEnd,
+      lunchStartSlot: lunchStart ? timeToSlotIndex(lunchStart) : null,
+      lunchEndSlot: lunchEnd ? timeToSlotIndex(lunchEnd) : null,
       viewStartSlot: bounds.viewStartSlot,
       viewEndSlot: bounds.viewEndSlot,
       scheduleSourceLabel: `Exceção: ${matchingException.name}`,
@@ -567,10 +608,16 @@ export function resolveSchoolDayStatusByIsoDate(
       ruleDayEntry.opening_time,
       ruleDayEntry.closing_time
     );
+    const lunchStart = ruleDayEntry.lunch_start || null;
+    const lunchEnd = ruleDayEntry.lunch_end || null;
     return {
       isOpen: true,
       openingTime: ruleDayEntry.opening_time,
       closingTime: ruleDayEntry.closing_time,
+      lunchStart,
+      lunchEnd,
+      lunchStartSlot: lunchStart ? timeToSlotIndex(lunchStart) : null,
+      lunchEndSlot: lunchEnd ? timeToSlotIndex(lunchEnd) : null,
       viewStartSlot: bounds.viewStartSlot,
       viewEndSlot: bounds.viewEndSlot,
       scheduleSourceLabel:
@@ -603,18 +650,6 @@ export function resolveSchoolDayStatusByIsoDate(
 /**
  * Determina o estado de abertura da escola numa data (usando o offset em dias face a hoje).
  */
-export function resolveSchoolDayStatus(
-  dayOffset: number,
-  calendarDays?: OperatingCalendarDay[],
-  extraSources?: Omit<OperatingStatusSources, "calendarDays">
-): SchoolDayStatus {
-  const info = getDateInfo(dayOffset);
-  return resolveSchoolDayStatusByIsoDate(info.isoDate, {
-    calendarDays,
-    ...extraSources,
-  });
-}
-
 /**
  * Verifica se existe escala gerada no Backend para uma determinada data civil (`YYYY-MM-DD`).
  */
@@ -1201,9 +1236,36 @@ export function resolveAssistantShiftBounds(params: {
       absences
     );
     if (absInfo.absent) {
-      absenceStartSlot = absInfo.startSlot ?? null;
-      absenceEndSlot = absInfo.endSlot ?? null;
+      if (absInfo.isFullDay) {
+        absenceStartSlot = finalStart;
+        absenceEndSlot = finalEnd;
+      } else {
+        absenceStartSlot =
+          absInfo.startSlot !== undefined && absInfo.startSlot >= 0
+            ? Math.max(absInfo.startSlot, finalStart)
+            : finalStart;
+        absenceEndSlot =
+          absInfo.endSlot !== undefined && absInfo.endSlot <= 96
+            ? Math.min(absInfo.endSlot, finalEnd)
+            : finalEnd;
+      }
       absenceReason = absInfo.reason ?? "Ausência Registada";
+    }
+  }
+
+  // 10. Prioridade de Ausências sobre Almoço:
+  // Se a ausência cobre ou coincide com o período de almoço, a ausência absorve a refeição ("esquece o almoço")
+  if (
+    lunchStartSlot !== null &&
+    lunchEndSlot !== null &&
+    absenceStartSlot !== null &&
+    absenceEndSlot !== null
+  ) {
+    const overlapStart = Math.max(lunchStartSlot, absenceStartSlot);
+    const overlapEnd = Math.min(lunchEndSlot, absenceEndSlot);
+    if (overlapEnd > overlapStart) {
+      lunchStartSlot = null;
+      lunchEndSlot = null;
     }
   }
 
@@ -1331,28 +1393,26 @@ export function buildDayMatrixFromApi(params: {
     }
 
     // Fonte B: Perfil de horário contratual / exceções do assistente
-    if (lunchS === null && profilesByAssistant && profilesByAssistant[String(assistant.id)]) {
-      const dow = (new Date(isoDate + "T12:00:00Z").getDay() + 6) % 7;
-      const bounds = resolveAssistantShiftBounds({
-        assistantId: assistant.id,
-        isoDate,
-        dow,
-        viewStartSlot: 0,
-        viewEndSlot: 96,
-        profiles: profilesByAssistant[String(assistant.id)],
-        exceptions: exceptionsByAssistant?.[String(assistant.id)],
-        schedulesList: schedules,
-        lunchBlocksForDate,
-        absences,
-      });
-      if (bounds.lunchStartSlot !== null && bounds.lunchEndSlot !== null) {
-        lunchS = bounds.lunchStartSlot;
-        lunchE = bounds.lunchEndSlot;
-      }
+    const dow = (new Date(isoDate + "T12:00:00Z").getDay() + 6) % 7;
+    const bounds = resolveAssistantShiftBounds({
+      assistantId: assistant.id,
+      isoDate,
+      dow,
+      viewStartSlot: 0,
+      viewEndSlot: 96,
+      profiles: profilesByAssistant?.[String(assistant.id)],
+      exceptions: exceptionsByAssistant?.[String(assistant.id)],
+      schedulesList: schedules,
+      lunchBlocksForDate,
+      absences,
+    });
+    if (lunchS === null && bounds.lunchStartSlot !== null && bounds.lunchEndSlot !== null) {
+      lunchS = bounds.lunchStartSlot;
+      lunchE = bounds.lunchEndSlot;
     }
 
     // Fonte C: Heurística entre tarefas/ausências
-    // Se não há perfil ou lunchBlock, inferir a partir do intervalo livre entre entradas e ausências
+    // Se não há perfil ou lunchBlock, inferir a partir do intervalo livre entre entradas e ausências dentro do turno
     if (lunchS === null && entriesForDay.length >= 1) {
       const absInfo = checkAssistantAbsenceOnDate(assistant, isoDate, absences);
       const absStart = absInfo.absent && absInfo.startSlot !== undefined ? absInfo.startSlot : -1;
@@ -1367,14 +1427,44 @@ export function buildDayMatrixFromApi(params: {
       }
       busyIntervals.sort((a, b) => a.start - b.start);
 
+      const minLunchSlot = bounds.lunchStartSlot ?? bounds.startSlot;
+      const maxLunchSlot = bounds.lunchEndSlot ?? bounds.endSlot;
+
       for (let idx = 0; idx < busyIntervals.length - 1; idx++) {
         const gapStart = busyIntervals[idx].end;
         const gapEnd = busyIntervals[idx + 1].start;
         const gapSlots = gapEnd - gapStart;
-        if (gapSlots >= 2 && gapSlots <= 6 && gapStart >= 44 && gapEnd <= 62) {
+        if (gapSlots >= 2 && gapSlots <= 6 && gapStart >= minLunchSlot && gapEnd <= maxLunchSlot) {
           lunchS = gapStart;
           lunchE = gapEnd;
           break;
+        }
+      }
+    }
+
+    // Se o assistente tem ausência registada que coincida com o horário de almoço ou dia inteiro, a falta absorve a refeição
+    const absInfoForLunch = checkAssistantAbsenceOnDate(assistant, isoDate, absences);
+    if (absInfoForLunch.absent) {
+      if (absInfoForLunch.isFullDay) {
+        lunchS = null;
+        lunchE = null;
+      } else {
+        const absStartForLunch =
+          absInfoForLunch.startSlot !== undefined ? absInfoForLunch.startSlot : -1;
+        const absEndForLunch =
+          absInfoForLunch.endSlot !== undefined ? absInfoForLunch.endSlot : -1;
+        if (
+          absStartForLunch >= 0 &&
+          absEndForLunch > absStartForLunch &&
+          lunchS !== null &&
+          lunchE !== null
+        ) {
+          const overlapStart = Math.max(lunchS, absStartForLunch);
+          const overlapEnd = Math.min(lunchE, absEndForLunch);
+          if (overlapEnd > overlapStart) {
+            lunchS = null;
+            lunchE = null;
+          }
         }
       }
     }
@@ -1394,18 +1484,31 @@ export function buildDayMatrixFromApi(params: {
     // 3. Aplicar ausências registadas na API para este assistente nesta data
     const absInfo = checkAssistantAbsenceOnDate(assistant, isoDate, absences);
     if (absInfo.absent) {
-      const aStart =
-        absInfo.startSlot !== undefined && absInfo.startSlot > 0
-          ? absInfo.startSlot
-          : 32;
-      const aEnd =
-        absInfo.endSlot !== undefined && absInfo.endSlot < 96
-          ? absInfo.endSlot
-          : 68;
+      let aStart: number;
+      let aEnd: number;
+
+      if (absInfo.isFullDay) {
+        // Falta de dia inteiro cobre estritamente o turno do assistente
+        aStart = bounds.startSlot;
+        aEnd = bounds.endSlot;
+      } else {
+        // Falta parcial delimita dentro do turno do assistente
+        const rawStart =
+          absInfo.startSlot !== undefined && absInfo.startSlot >= 0
+            ? absInfo.startSlot
+            : bounds.startSlot;
+        const rawEnd =
+          absInfo.endSlot !== undefined && absInfo.endSlot <= 96
+            ? absInfo.endSlot
+            : bounds.endSlot;
+        aStart = Math.max(rawStart, bounds.startSlot);
+        aEnd = Math.min(rawEnd, bounds.endSlot);
+      }
+
       for (let i = aStart; i < aEnd && i < 96; i++) {
         row[i] = "absent";
         metaRow[i] = {
-          activityName: absInfo.reason || "Ausente",
+          activityName: absInfo.reason || "Falta / Ausência",
         };
       }
     }

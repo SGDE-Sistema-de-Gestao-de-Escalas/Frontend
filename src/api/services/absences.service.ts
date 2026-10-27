@@ -1,5 +1,4 @@
 import apiClient from "../client";
-import type { ApiResponse } from "../types/api.types";
 
 export interface AbsenceAssistantInfo {
   id: string | number;
@@ -29,8 +28,8 @@ export interface BackendAbsenceResource {
   valid_until: string;
   start_date?: string;
   end_date?: string;
-  start_time?: string;
-  end_time?: string;
+  start_time?: string | null;
+  end_time?: string | null;
   total_days: number;
   justification?: string | null;
   document_name?: string | null;
@@ -60,8 +59,8 @@ export interface CreateAbsencePayload {
   valid_until: string;
   start_date?: string;
   end_date?: string;
-  start_time?: string;
-  end_time?: string;
+  start_time?: string | null;
+  end_time?: string | null;
   justification?: string | null;
   notes?: string | null;
   document_path?: string | null;
@@ -76,8 +75,8 @@ export interface UpdateAbsencePayload {
   valid_until?: string;
   start_date?: string;
   end_date?: string;
-  start_time?: string;
-  end_time?: string;
+  start_time?: string | null;
+  end_time?: string | null;
   justification?: string | null;
   notes?: string | null;
   document_path?: string | null;
@@ -163,8 +162,8 @@ export function normalizeAbsenceResource(item: any): BackendAbsenceResource {
     valid_until: validUntil,
     start_date: validFrom,
     end_date: validUntil,
-    start_time: item.start_time || item.startTime || "08:00",
-    end_time: item.end_time || item.endTime || "17:00",
+    start_time: item.start_time ?? item.startTime ?? null,
+    end_time: item.end_time ?? item.endTime ?? null,
     total_days: days || 1,
     justification: item.justification || item.absence_type?.name || item.absence_type_name || null,
     document_name: item.document_name || item.documentName || (item.document_path ? String(item.document_path).split("/").pop() : null),
@@ -503,6 +502,8 @@ export const absencesService = {
     } else {
       body = {
         ...payload,
+        start_time: payload.start_time || null,
+        end_time: payload.end_time || null,
         start_date: payload.valid_from,
         end_date: payload.valid_until,
       };
@@ -560,8 +561,8 @@ export const absencesService = {
         if (payload.absence_type_id) formData.append("absence_type_id", String(payload.absence_type_id));
         if (payload.valid_from) formData.append("valid_from", payload.valid_from);
         if (payload.valid_until !== undefined) formData.append("valid_until", payload.valid_until || payload.valid_from || "");
-        if (payload.start_time) formData.append("start_time", payload.start_time);
-        if (payload.end_time) formData.append("end_time", payload.end_time);
+        if (payload.start_time !== undefined) formData.append("start_time", payload.start_time || "");
+        if (payload.end_time !== undefined) formData.append("end_time", payload.end_time || "");
         if (payload.justification !== undefined) formData.append("justification", payload.justification || "");
         if (payload.notes !== undefined) formData.append("notes", payload.notes || "");
         if (payload.status) formData.append("status", payload.status);
@@ -572,6 +573,8 @@ export const absencesService = {
       } else {
         const formattedPayload = {
           ...payload,
+          start_time: payload.start_time ?? null,
+          end_time: payload.end_time ?? null,
           start_date: payload.valid_from,
           end_date: payload.valid_until,
         };

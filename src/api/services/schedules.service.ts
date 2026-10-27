@@ -41,8 +41,11 @@ export interface BackendScheduleEntryResource {
 export interface BackendScheduleResource {
   id: string;
   school_id: string;
+  school_name?: string | null;
   assistant_id: string;
   assistant_name: string | null;
+  shift_start?: string | null;
+  shift_end?: string | null;
   is_temporary_transfer?: boolean;
   origin_school_id?: string | null;
   origin_school_name?: string | null;
@@ -66,6 +69,18 @@ export interface TransferCandidateApi {
   selectable: boolean;
   score: number;
   origin_impact_detail: string | null;
+  shift_start?: string | null;
+  shift_end?: string | null;
+  lunch_start?: string | null;
+  lunch_end?: string | null;
+  lunch_duration?: number | null;
+  is_absent?: boolean;
+  partial_absence?: string | null;
+  absence_overlaps?: boolean;
+  works_today?: boolean;
+  shift_covers_deficit?: "full" | "partial" | "outside";
+  overlap_minutes?: number;
+  deficit_duration_minutes?: number;
 }
 
 export interface SkippedCandidateApi {
@@ -153,6 +168,8 @@ export interface ApprovedTransferPayload {
   assistant_id: string;
   date: string;
   rule_id?: string;
+  start_time?: string | null;
+  end_time?: string | null;
   notes?: string;
 }
 

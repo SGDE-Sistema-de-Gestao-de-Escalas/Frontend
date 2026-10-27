@@ -1,4 +1,3 @@
-import React from "react";
 import ConfigEngine from "../components/config/ConfigEngine";
 import { useSchool } from "../context/SchoolContext";
 import NoSchoolPlaceholder from "../components/common/NoSchoolPlaceholder";

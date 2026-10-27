@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { AdminPage } from "../../types";
+import type { AdminPage, EntityId } from "../../types";
 import { Sheet, SheetContent } from "../ui/sheet";
 import MobileBottomNav from "./MobileBottomNav";
 import Sidebar from "./Sidebar";
@@ -52,7 +52,7 @@ export default function AdminLayout({
     currentPage || initialPage
   );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [selectedAssistantId, setSelectedAssistantId] = useState<number | null>(
+  const [selectedAssistantId, setSelectedAssistantId] = useState<EntityId | null>(
     null
   );
   const [absenceFor, setAbsenceFor] = useState<string | null>(null);
@@ -83,7 +83,6 @@ export default function AdminLayout({
       <Sidebar
         currentPage={activePage}
         onNavigate={handleNavigate}
-        onSwitchRole={onSwitchRole}
         onLogout={onLogout}
       />
 
@@ -97,8 +96,7 @@ export default function AdminLayout({
             currentPage={activePage}
             onNavigate={handleNavigate}
             onCloseMobile={() => setMobileMenuOpen(false)}
-            onSwitchRole={onSwitchRole}
-            onLogout={onLogout}
+                        onLogout={onLogout}
           />
         </SheetContent>
       </Sheet>
@@ -110,7 +108,6 @@ export default function AdminLayout({
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
           onPlatformSettings={() => handleNavigate("platform-settings")}
           onAccount={() => handleNavigate("account")}
-          onSwitchRole={onSwitchRole}
           onLogout={onLogout}
         />
 

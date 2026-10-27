@@ -1,11 +1,9 @@
-import React, { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   AlertCircle,
   AlertTriangle,
   ArrowDownLeft,
   ArrowLeft,
-  Calendar,
-  CalendarDays,
   Check,
   CheckCircle2,
   ChevronLeft,
@@ -50,6 +48,10 @@ import {
   TIME_SLOTS,
   AssistantScheduleProfileApi,
   AssistantExceptionApi,
+  resolveSchoolDayStatusByIsoDate,
+  buildTimelineHourSegments,
+  timeToSlotIndex,
+  type OperatingStatusSources,
 } from "../../utils/scheduleMatrixUtils";
 import { useAllAssistantSchedules } from "../../hooks/api/useAssistantSchedules";
 import { useAllAssistantExceptions } from "../../hooks/api/useAssistantExceptions";
@@ -66,6 +68,7 @@ interface PublishSchedulesModalProps {
   onSuccess?: () => void;
   profilesByAssistant?: Record<string, AssistantScheduleProfileApi[]>;
   exceptionsByAssistant?: Record<string, AssistantExceptionApi[]>;
+  operatingSources?: OperatingStatusSources;
 }
 
 interface DraftWeekGroup {
@@ -97,6 +100,7 @@ interface AssistantDaySchedule {
   }[];
   hasNoSchedule?: boolean;
   absenceReason?: string | null;
+  unfilledGaps?: { start: string; end: string }[];
 }
 
 function parseTimeToMinutes(t: string): number {
@@ -161,13 +165,18 @@ function getDayScheduleDetails(
   temporaryAssignments: AssistantTemporaryAssignmentApi[] = [],
   selectedSchoolId?: string | number,
   profilesByAssistant?: Record<string, AssistantScheduleProfileApi[]>,
-  exceptionsByAssistant?: Record<string, AssistantExceptionApi[]>
+  exceptionsByAssistant?: Record<string, AssistantExceptionApi[]>,
+  operatingSources?: OperatingStatusSources
 ): {
   assistants: AssistantDaySchedule[];
   totalEntries: number;
 } {
   const assistantsMap = new Map<string, AssistantDaySchedule>();
   let totalEntries = 0;
+
+  const schoolStatus = resolveSchoolDayStatusByIsoDate(isoDate, operatingSources);
+  const dayViewStartSlot = schoolStatus.viewStartSlot ?? 30;
+  const dayViewEndSlot = schoolStatus.viewEndSlot ?? 76;
 
   // Agrupar todas as entradas por assistente para esta data
   const entriesByAssistant = new Map<string, any[]>();
@@ -192,9 +201,6 @@ function getDayScheduleDetails(
       a.start_time.localeCompare(b.start_time)
     );
 
-    const shiftStart = sortedEntries[0].start_time.slice(0, 5);
-    const shiftEnd = sortedEntries[sortedEntries.length - 1].end_time.slice(0, 5);
-
     const matchedAssistant = assistantsList.find(
       (a) => String(a.id) === aId
     );
@@ -213,10 +219,23 @@ function getDayScheduleDetails(
         .slice(0, 2)
         .toUpperCase();
 
-    const entriesWithLunch: AssistantDaySchedule["entries"] = [];
+    // Obter ausências parciais/registadas para este assistente nesta data
+    const matchingAbsences = absences.filter((abs) => {
+      if (String(abs.assistant_id) !== aId) return false;
+      const from = (abs.valid_from || abs.start_date || "").slice(0, 10);
+      const until = (abs.valid_until || abs.end_date || from).slice(0, 10);
+      return from <= isoDate && isoDate <= until;
+    });
 
-    for (let idx = 0; idx < sortedEntries.length; idx++) {
-      const e = sortedEntries[idx];
+    const rawItems: Array<{
+      id: string;
+      activityName: string;
+      activityColor?: string;
+      startTime: string;
+      endTime: string;
+      isLocked: boolean;
+      isFallback: boolean;
+    }> = sortedEntries.map((e) => {
       const actName =
         e.activity_name || (e.is_fallback ? "Apoio Turmas/escola" : "Atividade");
       const isLunchAct =
@@ -224,7 +243,7 @@ function getDayScheduleDetails(
         actName.toLowerCase().includes("almoco") ||
         actName.toLowerCase().includes("pausa");
 
-      entriesWithLunch.push({
+      return {
         id: String(e.id),
         activityName: actName,
         activityColor: e.activity_color || (isLunchAct ? "#F97316" : "#3B82F6"),
@@ -232,12 +251,89 @@ function getDayScheduleDetails(
         endTime: e.end_time.slice(0, 5),
         isLocked: Boolean(e.is_locked),
         isFallback: Boolean(e.is_fallback),
-      });
+      };
+    });
 
-      if (idx < sortedEntries.length - 1) {
-        const next = sortedEntries[idx + 1];
-        const gapStart = e.end_time.slice(0, 5);
-        const gapEnd = next.start_time.slice(0, 5);
+    // Inserir ausências como blocos visíveis (vermelho) idênticos ao dashboard
+    matchingAbsences.forEach((abs) => {
+      const s = (abs.start_time || "").slice(0, 5);
+      const e = (abs.end_time || "").slice(0, 5);
+      const absName =
+        abs.absence_type?.name || abs.justification || "Falta / Ausência";
+      if (s && e && e > s) {
+        rawItems.push({
+          id: `absence-${abs.id || aId}-${s}`,
+          activityName: absName,
+          activityColor: "#EF4444",
+          startTime: s,
+          endTime: e,
+          isLocked: true,
+          isFallback: false,
+        });
+      }
+    });
+
+    const sortedItems = [...rawItems].sort((a, b) =>
+      a.startTime.localeCompare(b.startTime)
+    );
+
+    const aProfiles = profilesByAssistant?.[aId] || [];
+    const aExceptions = exceptionsByAssistant?.[aId] || [];
+    const hasConfiguredShift = aProfiles.length > 0 || aExceptions.length > 0;
+
+    let shiftStart = sc?.shift_start ? sc.shift_start.slice(0, 5) : "";
+    let shiftEnd = sc?.shift_end ? sc.shift_end.slice(0, 5) : "";
+
+    if ((!shiftStart || !shiftEnd) && hasConfiguredShift) {
+      const dow = new Date(isoDate).getDay();
+      const bounds = resolveAssistantShiftBounds({
+        assistantId: aId,
+        isoDate,
+        dow,
+        viewStartSlot: dayViewStartSlot,
+        viewEndSlot: dayViewEndSlot,
+        profiles: aProfiles,
+        exceptions: aExceptions,
+        schedulesList: schedules,
+        absences,
+      });
+      if (bounds.startSlot !== null && bounds.endSlot !== null) {
+        if (!shiftStart && TIME_SLOTS[bounds.startSlot]) {
+          shiftStart = TIME_SLOTS[bounds.startSlot];
+        }
+        if (!shiftEnd && TIME_SLOTS[bounds.endSlot]) {
+          shiftEnd = TIME_SLOTS[bounds.endSlot];
+        }
+      }
+    }
+
+    if (!shiftStart) {
+      shiftStart = sortedItems[0]?.startTime || "08:00";
+    }
+    if (!shiftEnd) {
+      shiftEnd = sortedItems[sortedItems.length - 1]?.endTime || "17:00";
+    }
+
+    const entriesWithLunch: AssistantDaySchedule["entries"] = [];
+
+    const unfilledGaps: Array<{ start: string; end: string }> = [];
+
+    // Se o assistente tem início de turno contratual antes da primeira tarefa
+    if (sortedItems.length > 0 && shiftStart && sortedItems[0].startTime > shiftStart) {
+      const gapDur = parseTimeToMinutes(sortedItems[0].startTime) - parseTimeToMinutes(shiftStart);
+      if (gapDur >= 15) {
+        unfilledGaps.push({ start: shiftStart, end: sortedItems[0].startTime });
+      }
+    }
+
+    for (let idx = 0; idx < sortedItems.length; idx++) {
+      const cur = sortedItems[idx];
+      entriesWithLunch.push(cur);
+
+      if (idx < sortedItems.length - 1) {
+        const next = sortedItems[idx + 1];
+        const gapStart = cur.endTime;
+        const gapEnd = next.startTime;
         const gapStartMin = parseTimeToMinutes(gapStart);
         const gapEndMin = parseTimeToMinutes(gapEnd);
         const gapDuration = gapEndMin - gapStartMin;
@@ -257,7 +353,17 @@ function getDayScheduleDetails(
             isLocked: false,
             isFallback: false,
           });
+        } else if (gapDuration >= 15) {
+          unfilledGaps.push({ start: gapStart, end: gapEnd });
         }
+      }
+    }
+
+    // Se o assistente tem fim de turno contratual após a última tarefa
+    if (sortedItems.length > 0 && shiftEnd && sortedItems[sortedItems.length - 1].endTime < shiftEnd) {
+      const gapDur = parseTimeToMinutes(shiftEnd) - parseTimeToMinutes(sortedItems[sortedItems.length - 1].endTime);
+      if (gapDur >= 15) {
+        unfilledGaps.push({ start: sortedItems[sortedItems.length - 1].endTime, end: shiftEnd });
       }
     }
 
@@ -276,6 +382,7 @@ function getDayScheduleDetails(
       isTemporaryTransfer,
       originSchoolName,
       entries: entriesWithLunch,
+      unfilledGaps,
     });
 
     totalEntries += dayEntries.length;
@@ -332,8 +439,8 @@ function getDayScheduleDetails(
         assistantId: aId,
         isoDate,
         dow,
-        viewStartSlot: 30, // 07:30
-        viewEndSlot: 76,   // 19:00
+        viewStartSlot: dayViewStartSlot,
+        viewEndSlot: dayViewEndSlot,
         profiles: aProfiles,
         exceptions: aExceptions,
         schedulesList: schedules,
@@ -391,13 +498,21 @@ function validateDayForPublish(
   assistants: Assistant[] = [],
   absences: BackendAbsenceResource[] = [],
   temporaryAssignments: AssistantTemporaryAssignmentApi[] = [],
-  selectedSchoolId?: string | number
+  selectedSchoolId?: string | number,
+  profilesByAssistant?: Record<string, AssistantScheduleProfileApi[]>,
+  exceptionsByAssistant?: Record<string, AssistantExceptionApi[]>,
+  operatingSources?: OperatingStatusSources
 ): {
   canPublish: boolean;
   isPast: boolean;
   isIncomplete: boolean;
   reason: string | null;
+  reasons: string[];
 } {
+  const schoolStatus = resolveSchoolDayStatusByIsoDate(isoDate, operatingSources);
+  const dayViewStartSlot = schoolStatus.viewStartSlot ?? 30;
+  const dayViewEndSlot = schoolStatus.viewEndSlot ?? 76;
+
   const today = new Date();
   const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const isPast = isoDate < todayIso;
@@ -408,6 +523,7 @@ function validateDayForPublish(
       isPast: true,
       isIncomplete: false,
       reason: "Não é permitido publicar escalas de dias passados.",
+      reasons: ["Não é permitido publicar escalas de dias passados."],
     };
   }
 
@@ -424,6 +540,7 @@ function validateDayForPublish(
       isPast: false,
       isIncomplete: true,
       reason: "Não existem tarefas ou horários atribuídos neste dia.",
+      reasons: ["Não existem tarefas ou horários atribuídos neste dia."],
     };
   }
 
@@ -468,10 +585,9 @@ function validateDayForPublish(
   });
 
   if (missingAssistants.length > 0) {
-    const names = missingAssistants.map((a) => a.name).slice(0, 2).join(", ");
-    gapReasons.push(
-      `${missingAssistants.length} assistente${missingAssistants.length > 1 ? "s" : ""} sem horário (${names}${missingAssistants.length > 2 ? "..." : ""})`
-    );
+    missingAssistants.forEach((a) => {
+      gapReasons.push(`${a.name}: sem qualquer horário ou tarefa atribuída`);
+    });
   }
 
   // 2. Verificar cada assistente com tarefas se tem espaços por preencher ou turno incompleto
@@ -479,12 +595,94 @@ function validateDayForPublish(
     const ast = assistants.find((a) => String(a.id) === astId);
     const astName = ast?.name || `Assistente #${astId.slice(0, 6)}`;
     const astEntries = allDayEntries.filter((e) => e.assistantId === astId);
-    const sorted = [...astEntries].sort((a, b) => a.start_time.localeCompare(b.start_time));
+
+    // Obter também ausências deste assistente nesta data
+    const astAbsences = absences.filter((abs) => {
+      if (String(abs.assistant_id) !== astId) return false;
+      const from = (abs.valid_from || abs.start_date || "").slice(0, 10);
+      const until = (abs.valid_until || abs.end_date || from).slice(0, 10);
+      return from <= isoDate && isoDate <= until;
+    });
+
+    const busyBlocks: Array<{ start: string; end: string }> = [
+      ...astEntries.map((e) => ({
+        start: e.start_time.slice(0, 5),
+        end: e.end_time.slice(0, 5),
+      })),
+    ];
+
+    astAbsences.forEach((abs) => {
+      const s = (abs.start_time || "").slice(0, 5);
+      const e = (abs.end_time || "").slice(0, 5);
+      if (s && e && e > s) {
+        busyBlocks.push({ start: s, end: e });
+      }
+    });
+
+    const sorted = [...busyBlocks].sort((a, b) => a.start.localeCompare(b.start));
+
+    // Fundir intervalos sobrepostos ou adjacentes
+    const mergedBlocks: Array<{ start: string; end: string }> = [];
+    sorted.forEach((block) => {
+      if (mergedBlocks.length === 0) {
+        mergedBlocks.push({ ...block });
+      } else {
+        const last = mergedBlocks[mergedBlocks.length - 1];
+        if (block.start <= last.end) {
+          if (block.end > last.end) {
+            last.end = block.end;
+          }
+        } else {
+          mergedBlocks.push({ ...block });
+        }
+      }
+    });
+
+    const aProfiles = profilesByAssistant?.[astId] || [];
+    const aExceptions = exceptionsByAssistant?.[astId] || [];
+    const hasConfiguredShift = aProfiles.length > 0 || aExceptions.length > 0;
+    let shiftStart = "";
+    let shiftEnd = "";
+
+    const sc = schedules.find((s) => String(s.assistant_id) === astId);
+    if (sc?.shift_start) shiftStart = sc.shift_start.slice(0, 5);
+    if (sc?.shift_end) shiftEnd = sc.shift_end.slice(0, 5);
+
+    if ((!shiftStart || !shiftEnd) && hasConfiguredShift) {
+      const dow = new Date(isoDate).getDay();
+      const bounds = resolveAssistantShiftBounds({
+        assistantId: astId,
+        isoDate,
+        dow,
+        viewStartSlot: dayViewStartSlot,
+        viewEndSlot: dayViewEndSlot,
+        profiles: aProfiles,
+        exceptions: aExceptions,
+        schedulesList: schedules,
+        absences,
+      });
+      if (bounds.startSlot !== null && bounds.endSlot !== null) {
+        if (!shiftStart && TIME_SLOTS[bounds.startSlot]) {
+          shiftStart = TIME_SLOTS[bounds.startSlot];
+        }
+        if (!shiftEnd && TIME_SLOTS[bounds.endSlot]) {
+          shiftEnd = TIME_SLOTS[bounds.endSlot];
+        }
+      }
+    }
+
+    // Verificar se o início do turno contratual está por preencher
+    if (shiftStart && mergedBlocks.length > 0 && mergedBlocks[0].start > shiftStart) {
+      const gapDur = parseTimeToMinutes(mergedBlocks[0].start) - parseTimeToMinutes(shiftStart);
+      if (gapDur >= 15) {
+        gapReasons.push(`${astName}: início de turno por preencher (${shiftStart}–${mergedBlocks[0].start})`);
+      }
+    }
 
     let lunchCount = 0;
-    for (let i = 0; i < sorted.length - 1; i++) {
-      const curEnd = sorted[i].end_time.slice(0, 5);
-      const nextStart = sorted[i + 1].start_time.slice(0, 5);
+    for (let i = 0; i < mergedBlocks.length - 1; i++) {
+      const curEnd = mergedBlocks[i].end;
+      const nextStart = mergedBlocks[i + 1].start;
       if (nextStart > curEnd) {
         const gapStartM = parseTimeToMinutes(curEnd);
         const gapEndM = parseTimeToMinutes(nextStart);
@@ -493,19 +691,27 @@ function validateDayForPublish(
         if (isLunchWindow && lunchCount === 0) {
           lunchCount++;
         } else {
-          gapReasons.push(`${astName} (${curEnd}–${nextStart})`);
+          gapReasons.push(`${astName}: intervalo sem tarefa (${curEnd}–${nextStart})`);
         }
       }
     }
 
-    let totalWorkMin = 0;
-    sorted.forEach((e) => {
-      totalWorkMin += parseTimeToMinutes(e.end_time) - parseTimeToMinutes(e.start_time);
+    // Verificar se o fim do turno contratual está por preencher
+    if (shiftEnd && mergedBlocks.length > 0 && mergedBlocks[mergedBlocks.length - 1].end < shiftEnd) {
+      const gapDur = parseTimeToMinutes(shiftEnd) - parseTimeToMinutes(mergedBlocks[mergedBlocks.length - 1].end);
+      if (gapDur >= 15) {
+        gapReasons.push(`${astName}: fim de turno por preencher (${mergedBlocks[mergedBlocks.length - 1].end}–${shiftEnd})`);
+      }
+    }
+
+    let totalCoveredMin = 0;
+    mergedBlocks.forEach((e) => {
+      totalCoveredMin += parseTimeToMinutes(e.end) - parseTimeToMinutes(e.start);
     });
 
-    // Apenas assistentes residentes têm obrigatoriedade de turno normal >= 4h; transferidos podem vir para apoios pontuais
-    if (!ast?.is_temporary_transfer && sorted.length > 0 && totalWorkMin < 4 * 60) {
-      gapReasons.push(`${astName} (apenas ${Math.floor(totalWorkMin / 60)}h atribuídas)`);
+    // Apenas assistentes residentes têm obrigatoriedade de turno normal >= 4h; transferidos ou com falta podem ter menos horas
+    if (!ast?.is_temporary_transfer && mergedBlocks.length > 0 && totalCoveredMin < 4 * 60 && astAbsences.length === 0) {
+      gapReasons.push(`${astName}: carga horária insuficiente (apenas ${Math.floor(totalCoveredMin / 60)}h atribuídas)`);
     }
   });
 
@@ -514,7 +720,8 @@ function validateDayForPublish(
       canPublish: false,
       isPast: false,
       isIncomplete: true,
-      reason: `Horário incompleto: ${gapReasons.slice(0, 2).join("; ")}${gapReasons.length > 2 ? ` (+ ${gapReasons.length - 2})` : ""}.`,
+      reason: `Horário incompleto: ${gapReasons.join("; ")}.`,
+      reasons: gapReasons,
     };
   }
 
@@ -523,6 +730,7 @@ function validateDayForPublish(
     isPast: false,
     isIncomplete: false,
     reason: null,
+    reasons: [],
   };
 }
 
@@ -538,6 +746,7 @@ export default function PublishSchedulesModal({
   onSuccess,
   profilesByAssistant: profilesByAssistantProp,
   exceptionsByAssistant: exceptionsByAssistantProp,
+  operatingSources,
 }: PublishSchedulesModalProps) {
   const { data: allAssistantSchedules = [] } = useAllAssistantSchedules();
   const { data: allAssistantExceptions = [] } = useAllAssistantExceptions();
@@ -591,11 +800,14 @@ export default function PublishSchedulesModal({
         assistants,
         absences,
         temporaryAssignments,
-        selectedSchoolId
+        selectedSchoolId,
+        computedProfilesByAssistant,
+        computedExceptionsByAssistant,
+        operatingSources
       );
     });
     return map;
-  }, [draftDays, schedules, assistants, absences, temporaryAssignments, selectedSchoolId]);
+  }, [draftDays, schedules, assistants, absences, temporaryAssignments, selectedSchoolId, computedProfilesByAssistant, computedExceptionsByAssistant, operatingSources]);
 
   const publishableDates = useMemo(
     () =>
@@ -720,7 +932,8 @@ export default function PublishSchedulesModal({
       temporaryAssignments,
       selectedSchoolId,
       computedProfilesByAssistant,
-      computedExceptionsByAssistant
+      computedExceptionsByAssistant,
+      operatingSources
     );
   }, [
     previewDate,
@@ -731,6 +944,7 @@ export default function PublishSchedulesModal({
     selectedSchoolId,
     computedProfilesByAssistant,
     computedExceptionsByAssistant,
+    operatingSources,
   ]);
 
   const previewSummary = useMemo(() => {
@@ -749,60 +963,49 @@ export default function PublishSchedulesModal({
       ? draftDays[currentPreviewIndex + 1].isoDate
       : null;
 
-  // Régua de horários e limites dinâmicos para a timeline do dia
-  const timelineRange = useMemo(() => {
-    if (!previewDetails || previewDetails.assistants.length === 0) {
+  // Janela de funcionamento da escola para o dia em pré-visualização (alinhado rigorosamente com o Dashboard)
+  const previewSchoolStatus = useMemo(() => {
+    if (!previewDate) {
       return {
-        startHour: 7,
-        endHour: 19,
-        minM: 7 * 60,
-        maxM: 19 * 60,
-        totalMinutes: 12 * 60,
-        hours: [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+        viewStartSlot: 30,
+        viewEndSlot: 76,
+        operatingWindowStr: "07:30–19:00",
       };
     }
-
-    let minMinutes = 7 * 60; // 07:00 base
-    let maxMinutes = 19 * 60; // 19:00 base
-
-    previewDetails.assistants.forEach((ast) => {
-      if (ast.shiftStart) {
-        const sm = parseTimeToMinutes(ast.shiftStart);
-        if (sm < minMinutes) minMinutes = Math.floor(sm / 60) * 60;
-      }
-      if (ast.shiftEnd) {
-        const em = parseTimeToMinutes(ast.shiftEnd);
-        if (em > maxMinutes) maxMinutes = Math.ceil(em / 60) * 60;
-      }
-      ast.entries.forEach((e) => {
-        const sm = parseTimeToMinutes(e.startTime);
-        const em = parseTimeToMinutes(e.endTime);
-        if (sm < minMinutes) minMinutes = Math.floor(sm / 60) * 60;
-        if (em > maxMinutes) maxMinutes = Math.ceil(em / 60) * 60;
-      });
-    });
-
-    if (maxMinutes - minMinutes < 8 * 60) {
-      maxMinutes = minMinutes + 8 * 60;
-    }
-
-    const startHour = Math.floor(minMinutes / 60);
-    const endHour = Math.ceil(maxMinutes / 60);
-    const totalMinutes = (endHour - startHour) * 60;
-    const hours = Array.from(
-      { length: endHour - startHour + 1 },
-      (_, i) => startHour + i
-    );
-
+    const status = resolveSchoolDayStatusByIsoDate(previewDate, operatingSources);
+    const startSlot = status.viewStartSlot ?? 30;
+    const endSlot = status.viewEndSlot ?? 76;
+    const windowStr = `${TIME_SLOTS[startSlot] ?? "07:30"}–${TIME_SLOTS[endSlot] ?? "19:00"}`;
     return {
-      startHour,
-      endHour,
-      minM: startHour * 60,
-      maxM: endHour * 60,
-      totalMinutes,
-      hours,
+      ...status,
+      viewStartSlot: startSlot,
+      viewEndSlot: endSlot,
+      operatingWindowStr: windowStr,
     };
-  }, [previewDetails]);
+  }, [previewDate, operatingSources]);
+
+  const viewStartSlot = previewSchoolStatus.viewStartSlot;
+  const viewEndSlot = previewSchoolStatus.viewEndSlot;
+  const viewSlotsCount = Math.max(1, viewEndSlot - viewStartSlot);
+
+  // Segmentos horários dinâmicos baseados no horário de funcionamento (idêntico ao Dashboard)
+  const hourSegments = useMemo(
+    () => buildTimelineHourSegments(viewStartSlot, viewEndSlot),
+    [viewStartSlot, viewEndSlot]
+  );
+
+  function getTimeRangePct(startTime: string, endTime: string): { leftPct: number; widthPct: number } {
+    const s = timeToSlotIndex(startTime);
+    const e = timeToSlotIndex(endTime);
+    const clipStart = Math.max(s, viewStartSlot);
+    const clipEnd = Math.min(e, viewEndSlot);
+    if (clipEnd <= clipStart) {
+      return { leftPct: 0, widthPct: 0 };
+    }
+    const leftPct = ((clipStart - viewStartSlot) / viewSlotsCount) * 100;
+    const widthPct = ((clipEnd - clipStart) / viewSlotsCount) * 100;
+    return { leftPct, widthPct };
+  }
 
   // Lista de atividades únicas presentes no dia para a legenda
   const dayActivities = useMemo(() => {
@@ -865,11 +1068,11 @@ export default function PublishSchedulesModal({
         }`}
       >
         {/* Coluna do Assistente */}
-        <div className={`w-48 sm:w-56 px-3 py-2.5 border-r border-border/60 flex items-center gap-2.5 flex-shrink-0 ${
+        <div className={`w-48 sm:w-56 h-12 px-3 border-r border-border/60 flex items-center gap-2.5 flex-shrink-0 ${
           isUnscheduled ? "bg-card/40 group-hover:bg-card" : "bg-card/60 group-hover:bg-card"
         }`}>
           <div className={`w-7 h-7 rounded-full font-bold text-[10px] flex items-center justify-center flex-shrink-0 ${
-            ast.absenceReason
+            ast.absenceReason || ast.entries.some((e) => e.activityColor === "#EF4444")
               ? "bg-destructive/15 text-destructive ring-1 ring-destructive/30"
               : isUnscheduled && !ast.shiftStart
               ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 ring-1 ring-amber-500/40"
@@ -877,115 +1080,165 @@ export default function PublishSchedulesModal({
           }`}>
             {ast.initials}
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-foreground truncate">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-foreground truncate leading-tight">
               {ast.assistantName}
             </p>
             {ast.absenceReason ? (
-              <p className="text-[10px] font-medium text-destructive flex items-center gap-1 mt-0.5">
-                <AlertTriangle size={9} className="flex-shrink-0 text-destructive" />
-                <span className="truncate">Ausência: {ast.absenceReason}</span>
+              <p className="text-[10px] font-medium text-destructive flex items-center gap-1 mt-0.5 truncate leading-tight">
+                <AlertTriangle size={10} className="flex-shrink-0 text-destructive" />
+                <span className="truncate">
+                  {ast.absenceReason.toLowerCase() === "ausência" || ast.absenceReason.toLowerCase() === "ausencia"
+                    ? "Ausência total"
+                    : `Ausência (${ast.absenceReason})`}
+                </span>
               </p>
-            ) : ast.shiftStart && ast.shiftEnd ? (
-              <p className="text-[10px] font-mono text-muted-foreground flex items-center gap-1 mt-0.5">
-                <Clock size={9} className="text-primary/70 flex-shrink-0" />
-                <span>Turno {ast.shiftStart}–{ast.shiftEnd}</span>
+            ) : ast.unfilledGaps && ast.unfilledGaps.length > 0 ? (
+              <p className="text-[10px] font-medium text-destructive flex items-center gap-1 mt-0.5 truncate leading-tight">
+                <AlertTriangle size={10} className="flex-shrink-0 text-destructive" />
+                <span className="truncate">Horário incompleto ({ast.unfilledGaps[0].start}–{ast.unfilledGaps[0].end})</span>
+              </p>
+            ) : ast.entries.some((e) => e.activityColor === "#EF4444") ? (
+              <p className="text-[10px] font-medium text-destructive flex items-center gap-1 mt-0.5 truncate leading-tight">
+                <AlertTriangle size={10} className="flex-shrink-0 text-destructive" />
+                <span className="truncate">Falta parcial</span>
+              </p>
+            ) : isUnscheduled || (!ast.shiftStart && !ast.shiftEnd) ? (
+              <p className="text-[10px] font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-0.5 truncate leading-tight">
+                <AlertTriangle size={10} className="flex-shrink-0 text-amber-600 dark:text-amber-400" />
+                <span className="truncate">Sem horário atribuído</span>
               </p>
             ) : (
-              <p className="text-[10px] font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-0.5">
-                <AlertTriangle size={9} className="flex-shrink-0 text-amber-600 dark:text-amber-400" />
-                <span>Sem horário atribuído</span>
+              <p className="text-[10px] font-medium text-muted-foreground flex items-center gap-1 mt-0.5 truncate leading-tight">
+                <Check size={10} className="flex-shrink-0 text-[#0E7C59]" />
+                <span className="truncate">Escala atribuída</span>
               </p>
             )}
           </div>
         </div>
 
         {/* Coluna da Linha do Tempo / Escala */}
-        <div className="relative flex-1 h-11 px-0 flex items-center bg-muted/5">
-          {/* Linhas verticais guia de cada hora */}
-          {timelineRange.hours.map((hour) => {
-            const leftPct =
-              ((hour - timelineRange.startHour) /
-                (timelineRange.endHour - timelineRange.startHour)) *
-              100;
+        <div className="relative flex-1 h-12 px-0 flex items-center bg-muted/5">
+          {/* Linhas verticais guia da janela de funcionamento da escola */}
+          <div className="absolute inset-0 flex pointer-events-none">
+            {hourSegments.map((seg) => (
+              <div
+                key={seg.startSlot}
+                className="flex-none h-full border-r border-border/30 last:border-r-0"
+                style={{ width: `${seg.widthPct}%` }}
+              />
+            ))}
+          </div>
+
+          {/* Sombra do Turno Total do Assistente */}
+          {ast.shiftStart && ast.shiftEnd && (() => {
+            const { leftPct, widthPct } = getTimeRangePct(ast.shiftStart, ast.shiftEnd);
+            if (widthPct <= 0) return null;
             return (
               <div
-                key={hour}
-                className="absolute top-0 bottom-0 border-l border-dashed border-border/25 pointer-events-none"
-                style={{ left: `${leftPct}%` }}
+                className="absolute top-1.5 bottom-1.5 rounded-lg bg-primary/[0.04] border border-primary/15 pointer-events-none"
+                style={{
+                  left: `${leftPct}%`,
+                  width: `${widthPct}%`,
+                }}
               />
+            );
+          })()}
+
+          {/* Blocos de Espaços Vazios / Por Preencher no Turno */}
+          {ast.unfilledGaps?.map((gap, gi) => {
+            const { leftPct, widthPct } = getTimeRangePct(gap.start, gap.end);
+            if (widthPct <= 0) return null;
+            const gStartMin = parseTimeToMinutes(gap.start);
+            const gEndMin = parseTimeToMinutes(gap.end);
+            const gapDurationMin = gEndMin - gStartMin;
+            const gapDurationStr =
+              gapDurationMin >= 60
+                ? `${Math.floor(gapDurationMin / 60)}h${
+                    gapDurationMin % 60 > 0 ? ` ${gapDurationMin % 60}m` : ""
+                  }`
+                : `${gapDurationMin}m`;
+
+            return (
+              <Tooltip key={`gap-${gi}`}>
+                <TooltipTrigger asChild>
+                  <div
+                    className="absolute top-2 bottom-2 rounded-md border border-dashed border-destructive/80 bg-destructive/15 text-destructive flex items-center justify-center px-1.5 z-10 animate-pulse cursor-pointer hover:brightness-110 hover:z-20 transition-all"
+                    style={{
+                      left: `${leftPct}%`,
+                      width: `${widthPct}%`,
+                    }}
+                  >
+                    <span className="text-[10px] font-semibold truncate flex items-center gap-1 drop-shadow-2xs">
+                      <AlertTriangle size={10} className="shrink-0" />
+                      Vazio ({gap.start}–{gap.end})
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  sideOffset={6}
+                  className="bg-popover text-popover-foreground border border-border shadow-xl px-3.5 py-2.5 rounded-xl text-left min-w-[200px]"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-destructive shrink-0" />
+                      <span className="font-semibold text-xs text-destructive">
+                        Espaço por Preencher
+                      </span>
+                    </div>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-destructive/15 text-destructive shrink-0">
+                      <AlertTriangle size={10} />
+                      Incompleto
+                    </span>
+                  </div>
+                  <div className="mt-1.5 pt-1.5 border-t border-border/60 space-y-0.5">
+                    <p className="text-xs font-medium text-foreground">
+                      {ast.assistantName}
+                    </p>
+                    <p className="text-[11px] font-mono text-muted-foreground">
+                      {gap.start} – {gap.end}{" "}
+                      <span className="text-destructive font-semibold">
+                        ({gapDurationStr})
+                      </span>
+                    </p>
+                    <p className="text-[10px] text-muted-foreground pt-0.5">
+                      Período do turno contratual sem qualquer tarefa atribuída.
+                    </p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
             );
           })}
 
-          {/* Sombra do Turno Total do Assistente */}
-          {ast.shiftStart && ast.shiftEnd && (
-            <div
-              className="absolute top-1.5 bottom-1.5 rounded-lg bg-primary/[0.04] border border-primary/15 pointer-events-none"
-              style={{
-                left: `${Math.max(
-                  0,
-                  ((parseTimeToMinutes(ast.shiftStart) -
-                    timelineRange.minM) /
-                    timelineRange.totalMinutes) *
-                    100
-                )}%`,
-                width: `${Math.min(
-                  100,
-                  ((parseTimeToMinutes(ast.shiftEnd) -
-                    parseTimeToMinutes(ast.shiftStart)) /
-                    timelineRange.totalMinutes) *
-                    100
-                )}%`,
-              }}
-            />
-          )}
-
           {/* Faixa de Ausência se existir */}
-          {ast.absenceReason && (
-            <div
-              className="absolute top-2 bottom-2 rounded-md bg-destructive/15 border border-destructive/30 text-destructive flex items-center px-2 z-10"
-              style={{
-                left: `${Math.max(
-                  0,
-                  ((parseTimeToMinutes(ast.shiftStart || "08:00") -
-                    timelineRange.minM) /
-                    timelineRange.totalMinutes) *
-                    100
-                )}%`,
-                width: `${Math.min(
-                  100,
-                  ((parseTimeToMinutes(ast.shiftEnd || "17:00") -
-                    parseTimeToMinutes(ast.shiftStart || "08:00")) /
-                    timelineRange.totalMinutes) *
-                    100
-                )}%`,
-              }}
-            >
-              <span className="text-[11px] font-medium truncate">
-                {ast.absenceReason}
-              </span>
-            </div>
-          )}
+          {ast.absenceReason && (() => {
+            const { leftPct, widthPct } = getTimeRangePct(
+              ast.shiftStart || "08:00",
+              ast.shiftEnd || "17:00"
+            );
+            if (widthPct <= 0) return null;
+            return (
+              <div
+                className="absolute top-2 bottom-2 rounded-md bg-destructive/15 border border-destructive/30 text-destructive flex items-center px-2 z-10"
+                style={{
+                  left: `${leftPct}%`,
+                  width: `${widthPct}%`,
+                }}
+              >
+                <span className="text-[11px] font-medium truncate">
+                  {ast.absenceReason}
+                </span>
+              </div>
+            );
+          })()}
 
           {/* Cápsulas de Atividades */}
           {ast.entries.map((ent, i) => {
+            const { leftPct, widthPct } = getTimeRangePct(ent.startTime, ent.endTime);
+            if (widthPct <= 0) return null;
             const entStartMin = parseTimeToMinutes(ent.startTime);
             const entEndMin = parseTimeToMinutes(ent.endTime);
-            const leftPct = Math.max(
-              0,
-              ((entStartMin - timelineRange.minM) /
-                timelineRange.totalMinutes) *
-                100
-            );
-            const widthPct = Math.max(
-              1,
-              Math.min(
-                100 - leftPct,
-                ((entEndMin - entStartMin) /
-                  timelineRange.totalMinutes) *
-                  100
-              )
-            );
 
             const prevEnt = i > 0 ? ast.entries[i - 1] : null;
             const nextEnt = i < ast.entries.length - 1 ? ast.entries[i + 1] : null;
@@ -1017,7 +1270,7 @@ export default function PublishSchedulesModal({
               <Tooltip key={ent.id}>
                 <TooltipTrigger asChild>
                   <div
-                    className={`absolute top-2 bottom-2 ${radiusClass} ${separatorClass} text-white shadow-2xs overflow-hidden flex items-center px-2 gap-1.5 cursor-pointer hover:brightness-110 hover:z-20 transition-all z-10`}
+                    className={`absolute top-2 bottom-2 ${radiusClass} ${separatorClass} ${ent.isLocked ? "ring-1 ring-amber-400/90 shadow-xs" : ""} text-white shadow-2xs overflow-hidden flex items-center px-2 gap-1.5 cursor-pointer hover:brightness-110 hover:z-20 transition-all z-10`}
                     style={{
                       left: `${leftPct}%`,
                       width: `calc(${widthPct}% - ${hasPrevAdjacent ? 0 : 1}px)`,
@@ -1034,10 +1287,8 @@ export default function PublishSchedulesModal({
                     )}
                     {ent.isLocked && (
                       <Lock
-                        size={9}
-                        className={`${
-                          widthPct >= 14 ? "" : "ml-auto"
-                        } text-white/70 flex-shrink-0`}
+                        size={12}
+                        className="ml-auto text-amber-200 fill-amber-300/40 shrink-0 drop-shadow-xs"
                       />
                     )}
                   </div>
@@ -1059,8 +1310,8 @@ export default function PublishSchedulesModal({
                     </div>
                     {ent.isLocked && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
-                        <Lock size={9} />
-                        Fixo
+                        <Lock size={12} />
+                        Fixo (Bloqueado)
                       </span>
                     )}
                   </div>
@@ -1220,11 +1471,15 @@ export default function PublishSchedulesModal({
                         : null
                     }
                   >
-                    <button
-                      type="button"
-                      disabled={!validationsByDate[previewDate]?.canPublish}
-                      onClick={() => toggleDate(previewDate)}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all shadow-2xs ${
+                    <label
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!validationsByDate[previewDate]?.canPublish) {
+                          e.preventDefault();
+                          return;
+                        }
+                      }}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all shadow-2xs select-none ${
                         !validationsByDate[previewDate]?.canPublish
                           ? "opacity-50 cursor-not-allowed border-border text-muted-foreground bg-muted/20"
                           : selectedDates.includes(previewDate)
@@ -1235,25 +1490,41 @@ export default function PublishSchedulesModal({
                       <Checkbox
                         checked={selectedDates.includes(previewDate)}
                         disabled={!validationsByDate[previewDate]?.canPublish}
-                        onCheckedChange={() => toggleDate(previewDate)}
+                        onCheckedChange={() => {
+                          if (validationsByDate[previewDate]?.canPublish) {
+                            toggleDate(previewDate);
+                          }
+                        }}
                       />
                       <span>Incluir na Publicação</span>
-                    </button>
+                    </label>
                   </ActionTooltip>
                 </div>
               </div>
 
               {!validationsByDate[previewDate]?.canPublish && (
-                <div className="flex items-start gap-2.5 p-3 rounded-xl border border-destructive/30 bg-destructive/5 text-destructive text-xs">
-                  <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="font-semibold">
+                <div className="p-3.5 rounded-xl border border-destructive/35 bg-destructive/5 text-destructive text-xs space-y-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={15} className="flex-shrink-0 text-destructive" />
+                    <p className="font-semibold text-xs text-destructive">
                       {validationsByDate[previewDate]?.isPast ? "Dia Passado" : "Escala Incompleta"} — Não Publicável
                     </p>
-                    <p className="text-[11px] text-destructive/90 mt-0.5">
+                  </div>
+
+                  {validationsByDate[previewDate]?.reasons &&
+                  validationsByDate[previewDate].reasons.length > 0 ? (
+                    <ul className="space-y-1.5 pl-6 list-disc text-[11px] text-destructive/95">
+                      {validationsByDate[previewDate].reasons.map((r, ri) => (
+                        <li key={ri} className="leading-snug">
+                          {r}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-[11px] text-destructive/90 pl-6">
                       {validationsByDate[previewDate]?.reason}
                     </p>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -1267,38 +1538,26 @@ export default function PublishSchedulesModal({
                   <div className="border border-border rounded-xl bg-card overflow-hidden shadow-2xs">
                     <div className="overflow-x-auto">
                       <div className="min-w-[700px]">
-                        {/* Régua Superior de Horas */}
+                        {/* Régua Superior de Horas alinhada com o horário de funcionamento da escola */}
                         <div className="flex items-center border-b border-border bg-muted/40">
-                          <div className="w-48 sm:w-56 px-3 py-2 text-[11px] font-semibold text-muted-foreground border-r border-border/60 uppercase tracking-wider flex-shrink-0">
-                            Assistente & Turno
+                          <div className="w-48 sm:w-56 px-3 py-2 text-[11px] font-semibold text-muted-foreground border-r border-border/60 uppercase tracking-wider flex items-center justify-between flex-shrink-0">
+                            <span>Assistente & Turno</span>
+                            <span className="text-[10px] font-mono text-primary font-semibold lowercase">
+                              {previewSchoolStatus.operatingWindowStr}
+                            </span>
                           </div>
-                          <div className="relative flex-1 h-8">
-                            {timelineRange.hours.map((hour, idx) => {
-                              const leftPct =
-                                ((hour - timelineRange.startHour) /
-                                  (timelineRange.endHour - timelineRange.startHour)) *
-                                100;
-                              return (
-                                <div
-                                  key={hour}
-                                  className="absolute top-0 bottom-0 flex flex-col justify-between"
-                                  style={{
-                                    left: `${leftPct}%`,
-                                    transform:
-                                      idx === 0
-                                        ? "none"
-                                        : idx === timelineRange.hours.length - 1
-                                        ? "translateX(-100%)"
-                                        : "translateX(-50%)",
-                                  }}
-                                >
-                                  <span className="text-[10px] font-mono font-medium text-muted-foreground pt-1.5 px-1">
-                                    {String(hour).padStart(2, "0")}h
-                                  </span>
-                                  <div className="w-px h-1.5 bg-border mx-auto" />
-                                </div>
-                              );
-                            })}
+                          <div className="flex flex-1 relative">
+                            {hourSegments.map((seg) => (
+                              <div
+                                key={seg.startSlot}
+                                className="flex-none border-r border-border/50 text-center last:border-r-0 overflow-hidden"
+                                style={{ width: `${seg.widthPct}%` }}
+                              >
+                                <span className="text-[10px] font-mono text-muted-foreground px-0.5 py-1.5 block font-medium truncate">
+                                  {seg.label}
+                                </span>
+                              </div>
+                            ))}
                           </div>
                         </div>
 
@@ -1684,10 +1943,9 @@ export default function PublishSchedulesModal({
                 variant="outline"
                 size="sm"
                 onClick={() => setPreviewDate(null)}
-                className="gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
               >
-                <ArrowLeft size={13} />
-                <span>Voltar à lista</span>
+                Voltar à lista
               </Button>
             )}
           </div>
@@ -1710,18 +1968,15 @@ export default function PublishSchedulesModal({
                 size="sm"
                 disabled={selectedDates.length === 0 || isPublishing}
                 onClick={handleConfirmPublish}
-                className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 font-medium cursor-pointer"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 font-medium cursor-pointer"
               >
                 {isPublishing ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" />
+                    <Loader2 size={14} className="animate-spin mr-1.5" />
                     A publicar...
                   </>
                 ) : (
-                  <>
-                    <Send size={14} />
-                    Publicar {selectedDates.length} {selectedDates.length === 1 ? "Dia" : "Dias"}
-                  </>
+                  `Publicar ${selectedDates.length} ${selectedDates.length === 1 ? "Dia" : "Dias"}`
                 )}
               </Button>
             )}

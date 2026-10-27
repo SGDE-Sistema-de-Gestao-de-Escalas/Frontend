@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Card } from "../ui/card";
 import { useAssistantsList } from "../../hooks/api/useAssistants";
@@ -75,7 +75,12 @@ export default function MonthDashboardView({
         operatingSources
       );
       if (!status.isOpen) {
-        return { active: 0, isClosed: true, hasGenerated: false };
+        return {
+          active: 0,
+          isClosed: true,
+          hasGenerated: false,
+          status,
+        };
       }
 
       const hasGenerated = hasGeneratedScheduleForDate(info.isoDate, schedules);
@@ -197,13 +202,13 @@ export default function MonthDashboardView({
               <button
                 key={dayNum}
                 type="button"
-                onClick={() => !cov.isClosed && onSelectDay(offset)}
+                onClick={() => onSelectDay(offset)}
                 onMouseEnter={() => setHoveredDay(dayNum)}
                 onMouseLeave={() => setHoveredDay(null)}
-                className={`h-20 p-2 text-left border-r border-b border-border/30 transition-colors flex flex-col ${
+                className={`h-20 p-2 text-left border-r border-b border-border/30 transition-colors flex flex-col cursor-pointer ${
                   cov.isClosed
-                    ? "cursor-default bg-muted/10"
-                    : `cursor-pointer ${coverageColor(
+                    ? "bg-muted/10 hover:bg-muted/20"
+                    : `${coverageColor(
                         cov.active,
                         false,
                         cov.hasGenerated
@@ -217,12 +222,28 @@ export default function MonthDashboardView({
                     isToday
                       ? "bg-primary text-primary-foreground font-bold"
                       : cov.isClosed
-                      ? "text-muted-foreground/40"
+                      ? "text-muted-foreground/60"
                       : "text-foreground font-medium"
                   }`}
                 >
                   {dayNum}
                 </div>
+                {cov.isClosed && cov.status && (
+                  <div className="mt-auto">
+                    <span
+                      className={`block text-[9px] font-semibold truncate px-1 py-0.5 rounded leading-tight ${
+                        cov.status.reasonType === "exception"
+                          ? "text-destructive bg-destructive/10 border border-destructive/20"
+                          : cov.status.reasonType === "holiday"
+                          ? "text-[#D97706] bg-[#D97706]/10 border border-[#D97706]/20"
+                          : "text-muted-foreground/60"
+                      }`}
+                      title={cov.status.title}
+                    >
+                      {cov.status.closedLabel || (cov.status.reasonType === "exception" ? "Exceção" : "Encerrado")}
+                    </span>
+                  </div>
+                )}
                 {!cov.isClosed &&
                   (cov.hasGenerated ? (
                     <>

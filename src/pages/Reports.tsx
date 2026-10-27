@@ -1,4 +1,3 @@
-import React from "react";
 import ReportsPage from "../components/reports/ReportsPage";
 import { useSchool } from "../context/SchoolContext";
 import NoSchoolPlaceholder from "../components/common/NoSchoolPlaceholder";

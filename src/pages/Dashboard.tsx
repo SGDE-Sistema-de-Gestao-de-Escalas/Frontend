@@ -1,19 +1,21 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSchool } from "../context/SchoolContext";
 import DashboardSection from "../components/dashboard/DashboardSection";
 import AssistantDayModal from "../components/dashboard/AssistantDayModal";
 import QuickAbsenceModal from "../components/dashboard/QuickAbsenceModal";
 import NoSchoolPlaceholder from "../components/common/NoSchoolPlaceholder";
-import type { EntityId, BlockState } from "../types";
-import type { SlotEntryMetadata } from "../utils/scheduleMatrixUtils";
+import type { EntityId } from "../types";
 
 export default function Dashboard() {
   const [selectedAssistantData, setSelectedAssistantData] = useState<{
     id: EntityId;
     dayOffset: number;
   } | null>(null);
-  const [absenceFor, setAbsenceFor] = useState<string | null>(null);
+  const [absenceFor, setAbsenceFor] = useState<{
+    name: string;
+    dateIso?: string;
+  } | null>(null);
   const { currentSchoolId, selectedSchool } = useSchool();
   const navigate = useNavigate();
 
@@ -47,9 +49,9 @@ export default function Dashboard() {
             setSelectedAssistantData(null);
             navigate(aid ? `/profile/${aid}` : "/profile");
           }}
-          onMarkAbsence={(name) => {
+          onMarkAbsence={(name, dateIso) => {
             setSelectedAssistantData(null);
-            setAbsenceFor(name);
+            setAbsenceFor({ name, dateIso });
           }}
         />
       )}
@@ -57,7 +59,8 @@ export default function Dashboard() {
       {/* Quick Absence Modal */}
       {absenceFor !== null && (
         <QuickAbsenceModal
-          assistantName={absenceFor}
+          assistantName={absenceFor.name}
+          initialDate={absenceFor.dateIso}
           onClose={() => setAbsenceFor(null)}
           currentSchoolId={currentSchoolId}
         />

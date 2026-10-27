@@ -16,7 +16,6 @@ import PlatformSettings from "../pages/PlatformSettings";
 import Account from "../pages/Account";
 import StaffSchedule from "../pages/StaffSchedule";
 import StaffAbsences from "../pages/StaffAbsences";
-import StaffRegisterAbsence from "../pages/StaffRegisterAbsence";
 import LegacyApp from "../pages/LegacyApp";
 
 import TitleUpdater from "./TitleUpdater";

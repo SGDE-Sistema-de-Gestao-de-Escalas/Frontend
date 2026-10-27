@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, UserX } from "lucide-react";
 import type { BlockState, EntityId } from "../../types";
 import {

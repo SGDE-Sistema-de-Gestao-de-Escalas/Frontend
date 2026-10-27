@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowRight,
   Building2,
   Calendar,
   Check,
@@ -13,10 +12,8 @@ import {
   HelpCircle,
   Info,
   Loader2,
-  RefreshCw,
-  Send,
   Sparkles,
-  Users,
+  Utensils,
   X,
 } from "lucide-react";
 import {
@@ -29,12 +26,13 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import { Badge } from "../ui/badge";
 import DatePicker from "../common/DatePicker";
+import TimePicker from "../common/TimePicker";
 import CustomSelect from "../common/CustomSelect";
 import {
   useGenerateSchedules,
   usePublishSchedules,
+  useSchedulesList,
 } from "../../hooks/api/useSchedules";
 import { useSchool } from "../../context/SchoolContext";
 import type {
@@ -69,6 +67,11 @@ function formatMinutesToHours(mins: number): string {
   return `${h}h${String(m).padStart(2, "0")}`;
 }
 
+function toMinutes(timeStr: string): number {
+  const [h, m] = timeStr.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
 export default function RecalculateModal({
   open,
   onClose,
@@ -80,6 +83,7 @@ export default function RecalculateModal({
   const { selectedSchool, schools: contextSchools } = useSchool();
   const generateMutation = useGenerateSchedules();
   const publishMutation = usePublishSchedules();
+  const { data: existingSchedules = [] } = useSchedulesList();
 
   const todayIso = useMemo(() => new Date().toISOString().split("T")[0], []);
   const defaultEndIso = useMemo(() => {
@@ -89,10 +93,48 @@ export default function RecalculateModal({
   }, []);
 
   const [startDate, setStartDate] = useState(initialStartDate || todayIso);
-  const [endDate, setEndDate] = useState(initialEndDate || defaultEndIso);
-  const [strategy, setStrategy] = useState<"auto" | "fill" | "full">("auto");
+  const [endDate, setEndDate] = useState(initialEndDate || initialStartDate || defaultEndIso);
+  const [strategy, setStrategy] = useState<"auto" | "full">("auto");
   const [respectExceptions, setRespectExceptions] = useState(true);
   const [step, setStep] = useState<"form" | "gap" | "done">("form");
+  const [showPublishOverwriteConfirm, setShowPublishOverwriteConfirm] = useState(false);
+
+  const hasPublishedSchedulesInRange = useMemo(() => {
+    if (!startDate || !endDate || existingSchedules.length === 0) return false;
+    const cleanStart = startDate.slice(0, 10);
+    const cleanEnd = endDate.slice(0, 10);
+
+    return existingSchedules.some((sc) => {
+      if (sc.status !== "published" && !sc.published_at) return false;
+
+      const ws = (sc.week_start || "").slice(0, 10);
+      const we = (sc.week_end || "").slice(0, 10);
+      if (ws && we && ws <= cleanEnd && we >= cleanStart) {
+        if (sc.entries && sc.entries.length > 0) {
+          return sc.entries.some((e) => {
+            const ed = (e.date || "").slice(0, 10);
+            return ed >= cleanStart && ed <= cleanEnd;
+          });
+        }
+        return true;
+      }
+      return false;
+    });
+  }, [existingSchedules, startDate, endDate]);
+
+  useEffect(() => {
+    if (open) {
+      const defaultStart = initialStartDate || todayIso;
+      const defaultEnd = initialEndDate || initialStartDate || defaultStart;
+      setStartDate(defaultStart);
+      setEndDate(defaultEnd);
+      setStep("form");
+      setGenerationResult(null);
+      setApprovedTransfers([]);
+      setSelectedSubstituteId(null);
+      setDateErrors({});
+    }
+  }, [open, initialStartDate, initialEndDate, todayIso]);
 
   // Resultado real devolvido pelo motor do Backend
   const [generationResult, setGenerationResult] =
@@ -109,9 +151,15 @@ export default function RecalculateModal({
   const [selectedSubstituteId, setSelectedSubstituteId] = useState<
     EntityId | null
   >(null);
+  const [transferTimeMode, setTransferTimeMode] = useState<"deficit" | "full_day" | "custom">("deficit");
+  const [transferCustomStart, setTransferCustomStart] = useState<string>("");
+  const [transferCustomEnd, setTransferCustomEnd] = useState<string>("");
   const [substituteSchoolFilter, setSubstituteSchoolFilter] = useState<
     EntityId | "all"
   >("all");
+  const [ignoredConflictKeys, setIgnoredConflictKeys] = useState<Set<string>>(
+    new Set()
+  );
   const [dateErrors, setDateErrors] = useState<{
     start?: string;
     end?: string;
@@ -128,10 +176,34 @@ export default function RecalculateModal({
     selectedSchool ||
     contextSchools.find((s) => String(s.id) === String(currentSchoolId));
 
-  // Lista de conflitos reais devolvidos pela API
+  // Função auxiliar para testar se um défice é coberto por uma transferência
+  function isConflictCoveredByTransfer(
+    conflict: ScheduleConflictApi,
+    transfer: { date: string; start_time?: string | null; end_time?: string | null }
+  ): boolean {
+    if (transfer.date !== conflict.date) return false;
+    // Se a transferência for de dia inteiro, cobre qualquer horário no mesmo dia
+    if (!transfer.start_time || !transfer.end_time) return true;
+    // Período específico: o défice tem de estar compreendido dentro da janela da cedência
+    return (
+      transfer.start_time <= conflict.period_start &&
+      transfer.end_time >= conflict.period_end
+    );
+  }
+
+  // Lista de conflitos reais não satisfeitos e não ignorados
   const conflicts: ScheduleConflictApi[] = useMemo(() => {
-    return generationResult?.conflicts ?? [];
-  }, [generationResult]);
+    const raw = generationResult?.conflicts ?? [];
+    return raw.filter((c) => {
+      const key = `${c.date}_${c.rule_id}_${c.period_start}`;
+      if (ignoredConflictKeys.has(key)) return false;
+      // Se já existe uma transferência aprovada que cobre este horário na mesma data, não volta a pedir
+      if (approvedTransfers.some((t) => isConflictCoveredByTransfer(c, t))) {
+        return false;
+      }
+      return true;
+    });
+  }, [generationResult, ignoredConflictKeys, approvedTransfers]);
 
   const activeConflict =
     conflicts[Math.min(currentConflictIdx, Math.max(0, conflicts.length - 1))];
@@ -168,6 +240,91 @@ export default function RecalculateModal({
     (c) => String(c.assistant_id) === String(selectedSubstituteId)
   );
 
+  const prospectiveTransfer = useMemo(() => {
+    if (!activeConflict || !selectedSub) return null;
+    let startTime: string | null = null;
+    let endTime: string | null = null;
+    if (transferTimeMode === "deficit") {
+      startTime = activeConflict.period_start;
+      endTime = activeConflict.period_end;
+    } else if (transferTimeMode === "custom") {
+      startTime = transferCustomStart || activeConflict.period_start;
+      endTime = transferCustomEnd || activeConflict.period_end;
+    } else {
+      startTime = null;
+      endTime = null;
+    }
+    return {
+      date: activeConflict.date,
+      start_time: startTime,
+      end_time: endTime,
+    };
+  }, [activeConflict, selectedSub, transferTimeMode, transferCustomStart, transferCustomEnd]);
+
+  const effectiveTransferTimes = useMemo(() => {
+    if (!activeConflict || !selectedSub) return { start: "", end: "" };
+    if (transferTimeMode === "deficit") {
+      return { start: activeConflict.period_start, end: activeConflict.period_end };
+    }
+    if (transferTimeMode === "custom") {
+      return {
+        start: transferCustomStart || activeConflict.period_start,
+        end: transferCustomEnd || activeConflict.period_end,
+      };
+    }
+    return {
+      start: selectedSub.shift_start || "08:00",
+      end: selectedSub.shift_end || "17:00",
+    };
+  }, [activeConflict, selectedSub, transferTimeMode, transferCustomStart, transferCustomEnd]);
+
+  const shiftMismatch = useMemo(() => {
+    if (
+      !selectedSub ||
+      !selectedSub.shift_start ||
+      !selectedSub.shift_end ||
+      !effectiveTransferTimes.start ||
+      !effectiveTransferTimes.end
+    ) {
+      return null;
+    }
+    const shiftStartMin = toMinutes(selectedSub.shift_start);
+    const shiftEndMin = toMinutes(selectedSub.shift_end);
+    const trStartMin = toMinutes(effectiveTransferTimes.start);
+    const trEndMin = toMinutes(effectiveTransferTimes.end);
+
+    const earlyMinutes = Math.max(0, shiftStartMin - trStartMin);
+    const lateMinutes = Math.max(0, trEndMin - shiftEndMin);
+
+    if (earlyMinutes === 0 && lateMinutes === 0) return null;
+
+    return {
+      earlyMinutes,
+      lateMinutes,
+      shiftStart: selectedSub.shift_start,
+      shiftEnd: selectedSub.shift_end,
+      trStart: effectiveTransferTimes.start,
+      trEnd: effectiveTransferTimes.end,
+    };
+  }, [selectedSub, effectiveTransferTimes]);
+
+  // Outros conflitos pendentes que esta transferência também cobrirá de imediato
+  const coveredOtherConflicts = useMemo(() => {
+    if (!prospectiveTransfer || !activeConflict) return [];
+    return conflicts.filter((c) => {
+      if (c === activeConflict) return false;
+      return isConflictCoveredByTransfer(c, prospectiveTransfer);
+    });
+  }, [prospectiveTransfer, activeConflict, conflicts]);
+
+
+  // Se todos os défices foram resolvidos e estamos no passo "gap", avança imediatamente para "done"
+  useEffect(() => {
+    if (step === "gap" && conflicts.length === 0 && !generateMutation.isPending) {
+      setStep("done");
+    }
+  }, [step, conflicts.length, generateMutation.isPending]);
+
   function applyDatePreset(preset: "this-week" | "next-week" | "next-month") {
     const now = new Date();
     if (preset === "this-week") {
@@ -202,8 +359,12 @@ export default function RecalculateModal({
     setStep("form");
     setSelectedSubstituteId(null);
     setSubstituteSchoolFilter("all");
+    setTransferTimeMode("deficit");
+    setTransferCustomStart("");
+    setTransferCustomEnd("");
     setCurrentConflictIdx(0);
     setApprovedTransfers([]);
+    setIgnoredConflictKeys(new Set());
     setDateErrors({});
     setIsPublished(false);
     onClose();
@@ -225,13 +386,27 @@ export default function RecalculateModal({
       return;
     }
 
+    // Se o período já contiver horários publicados, pede confirmação explícita ao administrador
+    if (hasPublishedSchedulesInRange) {
+      setShowPublishOverwriteConfirm(true);
+      return;
+    }
+
+    await executeGeneration();
+  }
+
+  async function executeGeneration() {
     setDateErrors({});
     setApprovedTransfers([]);
+    setIgnoredConflictKeys(new Set());
     setCurrentConflictIdx(0);
     setSelectedSubstituteId(null);
+    setTransferTimeMode("deficit");
+    setTransferCustomStart("");
+    setTransferCustomEnd("");
 
     try {
-      const preserveLocked = strategy !== "full" && respectExceptions;
+      const preserveLocked = strategy === "auto" && respectExceptions;
       const result = await generateMutation.mutateAsync({
         start_date: startDate,
         end_date: endDate,
@@ -264,52 +439,159 @@ export default function RecalculateModal({
   async function handleAdvanceFromConflict(
     chosenCandidate: TransferCandidateApi | null
   ) {
-    let nextTransfers = [...approvedTransfers];
-    if (chosenCandidate && activeConflict) {
-      nextTransfers.push({
-        assistant_id: String(chosenCandidate.assistant_id),
-        date: activeConflict.date,
-        rule_id: activeConflict.rule_id,
-        notes: `Designação de cobertura inter-escolar para ${
-          activeConflict.activity_name ?? "regra obrigatória"
-        } (${activeConflict.period_start}–${activeConflict.period_end})`,
-        assistant_name: chosenCandidate.name,
-        origin_school_name:
-          chosenCandidate.origin_school_name ?? "Escola do Agrupamento",
-        period: `${activeConflict.period_start}–${activeConflict.period_end}`,
-      });
-      setApprovedTransfers(nextTransfers);
-    }
+    if (!chosenCandidate || !activeConflict) {
+      if (activeConflict) {
+        const key = `${activeConflict.date}_${activeConflict.rule_id}_${activeConflict.period_start}`;
+        const newIgnored = new Set(ignoredConflictKeys);
+        newIgnored.add(key);
+        setIgnoredConflictKeys(newIgnored);
 
-    setSelectedSubstituteId(null);
-    setSubstituteSchoolFilter("all");
+        const remaining = conflicts.filter(
+          (c) => `${c.date}_${c.rule_id}_${c.period_start}` !== key
+        );
 
-    // Se houver mais défices por rever, avança para o próximo défice na mesma modal
-    if (currentConflictIdx + 1 < conflicts.length) {
-      setCurrentConflictIdx((idx) => idx + 1);
+        if (remaining.length === 0) {
+          await handleFinalizeWithTransfers(approvedTransfers);
+          return;
+        }
+
+        if (currentConflictIdx >= remaining.length) {
+          setCurrentConflictIdx(Math.max(0, remaining.length - 1));
+        }
+      }
+      setSelectedSubstituteId(null);
+      setSubstituteSchoolFilter("all");
+      setTransferTimeMode("deficit");
+      setTransferCustomStart("");
+      setTransferCustomEnd("");
       return;
     }
 
-    // Se foram confirmadas designações de transferência, re-executar com as transferências aprovadas
-    if (nextTransfers.length > 0 && generationResult) {
+    let startTime: string | null = null;
+    let endTime: string | null = null;
+    let periodLabel = "";
+
+    if (transferTimeMode === "deficit") {
+      startTime = activeConflict.period_start;
+      endTime = activeConflict.period_end;
+      periodLabel = `${startTime}–${endTime}`;
+    } else if (transferTimeMode === "custom") {
+      startTime = transferCustomStart || activeConflict.period_start;
+      endTime = transferCustomEnd || activeConflict.period_end;
+      periodLabel = `${startTime}–${endTime}`;
+    } else {
+      startTime = null;
+      endTime = null;
+      periodLabel = chosenCandidate.shift_start
+        ? `Dia Inteiro (${chosenCandidate.shift_start}–${chosenCandidate.shift_end})`
+        : "Dia Inteiro";
+    }
+
+    const newTransfer: ApprovedTransferPayload & {
+      assistant_name: string;
+      origin_school_name: string;
+      period: string;
+    } = {
+      assistant_id: String(chosenCandidate.assistant_id),
+      date: activeConflict.date,
+      rule_id: activeConflict.rule_id,
+      start_time: startTime,
+      end_time: endTime,
+      notes: `Designação de cobertura inter-escolar para ${
+        activeConflict.activity_name ?? "regra obrigatória"
+      } (${periodLabel})`,
+      assistant_name: chosenCandidate.name,
+      origin_school_name:
+        chosenCandidate.origin_school_name ?? "Escola do Agrupamento",
+      period: periodLabel,
+    };
+
+    const nextTransfers = [...approvedTransfers, newTransfer];
+    setApprovedTransfers(nextTransfers);
+
+    setSelectedSubstituteId(null);
+    setSubstituteSchoolFilter("all");
+    setTransferTimeMode("deficit");
+    setTransferCustomStart("");
+    setTransferCustomEnd("");
+
+    // Recalcula no backend com a nova lista acumulada de transferências
+    try {
+      const preserveLocked = strategy === "auto" && respectExceptions;
+      const updatedResult = await generateMutation.mutateAsync({
+        start_date: startDate,
+        end_date: endDate,
+        preserve_locked: preserveLocked,
+        transfers: nextTransfers.map((t) => ({
+          assistant_id: t.assistant_id,
+          date: t.date,
+          rule_id: t.rule_id,
+          start_time: t.start_time,
+          end_time: t.end_time,
+          notes: t.notes,
+        })),
+      });
+
+      setGenerationResult(updatedResult);
+      onGenerated?.(updatedResult);
+
+      const remainingFromApi = (updatedResult.conflicts ?? []).filter((c) => {
+        const key = `${c.date}_${c.rule_id}_${c.period_start}`;
+        if (ignoredConflictKeys.has(key)) return false;
+        if (nextTransfers.some((t) => isConflictCoveredByTransfer(c, t))) return false;
+        return true;
+      });
+
+      if (remainingFromApi.length === 0) {
+        setStep("done");
+        return;
+      }
+
+      setCurrentConflictIdx(0);
+    } catch {
+      // Fallback de contingência local se o backend falhar
+      const nextRemaining = conflicts.filter((c) => {
+        if (c === activeConflict) return false;
+        if (isConflictCoveredByTransfer(c, newTransfer)) return false;
+        return true;
+      });
+
+      if (nextRemaining.length === 0) {
+        setStep("done");
+      } else {
+        setCurrentConflictIdx(0);
+      }
+    }
+  }
+
+  async function handleFinalizeWithTransfers(
+    transfersToApply: (ApprovedTransferPayload & {
+      assistant_name: string;
+      origin_school_name: string;
+      period: string;
+    })[]
+  ) {
+    if (transfersToApply.length > 0 && generationResult) {
       try {
-        const preserveLocked = strategy !== "full" && respectExceptions;
+        const preserveLocked = strategy === "auto" && respectExceptions;
         const updatedResult = await generateMutation.mutateAsync({
           start_date: startDate,
           end_date: endDate,
           preserve_locked: preserveLocked,
           idempotency_key: crypto.randomUUID(),
-          transfers: nextTransfers.map((t) => ({
+          transfers: transfersToApply.map((t) => ({
             assistant_id: t.assistant_id,
             date: t.date,
             rule_id: t.rule_id,
+            start_time: t.start_time,
+            end_time: t.end_time,
             notes: t.notes,
           })),
         });
         setGenerationResult(updatedResult);
         onGenerated?.(updatedResult);
       } catch {
-        // Mantém o resultado anterior caso falhe a segunda chamada
+        // Mantém o resultado anterior
       }
     }
 
@@ -332,8 +614,9 @@ export default function RecalculateModal({
   const isPublishing = publishMutation.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={(val) => !val && handleClose()}>
-      <DialogContent className="max-w-xl max-h-[90vh] flex flex-col p-0 overflow-hidden sm:rounded-xl">
+    <>
+      <Dialog open={open} onOpenChange={(val) => !val && handleClose()}>
+        <DialogContent className={`${step === "gap" ? "max-w-2xl" : "max-w-xl"} max-h-[90vh] flex flex-col p-0 overflow-hidden sm:rounded-xl transition-all duration-200`}>
         {/* Header com Stepper por baixo dos títulos (idêntico à modal de CSV) */}
         <DialogHeader className="px-6 pt-5 pb-4 border-b border-border bg-card">
           <div className="flex items-center gap-3 pr-8">
@@ -546,23 +829,10 @@ export default function RecalculateModal({
                       label: (
                         <div className="py-0.5 text-left w-full min-w-0 pr-4">
                           <p className="text-xs font-semibold text-foreground leading-snug">
-                            Automática / Equilibrada (Recomendado)
+                            Preencher e Otimizar Escala (Recomendado)
                           </p>
                           <p className="text-[11px] text-muted-foreground whitespace-normal break-words leading-relaxed mt-1">
-                            Aplica as 3 Rondas Obrigatórias, prioridades contratuais, descansos e preenchimento equilibrado de turnos.
-                          </p>
-                        </div>
-                      ),
-                    },
-                    {
-                      value: "fill",
-                      label: (
-                        <div className="py-0.5 text-left w-full min-w-0 pr-4">
-                          <p className="text-xs font-semibold text-foreground leading-snug">
-                            Preencher apenas lacunas de cobertura
-                          </p>
-                          <p className="text-[11px] text-muted-foreground whitespace-normal break-words leading-relaxed mt-1">
-                            Aloca apenas períodos com défice de cobertura, mantendo intactas as escalas já definidas anteriormente.
+                            Ajusta e equilibra a escala cobrindo as necessidades e regras em falta, mantendo intactas as tarefas fixadas manualmente com cadeado.
                           </p>
                         </div>
                       ),
@@ -572,10 +842,10 @@ export default function RecalculateModal({
                       label: (
                         <div className="py-0.5 text-left w-full min-w-0 pr-4">
                           <p className="text-xs font-semibold text-foreground leading-snug">
-                            Regeneração completa
+                            Regeneração Completa (Limpar do zero)
                           </p>
                           <p className="text-[11px] text-muted-foreground whitespace-normal break-words leading-relaxed mt-1">
-                            Recalcula a totalidade da escala do zero, substituindo integralmente quaisquer turnos pré-existentes no período.
+                            Recalcula a totalidade da escala do zero, substituindo integralmente quaisquer turnos e bloqueios pré-existentes no período.
                           </p>
                         </div>
                       ),
@@ -585,25 +855,52 @@ export default function RecalculateModal({
               </div>
 
               {/* Opção de Bloqueios e Exceções */}
-              <label
-                htmlFor="respect-exceptions"
-                className="flex items-start gap-3 p-3 rounded-xl border border-border bg-muted/20 hover:bg-muted/30 cursor-pointer transition-colors"
-              >
-                <Checkbox
-                  id="respect-exceptions"
-                  checked={respectExceptions}
-                  onCheckedChange={(checked) => setRespectExceptions(checked === true)}
-                  className="mt-0.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground">
-                    Preservar blocos manuais bloqueados e exceções individuais
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Mantém intactos os horários fixados manualmente com cadeado e respeita as restrições contratuais individuais.
-                  </p>
+              {strategy === "auto" ? (
+                <label
+                  htmlFor="respect-exceptions"
+                  className="flex items-start gap-3 p-3 rounded-xl border border-border bg-muted/20 hover:bg-muted/30 cursor-pointer transition-colors"
+                >
+                  <Checkbox
+                    id="respect-exceptions"
+                    checked={respectExceptions}
+                    onCheckedChange={(checked) => setRespectExceptions(checked === true)}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground">
+                      Preservar blocos manuais bloqueados
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Mantém inalteradas todas as tarefas e horários fixados com cadeado pelo administrador.
+                    </p>
+                  </div>
+                </label>
+              ) : (
+                <div className="p-3.5 rounded-xl border border-border bg-muted/30 text-xs flex items-start gap-2.5 text-muted-foreground">
+                  <Info size={14} className="mt-0.5 text-primary shrink-0" />
+                  <span>
+                    Na <strong>regeneração completa</strong>, todos os turnos e bloqueios manuais existentes no período são substituídos para gerar uma escala 100% nova do zero.
+                  </span>
                 </div>
-              </label>
+              )}
+
+              {/* Alerta se o período já se encontra publicado */}
+              {hasPublishedSchedulesInRange && (
+                <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5 animate-in fade-in-50">
+                  <AlertTriangle
+                    size={16}
+                    className="text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0"
+                  />
+                  <div className="space-y-1">
+                    <p className="font-semibold text-foreground">
+                      Atenção: Horário deste período já se encontra publicado
+                    </p>
+                    <p className="leading-relaxed opacity-90">
+                      O período selecionado ({startDate === endDate ? startDate : `${startDate} a ${endDate}`}) já possui uma escala publicada. Ao recalcular, esta escala passará para o estado de <strong>Rascunho (Draft)</strong> e deixará de estar em vigor até ser novamente publicada.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Caixa Informativa sobre as Fases do Motor (Estilo idêntico ao modelo CSV) */}
               <div className="rounded-lg border border-border bg-muted/30 p-3.5 space-y-2 text-xs">
@@ -623,6 +920,36 @@ export default function RecalculateModal({
           {/* ========================================================= */}
           {step === "gap" && activeConflict && (
             <div className="space-y-4">
+              {/* Barra de Progresso e Navegação dos Défices */}
+              {conflicts.length > 1 && (
+                <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-muted/40 border border-border/70 text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-semibold text-foreground">
+                      Défice {currentConflictIdx + 1} de {conflicts.length}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {conflicts.map((_, idx) => (
+                        <div
+                          key={idx}
+                          className={`h-2 rounded-full transition-all ${
+                            idx === currentConflictIdx
+                              ? "w-6 bg-primary shadow-xs"
+                              : idx < currentConflictIdx
+                              ? "w-2.5 bg-emerald-500"
+                              : "w-2.5 bg-muted-foreground/30"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  {approvedTransfers.length > 0 && (
+                    <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                      ✓ {approvedTransfers.length} {approvedTransfers.length === 1 ? "designada" : "designadas"}
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* Alerta de Falha de Cobertura */}
               <div className="p-3.5 rounded-xl border border-rose-300 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/30 flex items-start gap-3 text-xs text-rose-800 dark:text-rose-200">
                 <div className="w-8 h-8 rounded-full bg-rose-500/15 flex items-center justify-center flex-shrink-0 text-rose-600 dark:text-rose-400">
@@ -699,22 +1026,31 @@ export default function RecalculateModal({
                   <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                     {filteredSubstitutes.map((c) => {
                       const isSelected = String(selectedSubstituteId) === String(c.assistant_id);
+                      const isDisabled = c.is_absent || c.selectable === false;
                       const initials = getInitials(c.name);
                       return (
                         <button
                           key={c.assistant_id}
                           type="button"
-                          onClick={() => setSelectedSubstituteId(isSelected ? null : c.assistant_id)}
-                          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all text-left ${
-                            isSelected
+                          disabled={isDisabled}
+                          onClick={() => {
+                            if (isDisabled) return;
+                            setSelectedSubstituteId(isSelected ? null : c.assistant_id);
+                          }}
+                          className={`w-full flex items-start gap-3 px-3.5 py-2.5 rounded-xl border transition-all text-left ${
+                            isDisabled
+                              ? "border-border/60 bg-muted/20 opacity-60 cursor-not-allowed"
+                              : isSelected
                               ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
                               : "border-border hover:bg-muted/40 bg-card"
                           }`}
                         >
                           <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold font-mono ${
+                            className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold font-mono mt-0.5 ${
                               isSelected
                                 ? "bg-primary text-primary-foreground"
+                                : isDisabled
+                                ? "bg-muted text-muted-foreground"
                                 : "bg-primary/10 text-primary"
                             }`}
                           >
@@ -727,20 +1063,67 @@ export default function RecalculateModal({
                               </p>
                               <span
                                 className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
-                                  c.causes_origin_shortfall
+                                  isDisabled
+                                    ? "bg-muted text-muted-foreground"
+                                    : c.causes_origin_shortfall
                                     ? "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300"
                                     : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300"
                                 }`}
                               >
-                                {c.causes_origin_shortfall
+                                {c.is_absent
+                                  ? "Indisponível"
+                                  : c.causes_origin_shortfall
                                   ? `Score ${c.score}% · Afeta origem`
                                   : `Score ${c.score}% · Livre na origem`}
                               </span>
                             </div>
+
                             <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
                               <Building2 size={11} className="flex-shrink-0" />
                               {c.origin_school_name ?? "Escola do Agrupamento"}
                             </p>
+
+                            {/* Badges de Turno, Almoço e Ausências */}
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                              {c.shift_covers_deficit === "full" && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-200/50 dark:border-emerald-800/50">
+                                  ✓ Cobre horário do défice
+                                </span>
+                              )}
+                              {c.shift_covers_deficit === "partial" && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded border border-amber-200/50 dark:border-amber-800/50">
+                                  ⚠️ Cobre {c.overlap_minutes}m do défice
+                                </span>
+                              )}
+                              {c.shift_covers_deficit === "outside" && c.works_today && !c.is_absent && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 px-1.5 py-0.5 rounded border border-rose-200/50 dark:border-rose-800/50">
+                                  ⚠️ Fora do horário habitual ({c.shift_start}–{c.shift_end})
+                                </span>
+                              )}
+                              {c.shift_start && c.shift_end && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-mono bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded border border-blue-200/50 dark:border-blue-800/50">
+                                  <Clock size={10} className="flex-shrink-0" />
+                                  Turno: {c.shift_start}–{c.shift_end}
+                                </span>
+                              )}
+                              {c.lunch_start && c.lunch_end && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-mono bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded border border-amber-200/50 dark:border-amber-800/50">
+                                  <Utensils size={10} className="flex-shrink-0" />
+                                  Almoço: {c.lunch_start}–{c.lunch_end} ({c.lunch_duration ?? 60}m)
+                                </span>
+                              )}
+                              {c.is_absent && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 px-1.5 py-0.5 rounded border border-rose-200/50 dark:border-rose-800/50">
+                                  Ausente (Dia todo)
+                                </span>
+                              )}
+                              {!c.is_absent && c.partial_absence && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded border border-amber-200/50 dark:border-amber-800/50">
+                                  ⚠️ {c.partial_absence}
+                                </span>
+                              )}
+                            </div>
+
                             {c.causes_origin_shortfall && c.origin_impact_detail && (
                               <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1 leading-snug">
                                 {c.origin_impact_detail}
@@ -748,7 +1131,7 @@ export default function RecalculateModal({
                             )}
                           </div>
                           {isSelected && (
-                            <Check size={16} className="text-primary flex-shrink-0" />
+                            <Check size={16} className="text-primary flex-shrink-0 mt-0.5" />
                           )}
                         </button>
                       );
@@ -757,15 +1140,151 @@ export default function RecalculateModal({
                 )}
               </div>
 
-              {/* Resumo do Selecionado */}
+              {/* Resumo e Configuração do Selecionado */}
               {selectedSub && (
-                <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 flex items-center gap-2.5 text-xs animate-in fade-in-50">
-                  <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-[10px] font-bold text-primary">{getInitials(selectedSub.name)}</span>
+                <div className="p-3.5 rounded-xl border border-primary/30 bg-primary/5 space-y-3 animate-in fade-in-50">
+                  <div className="flex items-start gap-2.5 text-xs">
+                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 text-primary font-bold">
+                      {getInitials(selectedSub.name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-foreground text-xs">{selectedSub.name}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {selectedSub.origin_school_name ?? "Escola de Origem"}
+                        {selectedSub.shift_start && ` · Turno: ${selectedSub.shift_start}–${selectedSub.shift_end}`}
+                        {selectedSub.lunch_start && ` · Almoço: ${selectedSub.lunch_start}–${selectedSub.lunch_end}`}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0 text-muted-foreground leading-snug">
-                    <strong className="text-foreground">{selectedSub.name}</strong> ({selectedSub.origin_school_name ?? "outra escola"}) será transferido para cobrir{" "}
-                    <strong className="font-mono text-foreground">{activeConflict.period_start}–{activeConflict.period_end}</strong> em {activeConflict.date}.
+
+                  {/* Seletor de Período da Transferência */}
+                  <div className="space-y-1.5 pt-2 border-t border-primary/15">
+                    <label className="text-[11px] font-semibold text-foreground flex items-center justify-between">
+                      <span>Período de cedência para esta escola:</span>
+                      <span className="text-[10px] text-muted-foreground font-normal">
+                        Necessidade da regra: {activeConflict.period_start}–{activeConflict.period_end}
+                      </span>
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setTransferTimeMode("deficit")}
+                        className={`p-2 rounded-lg border text-left transition-all ${
+                          transferTimeMode === "deficit"
+                            ? "border-primary bg-background shadow-xs ring-1 ring-primary/20 font-medium text-foreground"
+                            : "border-border bg-card/60 text-muted-foreground hover:bg-card"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold">Período do Défice</span>
+                          <span className="font-mono text-[10px] text-primary">{activeConflict.period_start}–{activeConflict.period_end}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          Cobre apenas a necessidade; restante horário mantido na origem.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setTransferTimeMode("full_day")}
+                        className={`p-2 rounded-lg border text-left transition-all ${
+                          transferTimeMode === "full_day"
+                            ? "border-primary bg-background shadow-xs ring-1 ring-primary/20 font-medium text-foreground"
+                            : "border-border bg-card/60 text-muted-foreground hover:bg-card"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold">Dia Inteiro</span>
+                          <span className="font-mono text-[10px] text-primary">
+                            {selectedSub.shift_start ? `${selectedSub.shift_start}–${selectedSub.shift_end}` : "Turno Todo"}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          Transfere todo o horário diário do assistente para esta escola.
+                        </p>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (transferTimeMode !== "custom") {
+                            setTransferTimeMode("custom");
+                            setTransferCustomStart(activeConflict.period_start);
+                            setTransferCustomEnd(activeConflict.period_end);
+                          } else {
+                            setTransferTimeMode("deficit");
+                          }
+                        }}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        {transferTimeMode === "custom" ? "← Voltar aos modos predefinidos" : "Personalizar horas específicas..."}
+                      </button>
+                    </div>
+
+                    {transferTimeMode === "custom" && (
+                      <div className="grid grid-cols-2 gap-3 pt-1 animate-in fade-in-50">
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-muted-foreground block font-medium">Hora de Início</label>
+                          <TimePicker
+                            value={transferCustomStart || activeConflict.period_start || "08:00"}
+                            onChange={setTransferCustomStart}
+                            className="w-full"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-muted-foreground block font-medium">Hora de Fim</label>
+                          <TimePicker
+                            value={transferCustomEnd || activeConflict.period_end || "17:00"}
+                            onChange={setTransferCustomEnd}
+                            className="w-full"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-[10px] text-muted-foreground pt-1 flex items-center gap-1">
+                      <Info size={11} className="flex-shrink-0 text-primary" />
+                      A pausa de almoço de 1h é adaptada e garantida pelo motor antes ou depois da cedência.
+                    </p>
+
+                    {shiftMismatch && (
+                      <div className="p-3 rounded-xl border border-amber-300 dark:border-amber-800/70 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs space-y-1 animate-in fade-in-50">
+                        <div className="flex items-center gap-2 font-semibold">
+                          <AlertTriangle size={15} className="text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                          <span>Atenção: Horário ultrapassa o turno habitual do assistente</span>
+                        </div>
+                        <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                          O assistente tem horário contratual das <strong>{shiftMismatch.shiftStart} às {shiftMismatch.shiftEnd}</strong>.
+                          {shiftMismatch.earlyMinutes > 0 && shiftMismatch.lateMinutes > 0 && (
+                            <> A cedência selecionada ({shiftMismatch.trStart}–{shiftMismatch.trEnd}) inicia <strong>{formatMinutesToHours(shiftMismatch.earlyMinutes)} antes</strong> e termina <strong>{formatMinutesToHours(shiftMismatch.lateMinutes)} após</strong> o fim do turno habitual.</>
+                          )}
+                          {shiftMismatch.earlyMinutes > 0 && shiftMismatch.lateMinutes === 0 && (
+                            <> A cedência selecionada ({shiftMismatch.trStart}–{shiftMismatch.trEnd}) inicia <strong>{formatMinutesToHours(shiftMismatch.earlyMinutes)} antes</strong> da hora de entrada habitual.</>
+                          )}
+                          {shiftMismatch.lateMinutes > 0 && shiftMismatch.earlyMinutes === 0 && (
+                            <> A cedência selecionada ({shiftMismatch.trStart}–{shiftMismatch.trEnd}) ultrapassa o fim do turno habitual em <strong>{formatMinutesToHours(shiftMismatch.lateMinutes)}</strong>.</>
+                          )}
+                          {" "}O assistente estará a realizar horas para além do seu período habitual.
+                        </p>
+                      </div>
+                    )}
+
+                    {coveredOtherConflicts.length > 0 && (
+                      <div className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 text-[11px] flex items-start gap-2 animate-in fade-in-50">
+                        <CheckCircle2 size={14} className="flex-shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+                        <div className="space-y-0.5">
+                          <p className="font-semibold text-emerald-900 dark:text-emerald-200">
+                            Cobre automaticamente outros {coveredOtherConflicts.length} défice(s) no mesmo dia ({activeConflict.date}):
+                          </p>
+                          <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
+                            {coveredOtherConflicts.map((c) => `${c.activity_name ?? "Regra"} (${c.period_start}–${c.period_end})`).join(", ")}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -960,6 +1479,7 @@ export default function RecalculateModal({
                 size="sm"
                 onClick={handleClose}
                 disabled={isRunning}
+                className="cursor-pointer"
               >
                 Cancelar
               </Button>
@@ -968,54 +1488,50 @@ export default function RecalculateModal({
                 size="sm"
                 disabled={isRunning}
                 onClick={handleRunGeneration}
-                className="gap-2"
+                className="cursor-pointer"
               >
                 {isRunning ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" />
+                    <Loader2 size={14} className="animate-spin mr-1.5" />
                     A calcular escala...
                   </>
                 ) : (
-                  <>
-                    <RefreshCw size={14} />
-                    Executar Geração
-                  </>
+                  "Executar Geração"
                 )}
               </Button>
             </>
           )}
 
           {step === "gap" && (
-            <>
+            <div className="flex items-center justify-between w-full gap-2">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 disabled={isRunning}
                 onClick={() => handleAdvanceFromConflict(null)}
+                className="cursor-pointer"
               >
-                {currentConflictIdx + 1 < conflicts.length ? "Ignorar e Avançar" : "Ignorar Défice"}
+                {conflicts.length > 1 ? "Saltar este Défice" : "Ignorar Défice e Concluir"}
               </Button>
+
               <Button
                 type="button"
                 size="sm"
                 onClick={() => selectedSub && handleAdvanceFromConflict(selectedSub)}
                 disabled={!selectedSub || isRunning}
-                className="gap-2"
+                className="cursor-pointer"
               >
                 {isRunning ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" />
-                    A aplicar...
+                    <Loader2 size={14} className="animate-spin mr-1.5" />
+                    A validar e recalcular...
                   </>
                 ) : (
-                  <>
-                    <Check size={14} />
-                    Confirmar Designação
-                  </>
+                  "Confirmar Designação"
                 )}
               </Button>
-            </>
+            </div>
           )}
 
           {step === "done" && (
@@ -1025,6 +1541,7 @@ export default function RecalculateModal({
                 variant="outline"
                 size="sm"
                 onClick={handleClose}
+                className="cursor-pointer"
               >
                 Fechar
               </Button>
@@ -1034,18 +1551,15 @@ export default function RecalculateModal({
                   size="sm"
                   disabled={isPublishing}
                   onClick={handlePublishGeneratedSchedules}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
                 >
                   {isPublishing ? (
                     <>
-                      <Loader2 size={14} className="animate-spin" />
+                      <Loader2 size={14} className="animate-spin mr-1.5" />
                       A publicar...
                     </>
                   ) : (
-                    <>
-                      <Send size={14} />
-                      Publicar Escalas ({generationResult.schedules_count})
-                    </>
+                    `Publicar Escalas (${generationResult.schedules_count})`
                   )}
                 </Button>
               )}
@@ -1054,5 +1568,59 @@ export default function RecalculateModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Modal de Confirmação para Recalcular Horário Publicado */}
+    <Dialog
+      open={showPublishOverwriteConfirm}
+      onOpenChange={setShowPublishOverwriteConfirm}
+    >
+      <DialogContent className="max-w-md p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+        <DialogHeader className="px-5 py-4 border-b border-border bg-amber-500/10">
+          <DialogTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <AlertTriangle size={17} className="text-amber-600 dark:text-amber-400" />
+            Recalcular Horário Já Publicado?
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground mt-1">
+            A escala do período de <strong>{startDate === endDate ? startDate : `${startDate} a ${endDate}`}</strong> já está atualmente <strong>publicada</strong>.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="p-5 text-xs text-foreground space-y-2.5 leading-relaxed">
+          <p>
+            Ao proceder ao recálculo, o horário existente será substituído e passará para o estado de <strong>Rascunho (Draft)</strong>.
+          </p>
+          <p className="text-muted-foreground">
+            O novo horário gerado <strong>não estará em vigor nem visível para as equipas</strong> até ser revisto e novamente publicado por um administrador.
+          </p>
+          <p className="font-medium text-foreground pt-1">
+            Tem a certeza de que deseja avançar com o recálculo?
+          </p>
+        </div>
+
+        <DialogFooter className="px-6 py-4 border-t border-border bg-card flex items-center justify-end gap-2.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowPublishOverwriteConfirm(false)}
+            className="cursor-pointer"
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
+            onClick={() => {
+              setShowPublishOverwriteConfirm(false);
+              executeGeneration();
+            }}
+          >
+            Sim, Recalcular e Tornar Rascunho
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </>
   );
 }

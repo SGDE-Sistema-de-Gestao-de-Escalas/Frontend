@@ -1,4 +1,3 @@
-import React from "react";
 import { useNavigate } from "react-router-dom";
 import AssistantsPageWrapper from "../components/assistants/AssistantsPageWrapper";
 import { useSchool } from "../context/SchoolContext";

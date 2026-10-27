@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   AlertTriangle,
   ArrowDownLeft,
@@ -7,7 +7,6 @@ import {
   Calendar,
   CalendarClock,
   CalendarOff,
-  Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -24,15 +23,12 @@ import {
   ShieldAlert,
   Sparkles,
   Send,
-  Trash2,
   UserX,
   ChevronDown,
-  Download,
   FileSpreadsheet,
-  FileText,
-  Layers,
   Printer,
   UserCheck,
+  Utensils,
   X
 } from "lucide-react";
 import {
@@ -50,8 +46,8 @@ import PrintScheduleModal, {
 } from "./PrintScheduleModal";
 import type { Assistant, BlockState, EntityId, ScheduleMatrix } from "../../types";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
 import { Card } from "../ui/card";
-import { Checkbox } from "../ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -76,7 +72,6 @@ import {
   type MergedScheduleBlockMeta,
 } from "./blockStyles";
 import { useSchool } from "../../context/SchoolContext";
-import { schoolScopedKey } from "../../lib/queryClient";
 import { useDashboardBootstrap } from "../../hooks/api/useDashboardBootstrap";
 import { useSaveScheduleDays } from "../../hooks/api/useSchedules";
 import type {
@@ -118,9 +113,10 @@ interface DayRuleConfig {
   startSlot: number;
   endSlot: number;
   min: number;
-  type: "mandatory" | "optional";
+  type: "mandatory" | "optional" | "fallback";
   daysOfWeek: number[]; // 0 = Seg ... 4 = Sex
   priorityNames: string[];
+  isFallback?: boolean;
 }
 
 interface MatrixGridProps {
@@ -203,8 +199,13 @@ export default function MatrixGrid({
     setEditMode(false);
     setIsPainting(false);
     setPaintAid(null);
+    setActiveTool("paint");
+    setHoveredLockTarget(null);
   }, [selectedSchoolId]);
 
+  type EditTool = "paint" | "lock" | "eraser" | "lunch";
+  const [activeTool, setActiveTool] = useState<EditTool>("paint");
+  const [hoveredLockTarget, setHoveredLockTarget] = useState<{ aid: EntityId; slot: number } | null>(null);
   const [paintType, setPaintType] = useState<BlockState>("work");
   const [focusActiveActivity, setFocusActiveActivity] = useState(true);
   const [highlightedRuleId, setHighlightedRuleId] = useState<string | null>(
@@ -241,10 +242,10 @@ export default function MatrixGrid({
   }
     const [printModalState, setPrintModalState] = useState<{
     open: boolean;
-    initialTab: "wall" | "individual";
+    initialDocModel?: "wall" | "individual";
   }>({
     open: false,
-    initialTab: "wall",
+    initialDocModel: "wall",
   });
 
 const [publishModalState, setPublishModalState] = useState<{
@@ -295,14 +296,18 @@ const [publishModalState, setPublishModalState] = useState<{
   const schedulesList = bootstrapData?.schedules || [];
   const absencesRes = bootstrapData?.absences;
   const scheduleRules = bootstrapData?.schedule_rules || [];
-  const activityTypes = bootstrapData?.activity_types || [];
+  const rawActivityTypes = bootstrapData?.activity_types || [];
+  const activityTypes = useMemo(() => {
+    return rawActivityTypes.filter(
+      (at) => !at.school_id || String(at.school_id) === String(selectedSchoolId)
+    );
+  }, [rawActivityTypes, selectedSchoolId]);
   const calendarDays = bootstrapData?.operating_calendar || [];
   const operatingRules = bootstrapData?.operating_rules || [];
   const operatingExceptions = bootstrapData?.operating_exceptions || [];
   const holidays = bootstrapData?.holidays || [];
   const temporaryAssignments = bootstrapData?.temporary_assignments || [];
 
-  const isOperatingLoading = false;
   const isDayLoading = isBootstrapLoading && assistantsList.length === 0;
 
   const operatingSources = useMemo(
@@ -404,7 +409,7 @@ const [publishModalState, setPublishModalState] = useState<{
   }, [activeAssistants]);
 
   const dayRulesCatalog: DayRuleConfig[] = useMemo(() => {
-    return scheduleRules.map((rule) => {
+    const rules: DayRuleConfig[] = scheduleRules.map((rule) => {
       const actType = activityTypes.find(
         (at) => String(at.id) === String(rule.activity_type_id)
       );
@@ -421,8 +426,42 @@ const [publishModalState, setPublishModalState] = useState<{
         priorityNames: (rule.assistants || [])
           .sort((a, b) => a.priority - b.priority)
           .map((a) => `${a.priority}º ${a.name.split(" ")[0]}`),
+        isFallback: false,
       };
     });
+
+    // Adiciona exatamente UMA atividade de Fallback (ex: Apoio Escola) para estar disponível na lista de regras para pintar
+    const fallbackActivities = activityTypes.filter(
+      (at) =>
+        Boolean(at.is_fallback) ||
+        (at.is_fallback as any) === 1 ||
+        (at.is_fallback as any) === "1"
+    );
+
+    const primaryFallback =
+      fallbackActivities[0] ||
+      activityTypes.find(
+        (at) =>
+          at.name?.toLowerCase().includes("apoio escola") ||
+          at.name?.toLowerCase().includes("apoio geral") ||
+          at.name?.toLowerCase().includes("apoio turmas")
+      ) ||
+      null;
+
+    rules.push({
+      id: primaryFallback ? `fallback-${primaryFallback.id}` : "fallback-default",
+      title: primaryFallback?.name || "Apoio Escola",
+      state: primaryFallback ? mapActivityToBlockState(primaryFallback.name, true) : "work",
+      startSlot: 24,
+      endSlot: 84,
+      min: 0,
+      type: "fallback",
+      daysOfWeek: [0, 1, 2, 3, 4],
+      priorityNames: ["Todos os Assistentes"],
+      isFallback: true,
+    });
+
+    return rules;
   }, [scheduleRules, activityTypes]);
 
   const schoolStatus = getStatusForIsoDate(dayInfo.isoDate);
@@ -507,14 +546,17 @@ const [publishModalState, setPublishModalState] = useState<{
     activityTypes
       .filter((at) => at.active !== false)
       .forEach((at) => {
+        const normName = at.name.trim().toLowerCase();
+        if (seenNames.has(normName)) return;
+        seenNames.add(normName);
+
         const isLunchSurveillance =
-          at.name.toLowerCase().includes("vigilância almoço") ||
-          at.name.toLowerCase().includes("vigilancia almoco");
+          normName.includes("vigilância almoço") ||
+          normName.includes("vigilancia almoco");
         const color =
           isLunchSurveillance && (at.color === "#EF4444" || !at.color)
             ? "#A855F7"
             : at.color || "#3B82F6";
-        seenNames.add(at.name.toLowerCase());
         items.push({
           key: `act-${at.id}`,
           name: at.name,
@@ -526,11 +568,13 @@ const [publishModalState, setPublishModalState] = useState<{
       Object.values(slotMetaByAssistant).forEach((metaRow) => {
         if (!metaRow) return;
         Object.values(metaRow).forEach((meta) => {
-          if (meta?.activityName && !seenNames.has(meta.activityName.toLowerCase())) {
-            seenNames.add(meta.activityName.toLowerCase());
+          if (!meta?.activityName) return;
+          const normName = meta.activityName.trim().toLowerCase();
+          if (!seenNames.has(normName)) {
+            seenNames.add(normName);
             const isLunchSurveillance =
-              meta.activityName.toLowerCase().includes("vigilância almoço") ||
-              meta.activityName.toLowerCase().includes("vigilancia almoco");
+              normName.includes("vigilância almoço") ||
+              normName.includes("vigilancia almoco");
             const color =
               isLunchSurveillance && (meta.activityColor === "#EF4444" || !meta.activityColor)
                 ? "#A855F7"
@@ -556,16 +600,32 @@ const [publishModalState, setPublishModalState] = useState<{
       );
     }
 
-    items.push({
-      key: "system-lunch",
-      name: "Pausa Almoço",
-      color: "#F97316",
-    });
-    items.push({
-      key: "system-absent",
-      name: "Falta / Ausência",
-      color: "#EF4444",
-    });
+    if (
+      !seenNames.has("pausa almoço") &&
+      !seenNames.has("pausa almoco") &&
+      !seenNames.has("almoço") &&
+      !seenNames.has("almoco")
+    ) {
+      seenNames.add("pausa almoço");
+      items.push({
+        key: "system-lunch",
+        name: "Pausa Almoço",
+        color: "#F97316",
+      });
+    }
+    if (
+      !seenNames.has("falta / ausência") &&
+      !seenNames.has("falta") &&
+      !seenNames.has("ausência") &&
+      !seenNames.has("ausencia")
+    ) {
+      seenNames.add("falta / ausência");
+      items.push({
+        key: "system-absent",
+        name: "Falta / Ausência",
+        color: "#EF4444",
+      });
+    }
 
     return items;
   }, [activityTypes, slotMetaByAssistant]);
@@ -768,7 +828,7 @@ const [publishModalState, setPublishModalState] = useState<{
   );
 
   // Activities that apply to this day
-  const availablePaintTypes = useMemo(() => {
+  const dayActivities = useMemo(() => {
     const ruleStates = new Set<BlockState>();
     rulesForToday.forEach((r) => ruleStates.add(r.state));
     const ordered: BlockState[] = [];
@@ -777,9 +837,13 @@ const [publishModalState, setPublishModalState] = useState<{
     ).forEach((s) => {
       if (ruleStates.has(s) || s === "work" || s === "collection") ordered.push(s);
     });
-    ordered.push("lunch", "off");
+    ordered.push("lunch");
     return ordered;
   }, [rulesForToday]);
+
+  const availablePaintTypes = useMemo(() => {
+    return [...dayActivities, "lunch" as BlockState, "off" as BlockState];
+  }, [dayActivities]);
 
   useEffect(() => {
     if (!availablePaintTypes.includes(paintType)) {
@@ -796,7 +860,65 @@ const [publishModalState, setPublishModalState] = useState<{
     return () => window.removeEventListener("mouseup", stop);
   }, []);
 
-  function paintSlot(aid: EntityId, slot: number) {
+    function toggleBlockLockAtSlot(aid: EntityId, targetSlot: number) {
+    if (!canEditCurrentDay) return;
+    if (!baselineMatricesRef.current[dayOffset]) {
+      baselineMatricesRef.current[dayOffset] = cloneMatrix(baseDayMatrix);
+    }
+
+    const currentMatrix = draftMatricesByDay[dayOffset] ?? baseDayMatrix;
+    const assistantSlots = currentMatrix[aid] ?? Array(96).fill("off");
+    const currentSlotState = assistantSlots[targetSlot];
+
+    if (!currentSlotState || currentSlotState === "off") {
+      return;
+    }
+
+    const assistantMeta = {
+      ...(slotMetaByAssistant[aid] ?? {}),
+      ...(draftSlotMetaByDay[dayOffset]?.[aid] ?? {}),
+    };
+
+    const blocks = slotsToBlocks(assistantSlots, assistantMeta);
+    const targetBlock = blocks.find(
+      (b) => targetSlot >= b.start && targetSlot < b.start + b.count
+    );
+
+    if (!targetBlock) return;
+
+    const newIsLocked = !Boolean(targetBlock.isLocked);
+
+    setDraftMatricesByDay((prev) => {
+      const curDay = prev[dayOffset] ?? baseDayMatrix;
+      return {
+        ...prev,
+        [dayOffset]: cloneMatrix(curDay),
+      };
+    });
+
+    setDraftSlotMetaByDay((prev) => {
+      const dayMeta = { ...(prev[dayOffset] ?? {}) };
+      const curAssistantMeta = { ...(dayMeta[aid] ?? slotMetaByAssistant[aid] ?? {}) };
+
+      for (let s = targetBlock.start; s < targetBlock.start + targetBlock.count; s++) {
+        const existingSlot = curAssistantMeta[s] ?? slotMetaByAssistant[aid]?.[s] ?? {};
+        curAssistantMeta[s] = {
+          ...existingSlot,
+          isLocked: newIsLocked,
+        };
+      }
+
+      dayMeta[aid] = curAssistantMeta;
+      return {
+        ...prev,
+        [dayOffset]: dayMeta,
+      };
+    });
+
+
+  }
+
+function paintSlot(aid: EntityId, slot: number) {
     if (!canEditCurrentDay) return;
     if (!baselineMatricesRef.current[dayOffset]) {
       baselineMatricesRef.current[dayOffset] = cloneMatrix(baseDayMatrix);
@@ -820,6 +942,14 @@ const [publishModalState, setPublishModalState] = useState<{
 
       if (paintType === "off") {
         delete assistantMeta[slot];
+      } else if (paintType === "lunch") {
+        assistantMeta[slot] = {
+          activityName: "Pausa Almoço",
+          activityColor: "#F97316",
+          activityTypeId: null,
+          ruleId: null,
+          isFallback: false,
+        };
       } else {
         const activeRule = highlightedRuleId
           ? dayRulesCatalog.find(
@@ -829,21 +959,22 @@ const [publishModalState, setPublishModalState] = useState<{
 
         const defaultLabel = BLOCK_STYLES[paintType]?.label;
         const matchedAct = activeRule
-          ? activityTypes.find(
-              (at) => at.name.toLowerCase() === activeRule.title.toLowerCase()
-            )
+          ? (activeRule.isFallback
+              ? activityTypes.find((at) => at.is_fallback || at.name.toLowerCase() === activeRule.title.toLowerCase())
+              : activityTypes.find((at) => at.name.toLowerCase() === activeRule.title.toLowerCase()))
           : activityTypes.find(
               (at) =>
                 at.name.toLowerCase() === defaultLabel?.toLowerCase() ||
                 mapActivityToBlockState(at.name, at.is_fallback) === paintType
             );
 
+        const isFallbackAct = Boolean(activeRule?.isFallback || matchedAct?.is_fallback || paintType === "work");
         assistantMeta[slot] = {
-          activityName: activeRule?.title || matchedAct?.name || defaultLabel || "Atividade",
-          activityColor: matchedAct?.color,
+          activityName: activeRule?.title || matchedAct?.name || (isFallbackAct ? "Apoio Escola" : defaultLabel) || "Atividade",
+          activityColor: matchedAct?.color || (isFallbackAct ? "#3B82F6" : undefined),
           activityTypeId: matchedAct?.id || null,
-          ruleId: activeRule?.id || null,
-          isFallback: Boolean(matchedAct?.is_fallback),
+          ruleId: activeRule?.isFallback ? null : (activeRule?.id ? String(activeRule.id) : null),
+          isFallback: isFallbackAct,
         };
       }
 
@@ -1109,21 +1240,32 @@ const [publishModalState, setPublishModalState] = useState<{
 
       if (absInfo.absent && (absInfo.isFullDay || isShiftCovered)) {
         const copiedRow = copiedInfo?.sourcePlannedMatrix?.[a.id];
+        const fixedBounds = fixedShiftBoundsByAssistant[a.id];
         const fallbackRow = baseDayMatrix[a.id] || Array(96).fill("off");
-        const plannedRow = copiedRow ?? fallbackRow;
+        const resolvedBounds: AssistantResolvedShiftBounds =
+          fixedBounds ||
+          getShiftBoundsFromRow(
+            fallbackRow,
+            viewStartSlot,
+            viewEndSlot
+          );
+
+        let plannedRow = copiedRow ?? fallbackRow;
+        // Para falta de dia inteiro sem cópia explícita, a linha reflete estritamente o turno do assistente
+        if (!copiedRow && absInfo.isFullDay) {
+          const row = Array(96).fill("off") as BlockState[];
+          const bStart = resolvedBounds.startSlot;
+          const bEnd = resolvedBounds.endSlot;
+          for (let i = bStart; i < bEnd && i < 96; i++) {
+            row[i] = "absent";
+          }
+          plannedRow = row;
+        }
+
         const srcDateInfo =
           copiedInfo !== undefined
             ? getDateInfo(copiedInfo.sourceOffset)
             : null;
-
-        const fixedBounds = fixedShiftBoundsByAssistant[a.id];
-        const resolvedBounds: AssistantResolvedShiftBounds =
-          fixedBounds ||
-          getShiftBoundsFromRow(
-            plannedRow,
-            viewStartSlot,
-            viewEndSlot
-          );
 
         absent.push({
           assistant: a,
@@ -1219,6 +1361,7 @@ const [publishModalState, setPublishModalState] = useState<{
 
     const evaluations = rules.map((rule) => {
       let minAssignedInWindow = Infinity;
+      let totalAssignedAnySlot = 0;
       const assignedNamesSet = new Set<string>();
 
       for (let s = rule.startSlot; s < rule.endSlot; s++) {
@@ -1236,10 +1379,19 @@ const [publishModalState, setPublishModalState] = useState<{
       }
       if (minAssignedInWindow === Infinity) minAssignedInWindow = 0;
 
+      if (rule.isFallback) {
+        workingOnDay.forEach((a) => {
+          const row = mat[a.id] || [];
+          if (row.some((st) => st === rule.state)) {
+            totalAssignedAnySlot++;
+          }
+        });
+      }
+
       return {
         ...rule,
-        assigned: minAssignedInWindow,
-        isMet: minAssignedInWindow >= rule.min,
+        assigned: rule.isFallback ? totalAssignedAnySlot : minAssignedInWindow,
+        isMet: rule.isFallback ? true : minAssignedInWindow >= rule.min,
         assignedNames: Array.from(assignedNamesSet),
       };
     });
@@ -1252,7 +1404,7 @@ const [publishModalState, setPublishModalState] = useState<{
     }[] = [];
 
     evaluations.forEach((ev) => {
-      if (!ev.isMet) {
+      if (!ev.isFallback && !ev.isMet) {
         const rangeStr = `${TIME_SLOTS[ev.startSlot]}–${TIME_SLOTS[ev.endSlot]}`;
         warnings.push({
           id: `rule-${ev.id}`,
@@ -1268,29 +1420,108 @@ const [publishModalState, setPublishModalState] = useState<{
 
     workingOnDay.forEach((a) => {
       const row = mat[a.id] || [];
-      const bounds = getShiftBoundsFromRow(
-        row,
-        targetStatus.viewStartSlot,
-        targetStatus.viewEndSlot
-      );
+      const fixedBounds =
+        targetOffset === dayOffset
+          ? fixedShiftBoundsByAssistant[a.id]
+          : resolveAssistantShiftBounds({
+              assistantId: a.id,
+              isoDate: info.isoDate,
+              dow: info.dow,
+              viewStartSlot: targetStatus.viewStartSlot,
+              viewEndSlot: targetStatus.viewEndSlot,
+              profiles: profilesByAssistant[String(a.id)],
+              exceptions: exceptionsByAssistant[String(a.id)],
+              baseDayRow: baseDayMatrix[a.id],
+              schedulesList,
+              lunchBlocksForDate: lunchBlocksByDate[info.isoDate],
+              absences: absencesRes?.data || [],
+            });
+
+      const shiftStartSlot = fixedBounds?.startSlot;
+      const shiftEndSlot = fixedBounds?.endSlot;
+      const outOfShiftSlots: number[] = [];
       const outOfBoundsSlots: number[] = [];
       let lunchSlotsCount = 0;
       let activeWorkSlots = 0;
 
+      let actualWorkSlots = 0;
+      let currentContinuousWork = 0;
+      let maxContinuousWork = 0;
+      let currentContinuousStart = -1;
+      let maxContStart = -1;
+      let maxContEnd = -1;
+      const lunchRanges: Array<{ start: number; end: number }> = [];
+      let currentLunchStart: number | null = null;
+
       for (let s = 0; s < row.length; s++) {
         const st = row[s];
-        if (st !== "off" && st !== "absent") {
+        if (st === "lunch") {
+          lunchSlotsCount++;
+          if (currentLunchStart === null) currentLunchStart = s;
+        } else if (currentLunchStart !== null) {
+          lunchRanges.push({ start: currentLunchStart, end: s });
+          currentLunchStart = null;
+        }
+
+        const isActualWork = st !== "off" && st !== "absent" && st !== "lunch";
+        if (isActualWork) {
+          actualWorkSlots++;
           activeWorkSlots++;
+          if (currentContinuousWork === 0) {
+            currentContinuousStart = s;
+          }
+          currentContinuousWork++;
+          if (currentContinuousWork > maxContinuousWork) {
+            maxContinuousWork = currentContinuousWork;
+            maxContStart = currentContinuousStart;
+            maxContEnd = s + 1;
+          }
+
           if (
             s < targetStatus.viewStartSlot ||
             s >= targetStatus.viewEndSlot
           ) {
             outOfBoundsSlots.push(s);
           }
+          if (
+            shiftStartSlot !== null &&
+            shiftEndSlot !== null &&
+            shiftStartSlot !== undefined &&
+            shiftEndSlot !== undefined &&
+            shiftEndSlot > shiftStartSlot
+          ) {
+            if (s < shiftStartSlot || s >= shiftEndSlot) {
+              outOfShiftSlots.push(s);
+            }
+          }
+        } else {
+          currentContinuousWork = 0;
+          currentContinuousStart = -1;
         }
-        if (st === "lunch") {
-          lunchSlotsCount++;
-        }
+      }
+
+      if (currentLunchStart !== null) {
+        lunchRanges.push({ start: currentLunchStart, end: row.length });
+      }
+
+      if (outOfShiftSlots.length > 0) {
+        const firstOut = TIME_SLOTS[outOfShiftSlots[0]];
+        const lastOut =
+          TIME_SLOTS[
+            Math.min(outOfShiftSlots[outOfShiftSlots.length - 1] + 1, 95)
+          ];
+        const shiftStr =
+          shiftStartSlot !== undefined && shiftEndSlot !== undefined
+            ? `${TIME_SLOTS[shiftStartSlot]}–${TIME_SLOTS[shiftEndSlot]}`
+            : "";
+        warnings.push({
+          id: `out-of-shift-${a.id}`,
+          severity: "critical",
+          title: `Atividades fora do horário do assistente: ${a.name}`,
+          detail: `Tem ${formatDurationSlots(
+            outOfShiftSlots.length
+          )} (${firstOut}–${lastOut}) marcados fora do seu turno habitual (${shiftStr}).`,
+        });
       }
 
       if (outOfBoundsSlots.length > 0) {
@@ -1312,14 +1543,71 @@ const [publishModalState, setPublishModalState] = useState<{
         });
       }
 
-      if (activeWorkSlots >= 20 && lunchSlotsCount < 2) {
+      // Validação Legal (Artigo 213.º do Código do Trabalho):
+      // 1. Limite máximo de 5 horas consecutivas de trabalho contínuo sem intervalo de descanso (20 slots = 5h)
+      if (maxContinuousWork > 20) {
+        const firstCont = TIME_SLOTS[maxContStart] ?? "00:00";
+        const lastCont = TIME_SLOTS[Math.min(maxContEnd, 95)] ?? "24:00";
+        warnings.push({
+          id: `consecutive-work-${a.id}`,
+          severity: "warning",
+          title: `Mais de 5 horas seguidas sem pausa: ${a.name}`,
+          detail: `Trabalha ${formatDurationSlots(
+            maxContinuousWork
+          )} consecutivas (${firstCont}–${lastCont}) sem intervalo de descanso (limite legal: 5h).`,
+        });
+      }
+
+      // 2. Obrigatoriedade de pausa de almoço:
+      // Apenas se a jornada de trabalho contínua ultrapassar 5h ou totalizar mais de 5h sem ausência no período de refeição
+      const absInfoForLunch = checkAssistantAbsenceOnDate(a, info.isoDate, absencesRes?.data || []);
+      const assistantLunchStart = fixedBounds?.lunchStartSlot ?? targetStatus.lunchStartSlot;
+      const assistantLunchEnd = fixedBounds?.lunchEndSlot ?? targetStatus.lunchEndSlot;
+      const absenceCoversLunch =
+        absInfoForLunch.absent &&
+        absInfoForLunch.startSlot !== undefined &&
+        absInfoForLunch.endSlot !== undefined &&
+        assistantLunchStart !== null &&
+        assistantLunchStart !== undefined &&
+        assistantLunchEnd !== null &&
+        assistantLunchEnd !== undefined &&
+        Math.min(assistantLunchEnd, absInfoForLunch.endSlot) > Math.max(assistantLunchStart, absInfoForLunch.startSlot);
+
+      if (!absenceCoversLunch && actualWorkSlots > 20 && lunchSlotsCount < 2) {
         warnings.push({
           id: `lunch-${a.id}`,
           severity: "warning",
           title: `Pausa de almoço insuficiente: ${a.name}`,
-          detail: `Tem apenas ${formatDurationSlots(
+          detail: `Com ${formatDurationSlots(
+            actualWorkSlots
+          )} de trabalho no dia, tem apenas ${formatDurationSlots(
             lunchSlotsCount
-          )} de Pausa de Almoço marcada neste dia.`,
+          )} de Pausa de Almoço marcada (mínimo legal: 1h).`,
+        });
+      }
+
+      // 3. Pausa de almoço fora da janela de funcionamento da escola ou do turno do assistente
+      if (
+        assistantLunchStart !== null &&
+        assistantLunchStart !== undefined &&
+        assistantLunchEnd !== null &&
+        assistantLunchEnd !== undefined
+      ) {
+        const typicalStart = Math.max(0, assistantLunchStart - 2);
+        const typicalEnd = Math.min(96, assistantLunchEnd + 2);
+
+        lunchRanges.forEach((lr, lIdx) => {
+          if (lr.start < typicalStart || lr.end > typicalEnd) {
+            const lsStr = TIME_SLOTS[lr.start] ?? "00:00";
+            const leStr = TIME_SLOTS[Math.min(lr.end, 95)] ?? "24:00";
+            const expectedStr = `${TIME_SLOTS[assistantLunchStart]}–${TIME_SLOTS[assistantLunchEnd]}`;
+            warnings.push({
+              id: `lunch-odd-${a.id}-${lIdx}`,
+              severity: "warning",
+              title: `Pausa de almoço em horário atípico: ${a.name}`,
+              detail: `Pausa de almoço marcada das ${lsStr} às ${leStr}. O intervalo previsto para refeição é de ${expectedStr}.`,
+            });
+          }
         });
       }
     });
@@ -1419,6 +1707,11 @@ const [publishModalState, setPublishModalState] = useState<{
     ]
   );
 
+  const selectedRuleEval = useMemo(
+    () => ruleEvaluations.find((r) => r.id === highlightedRuleId) ?? null,
+    [ruleEvaluations, highlightedRuleId]
+  );
+
   // Altura sincronizada do painel de regras para ajustar o scroll dos avisos em tempo real
   const rulesPanelRef = useRef<HTMLDivElement>(null);
   const [rulesPanelHeight, setRulesPanelHeight] = useState<number | null>(null);
@@ -1467,6 +1760,26 @@ const [publishModalState, setPublishModalState] = useState<{
           if (diff) changedAssistantsCount++;
         });
 
+        // Contabilizar alterações de bloqueio (isLocked) no rascunho
+        const draftDayMeta = draftSlotMetaByDay[offset];
+        const baseDayMeta = slotMetaByAssistant;
+        let lockChangesCount = 0;
+        if (draftDayMeta) {
+          activeAssistants.forEach((a) => {
+            const aMeta = draftDayMeta[a.id];
+            if (aMeta) {
+              Object.keys(aMeta).forEach((slotStr) => {
+                const s = Number(slotStr);
+                const draftIsLocked = Boolean(aMeta[s]?.isLocked);
+                const baseIsLocked = Boolean(baseDayMeta[a.id]?.[s]?.isLocked);
+                if (draftIsLocked !== baseIsLocked) {
+                  lockChangesCount++;
+                }
+              });
+            }
+          });
+        }
+
         const evalResult = evaluateDaySchedule(offset, draft);
         const copiedMeta = copiedFromByDay[offset];
         const copiedFromInfo = copiedMeta
@@ -1476,8 +1789,8 @@ const [publishModalState, setPublishModalState] = useState<{
         return {
           offset,
           info: getDateInfo(offset),
-          changedAssistantsCount,
-          changedSlotsCount,
+          changedAssistantsCount: changedAssistantsCount || (lockChangesCount > 0 ? 1 : 0),
+          changedSlotsCount: changedSlotsCount + lockChangesCount,
           warnings: evalResult.liveWarnings,
           copiedFromLabel: copiedFromInfo
             ? `${copiedFromInfo.dayName}, ${copiedFromInfo.dateStr}`
@@ -1590,10 +1903,10 @@ const [publishModalState, setPublishModalState] = useState<{
         );
       } else {
         notify.success(
-          `Alterações guardadas com sucesso na base de dados para ${daysToSave.length} ${
+          `Alterações guardadas como Rascunho para ${daysToSave.length} ${
             daysToSave.length === 1 ? "dia" : "dias"
-          }.`,
-          "Escala Gravada"
+          }. Lembre-se de publicar a escala novamente para que entre em vigor.`,
+          "Rascunho Guardado"
         );
       }
     } catch (err: any) {
@@ -1678,6 +1991,13 @@ const [publishModalState, setPublishModalState] = useState<{
                       st !== "off" &&
                       st !== "absent" &&
                       (sIdx < viewStartSlot || sIdx >= viewEndSlot)
+                  );
+
+                  const hasOutOfShiftPaint = rowSlots.some(
+                    (st, sIdx) =>
+                      st !== "off" &&
+                      st !== "absent" &&
+                      (sIdx < shiftBounds.startSlot || sIdx >= shiftBounds.endSlot)
                   );
 
                   const clampedShiftStart = Math.max(
@@ -1774,6 +2094,16 @@ const [publishModalState, setPublishModalState] = useState<{
                               >
                                 <span className="inline-flex items-center text-blue-600 dark:text-blue-400 shrink-0">
                                   <ArrowDownLeft size={11} />
+                                </span>
+                              </ActionTooltip>
+                            )}
+                            {hasOutOfShiftPaint && (
+                              <ActionTooltip content={`Tem atividades marcadas fora do horário contratual do assistente (${shiftRangeStr})`}>
+                                <span className="inline-flex items-center">
+                                  <AlertTriangle
+                                    size={11}
+                                    className="text-destructive flex-shrink-0"
+                                  />
                                 </span>
                               </ActionTooltip>
                             )}
@@ -1910,6 +2240,7 @@ const [publishModalState, setPublishModalState] = useState<{
                         {/* Highlighted Rule Window */}
                         {canEditCurrentDay &&
                           highlightedRule &&
+                          !highlightedRule.isFallback &&
                           Math.min(highlightedRule.endSlot, viewEndSlot) >
                             Math.max(
                               highlightedRule.startSlot,
@@ -1963,9 +2294,21 @@ const [publishModalState, setPublishModalState] = useState<{
                             "24:00";
                           const durationStr = formatDurationSlots(b.count);
 
-                          const isBlockOutOfShift =
+                          const isBlockOutsideAssistantShift =
+                            b.state !== "absent" &&
+                            (b.start < shiftBounds.startSlot ||
+                              b.start + b.count > shiftBounds.endSlot);
+
+                          const isBlockOutOfSchoolHours =
                             b.start < viewStartSlot ||
                             b.start + b.count > viewEndSlot;
+
+                          const isHoveredByLockTool =
+                            activeTool === "lock" &&
+                            hoveredLockTarget !== null &&
+                            hoveredLockTarget.aid === assistant.id &&
+                            hoveredLockTarget.slot >= b.start &&
+                            hoveredLockTarget.slot < b.start + b.count;
 
                           const isMatchesSpotlight = b.state === paintType;
                           const spotlightClass = isSpotlightActive
@@ -2015,8 +2358,14 @@ const [publishModalState, setPublishModalState] = useState<{
                               } ${radiusClass} ${separatorClass} ${
                                 (b.activityColor === "#EF4444" && (b.activityName?.toLowerCase().includes("vigilância almoço") || b.activityName?.toLowerCase().includes("vigilancia almoco")) ? "#A855F7" : b.activityColor) ? "" : styleConfig.bg
                               } ${spotlightClass} ${
-                                isBlockOutOfShift && canEditCurrentDay
+                                isHoveredByLockTool
+                                  ? "ring-2 ring-amber-400 ring-offset-1 shadow-lg brightness-110 z-30"
+                                  : isBlockOutsideAssistantShift && canEditCurrentDay
+                                  ? "ring-2 ring-destructive ring-offset-1 z-10"
+                                  : isBlockOutOfSchoolHours && canEditCurrentDay
                                   ? "ring-2 ring-[#D97706]"
+                                  : isLocked && canEditCurrentDay
+                                  ? "ring-2 ring-amber-400 ring-offset-1"
                                   : ""
                               } text-white shadow-2xs overflow-hidden transition-all flex items-center px-2 gap-1.5 text-left`}
                               style={{
@@ -2041,10 +2390,10 @@ const [publishModalState, setPublishModalState] = useState<{
                                   )}
                                   {isLocked && (
                                     <Lock
-                                      size={10}
+                                      size={12}
                                       className={`${
                                         showDurationChip ? "" : "ml-auto"
-                                      } flex-shrink-0 text-white/80`}
+                                      } flex-shrink-0 text-amber-200 fill-amber-300/40`}
                                     />
                                   )}
                                 </>
@@ -2052,7 +2401,17 @@ const [publishModalState, setPublishModalState] = useState<{
 
                               {!showLabel && isLocked && (
                                 <div className="w-full flex items-center justify-center">
-                                  <Lock size={8} className="text-white/80" />
+                                  <Lock size={12} className="text-amber-200 fill-amber-300/40" />
+                                </div>
+                              )}
+
+                              {/* Overlay de destaque do bloco completo no modo Bloquear Tarefa */}
+                              {isHoveredByLockTool && (
+                                <div className="absolute inset-0 bg-amber-500/35 backdrop-blur-[0.5px] border-2 border-amber-400 rounded-[inherit] flex items-center justify-center gap-1.5 text-amber-100 font-bold text-xs pointer-events-none z-30 animate-in fade-in-50">
+                                  <Lock size={12} className="text-amber-200 fill-amber-300/40 animate-pulse" />
+                                  <span className="drop-shadow-sm truncate">
+                                    {isLocked ? "Desbloquear Tarefa" : "Bloquear Tarefa"}
+                                  </span>
                                 </div>
                               )}
                             </div>
@@ -2087,16 +2446,10 @@ const [publishModalState, setPublishModalState] = useState<{
                                     <span className="font-semibold text-xs text-foreground">
                                       {displayLabel}
                                     </span>
-                                    {b.activityName &&
-                                      b.activityName !== styleConfig.label && (
-                                        <span className="text-[10px] text-muted-foreground">
-                                          ({styleConfig.label})
-                                        </span>
-                                      )}
                                   </div>
                                   {isLocked && (
                                     <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                                      <Lock size={9} />
+                                      <Lock size={12} />
                                       Fixo
                                     </span>
                                   )}
@@ -2133,17 +2486,25 @@ const [publishModalState, setPublishModalState] = useState<{
                                 <Tooltip key={slot}>
                                   <TooltipTrigger asChild>
                                     <div
-                                      className="flex-none h-full cursor-crosshair group/slot flex items-center justify-center px-[1px]"
+                                      className={`flex-none h-full ${activeTool === "lock" ? "cursor-pointer" : "cursor-crosshair"} group/slot flex items-center justify-center px-[1px]`}
                                       style={{
                                         width: `${(1 / viewSlotsCount) * 100}%`,
                                       }}
                                       onMouseDown={(e) => {
                                         e.preventDefault();
+                                        if (activeTool === "lock") {
+                                          toggleBlockLockAtSlot(assistant.id, slot);
+                                          return;
+                                        }
                                         setIsPainting(true);
                                         setPaintAid(assistant.id);
                                         paintSlot(assistant.id, slot);
                                       }}
                                       onMouseEnter={() => {
+                                        if (activeTool === "lock") {
+                                          setHoveredLockTarget({ aid: assistant.id, slot });
+                                          return;
+                                        }
                                         if (
                                           isPainting &&
                                           paintAid === assistant.id
@@ -2151,15 +2512,28 @@ const [publishModalState, setPublishModalState] = useState<{
                                           paintSlot(assistant.id, slot);
                                         }
                                       }}
+                                      onMouseLeave={() => {
+                                        if (activeTool === "lock") {
+                                          setHoveredLockTarget((prev) =>
+                                            prev?.aid === assistant.id && prev?.slot === slot ? null : prev
+                                          );
+                                        }
+                                      }}
+                                      onContextMenu={(e) => {
+                                        e.preventDefault();
+                                        toggleBlockLockAtSlot(assistant.id, slot);
+                                      }}
                                     >
-                                      {/* Hover brush preview pill */}
-                                      <div
-                                        className={`w-full h-8 rounded-sm opacity-0 group-hover/slot:opacity-45 transition-opacity ${
-                                          paintType === "off"
-                                            ? "bg-destructive/50 border border-destructive"
-                                            : BLOCK_STYLES[paintType].bg
-                                        }`}
-                                      />
+                                      {/* Hover brush preview pill (apenas no modo pintura/borracha; no modo lock o bloco inteiro ilumina-se) */}
+                                      {activeTool !== "lock" && (
+                                        <div
+                                          className={`w-full h-8 rounded-sm opacity-0 group-hover/slot:opacity-45 transition-opacity ${
+                                            paintType === "off"
+                                              ? "bg-destructive/50 border border-destructive"
+                                              : BLOCK_STYLES[paintType].bg
+                                          }`}
+                                        />
+                                      )}
                                     </div>
                                   </TooltipTrigger>
                                   <TooltipContent
@@ -2363,85 +2737,20 @@ const [publishModalState, setPublishModalState] = useState<{
 
                   <div className="h-4 w-[1px] bg-border mx-0.5" />
 
-                  {/* Dropdown Menu Imprimir / Exportar */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
-                      >
-                        <Printer size={12} />
-                        <span>Imprimir / Exportar</span>
-                        <ChevronDown size={11} className="opacity-70 ml-0.5" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56 p-1.5">
-                      <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1">
-                        Documentos para Impressão
-                      </DropdownMenuLabel>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          setPrintModalState({
-                            open: true,
-                            initialTab: "wall",
-                          })
-                        }
-                        className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
-                      >
-                        <Printer size={13} />
-                        <div>
-                          <div className="font-medium">Escala do Dia (Afixação)</div>
-                          <div className="text-[10px] text-muted-foreground">Formato oficial para o placard</div>
-                        </div>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          setPrintModalState({
-                            open: true,
-                            initialTab: "individual",
-                          })
-                        }
-                        className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
-                      >
-                        <UserCheck size={13} />
-                        <div>
-                          <div className="font-medium">Horários Individuais</div>
-                          <div className="text-[10px] text-muted-foreground">Fichas para entrega e assinatura</div>
-                        </div>
-                      </DropdownMenuItem>
-
-                      <DropdownMenuSeparator className="my-1" />
-
-                      <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1">
-                        Exportação de Dados
-                      </DropdownMenuLabel>
-                      <DropdownMenuItem
-                        onClick={handleExportDayCsv}
-                        className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
-                      >
-                        <FileSpreadsheet size={13} />
-                        <div>
-                          <div className="font-medium">Descarregar Excel / CSV</div>
-                          <div className="text-[10px] text-muted-foreground">Tabela com horários e postos</div>
-                        </div>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          setPrintModalState({
-                            open: true,
-                            initialTab: "wall",
-                          })
-                        }
-                        className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
-                      >
-                        <Eye size={13} />
-                        <div>
-                          <div className="font-medium">Pré-visualizar Tudo...</div>
-                          <div className="text-[10px] text-muted-foreground">Abrir central de documentos</div>
-                        </div>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  {/* Botão Imprimir / Exportar */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPrintModalState({
+                        open: true,
+                        initialDocModel: "wall",
+                      })
+                    }
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
+                  >
+                    <Printer size={12} />
+                    <span>Imprimir / Exportar</span>
+                  </button>
                 </div>
               )}
 
@@ -2484,11 +2793,11 @@ const [publishModalState, setPublishModalState] = useState<{
                               preselectedDate: dayInfo.isoDate,
                             })
                           }
-                          className="flex items-center gap-2 text-xs py-2 cursor-pointer"
+                          className="flex items-center gap-2.5 text-xs py-2 px-2.5 cursor-pointer rounded-lg"
                         >
-                          <Send size={12} />
+                          <Send size={13} className="shrink-0 text-muted-foreground group-focus/dropdown-item:text-foreground group-hover/dropdown-item:text-foreground transition-colors" />
                           <div>
-                            <div className="font-semibold">Publicar Este Dia</div>
+                            <div className="font-semibold text-foreground">Publicar Este Dia</div>
                             <div className="text-[10px] text-muted-foreground">{dayInfo.dayShort}, {dayInfo.dateStr}</div>
                           </div>
                         </DropdownMenuItem>
@@ -2500,11 +2809,11 @@ const [publishModalState, setPublishModalState] = useState<{
                                 preselectedDate: undefined,
                               })
                             }
-                            className="flex items-center gap-2 text-xs py-2 cursor-pointer"
+                            className="flex items-center gap-2.5 text-xs py-2 px-2.5 cursor-pointer rounded-lg"
                           >
-                            <Calendar size={12} />
+                            <Calendar size={13} className="shrink-0 text-muted-foreground group-focus/dropdown-item:text-foreground group-hover/dropdown-item:text-foreground transition-colors" />
                             <div>
-                              <div className="font-semibold">Publicar Vários Dias em Rascunho...</div>
+                              <div className="font-semibold text-foreground">Publicar Vários Dias em Rascunho...</div>
                               <div className="text-[10px] text-muted-foreground">{allDraftDays.length} {allDraftDays.length === 1 ? "dia pendente" : "dias pendentes"}</div>
                             </div>
                           </DropdownMenuItem>
@@ -2587,7 +2896,7 @@ const [publishModalState, setPublishModalState] = useState<{
                   <Edit2 size={11} />
                   {editMode
                     ? modifiedDaysSummary.length > 0
-                      ? `Concluir Edição (${modifiedDaysSummary.length} ${
+                      ? `Sair da Edição (${modifiedDaysSummary.length} ${
                           modifiedDaysSummary.length === 1
                             ? "dia alterado"
                             : "dias alterados"
@@ -2787,67 +3096,10 @@ const [publishModalState, setPublishModalState] = useState<{
               </div>
             )}
 
-            {/* EDIT MODE WORKSPACE: Day Activities Brush + Day Rules & Live Feedback */}
+            {/* EDIT MODE WORKSPACE: Painel de Regras do Dia + Toolbar colada ao Mapa */}
             {canEditCurrentDay && (
               <div className="border-b border-border bg-muted/15 divide-y divide-border/60">
-                {/* 1. Day-Filtered Activity Paint Palette */}
-                <div className="px-4 py-3 flex items-center gap-3 flex-wrap">
-                  <span className="text-xs font-semibold text-foreground">
-                    Pintar atividade ({dayInfo.dayName}):
-                  </span>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {availablePaintTypes.map((type) => {
-                      const isEraser = type === "off";
-                      const isSelected = paintType === type;
-                      return (
-                        <button
-                          key={type}
-                          type="button"
-                          onClick={() => setPaintType(type)}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                            isSelected
-                              ? isEraser
-                                ? "ring-2 ring-foreground bg-foreground text-background border-transparent font-semibold"
-                                : "ring-2 ring-primary ring-offset-1 border-transparent " +
-                                  BLOCK_STYLES[type].bg +
-                                  " text-white font-semibold shadow-xs"
-                              : isSpotlightActive
-                              ? "border-border bg-card text-muted-foreground opacity-55 hover:opacity-100 hover:text-foreground"
-                              : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
-                          }`}
-                        >
-                          {isEraser ? (
-                            <Eraser size={11} />
-                          ) : (
-                            <div
-                              className={`w-2.5 h-2.5 rounded-sm ${
-                                isSelected
-                                  ? "bg-white/30"
-                                  : BLOCK_STYLES[type].bg
-                              }`}
-                            />
-                          )}
-                          {isEraser ? "Limpar Bloco" : BLOCK_STYLES[type].label}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Toggle to highlight active activity vs show all at 100% */}
-                  <div className="ml-auto flex items-center gap-3 flex-wrap">
-                    <label className="flex items-center gap-2 text-xs text-foreground font-medium cursor-pointer select-none">
-                      <Checkbox
-                        checked={focusActiveActivity}
-                        onCheckedChange={(checked) =>
-                          setFocusActiveActivity(checked === true)
-                        }
-                      />
-                      <span>Destacar atividade selecionada</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* 2. Day Rules + Live Engine Feedback Panel */}
+                {/* 1. Day Rules & Live Engine Feedback Panel */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-border/60">
                   {/* Left: Rules established for this day */}
                   <div ref={rulesPanelRef} className="lg:col-span-7 p-3.5 space-y-2">
@@ -2870,20 +3122,22 @@ const [publishModalState, setPublishModalState] = useState<{
                         const isDimmedBySpotlight =
                           isSpotlightActive && !matchesPaintActivity;
 
-                        const rangeStr = `${TIME_SLOTS[rule.startSlot]}–${
-                          TIME_SLOTS[rule.endSlot]
-                        }`;
+                        const timeRangeStr = rule.isFallback
+                          ? null
+                          : `${TIME_SLOTS[rule.startSlot]}–${TIME_SLOTS[rule.endSlot]}`;
+
                         return (
                           <button
                             key={rule.id}
                             type="button"
                             onClick={() => {
+                              setActiveTool("paint");
                               setPaintType(rule.state);
                               setHighlightedRuleId(
                                 isRuleSelected ? null : rule.id
                               );
                             }}
-                            className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1.5 ${
+                            className={`px-3 py-2 rounded-xl border text-left transition-all flex flex-col justify-center gap-1 ${
                               isRuleSelected
                                 ? "border-primary bg-primary/8 ring-2 ring-primary/35 shadow-xs"
                                 : matchesPaintActivity
@@ -2895,8 +3149,9 @@ const [publishModalState, setPublishModalState] = useState<{
                                 : "opacity-100"
                             }`}
                           >
+                            {/* Linha 1: Nome da regra + Horário à frente + Tipo + Contador */}
                             <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-1.5 min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
                                 <span
                                   className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
                                     BLOCK_STYLES[rule.state].bg
@@ -2905,44 +3160,60 @@ const [publishModalState, setPublishModalState] = useState<{
                                 <span className="text-xs font-semibold text-foreground truncate">
                                   {rule.title}
                                 </span>
-                              </div>
-                              <span
-                                className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded flex items-center gap-1 flex-shrink-0 ${
-                                  rule.isMet
-                                    ? "bg-[#0E7C59]/15 text-[#0E7C59]"
-                                    : rule.type === "mandatory"
-                                    ? "bg-destructive/15 text-destructive"
-                                    : "bg-[#D97706]/15 text-[#D97706]"
-                                }`}
-                              >
-                                {rule.isMet ? (
-                                  <CheckCircle2 size={10} />
-                                ) : (
-                                  <AlertTriangle size={10} />
+                                {timeRangeStr && (
+                                  <span className="text-[11px] font-mono font-medium text-muted-foreground/80 flex-shrink-0">
+                                    {timeRangeStr}
+                                  </span>
                                 )}
-                                {rule.assigned}/{rule.min}
-                              </span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <span
+                                  className={`uppercase tracking-wider font-semibold text-[9px] ${
+                                    rule.isFallback
+                                      ? "text-muted-foreground"
+                                      : rule.type === "mandatory"
+                                      ? "text-primary"
+                                      : "text-muted-foreground"
+                                  }`}
+                                >
+                                  {rule.isFallback
+                                    ? "Fallback"
+                                    : rule.type === "mandatory"
+                                    ? "Obrigatória"
+                                    : "Facultativa"}
+                                </span>
+
+                                {rule.isFallback ? (
+                                  <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground flex-shrink-0">
+                                    {rule.assigned}
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded flex items-center gap-1 flex-shrink-0 ${
+                                      rule.isMet
+                                        ? "bg-[#0E7C59]/15 text-[#0E7C59]"
+                                        : rule.type === "mandatory"
+                                        ? "bg-destructive/15 text-destructive"
+                                        : "bg-[#D97706]/15 text-[#D97706]"
+                                    }`}
+                                  >
+                                    {rule.isMet ? (
+                                      <CheckCircle2 size={10} />
+                                    ) : (
+                                      <AlertTriangle size={10} />
+                                    )}
+                                    {rule.assigned}/{rule.min}
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
-                            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                              <span className="font-mono font-medium text-foreground/80">
-                                {rangeStr} · {rule.title}
-                              </span>
-                              <span
-                                className={`uppercase tracking-wider font-semibold text-[9px] ${
-                                  rule.type === "mandatory"
-                                    ? "text-primary"
-                                    : "text-muted-foreground"
-                                }`}
-                              >
-                                {rule.type === "mandatory"
-                                  ? "Obrigatória"
-                                  : "Facultativa"}
-                              </span>
-                            </div>
-
+                            {/* Linha 2: Fila / Preenchimento */}
                             <p className="text-[10px] text-muted-foreground truncate">
-                              Fila: {rule.priorityNames.join(" · ")}
+                              {rule.isFallback
+                                ? "Atividade padrão de preenchimento flexível"
+                                : `Fila: ${rule.priorityNames.join(" · ")}`}
                             </p>
                           </button>
                         );
@@ -3027,10 +3298,177 @@ const [publishModalState, setPublishModalState] = useState<{
                     )}
                   </div>
                 </div>
-              </div>
-            )}
+              
 
-            <div className="overflow-x-auto">
+                {/* 2. TOOLBAR COLADA AO MAPA: Ferramentas + Destacar Atividade */}
+                <div className="px-4 py-2 border-t border-border bg-card/75 backdrop-blur-xs flex items-center justify-between gap-3 flex-wrap">
+                  {/* Lado Esquerdo: Ações, Bloqueio, Limpeza e Destacar */}
+                  <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+                    {/* Indicador de Pintura da Regra Selecionada */}
+                    {activeTool === "lunch" ? (
+                      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/30 text-xs font-semibold text-orange-600 dark:text-orange-400 shadow-2xs">
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#F97316]" />
+                        <span>Pintar: Pausa de Almoço</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTool("paint");
+                            setPaintType("work");
+                          }}
+                          className="ml-1 text-orange-600/70 hover:text-orange-600 cursor-pointer p-0.5 rounded hover:bg-orange-500/20"
+                          title="Desmarcar pausa de almoço"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ) : selectedRuleEval ? (
+                      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-xs font-semibold text-primary shadow-2xs">
+                        <span
+                          className={`w-2.5 h-2.5 rounded-full ${
+                            BLOCK_STYLES[selectedRuleEval.state]?.bg || "bg-primary"
+                          }`}
+                        />
+                        <span className="truncate max-w-[200px] sm:max-w-[280px]">
+                          Pintar: {selectedRuleEval.title}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHighlightedRuleId(null);
+                            setPaintType("work");
+                          }}
+                          className="ml-1 text-primary/70 hover:text-primary cursor-pointer p-0.5 rounded hover:bg-primary/20"
+                          title="Desmarcar regra"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/40 border border-border text-xs text-muted-foreground select-none">
+                        <span className="w-2 h-2 rounded-full bg-primary/50" />
+                        <span>Clica numa regra acima para pintar</span>
+                      </div>
+                    )}
+
+                    {/* Separador vertical */}
+                    <div className="h-5 w-[1px] bg-border hidden sm:block" />
+
+                    {/* Botão Pausa de Almoço */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeTool === "lunch") {
+                          setActiveTool("paint");
+                          setPaintType("work");
+                        } else {
+                          setActiveTool("lunch");
+                          setPaintType("lunch");
+                          setHighlightedRuleId(null);
+                        }
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                        activeTool === "lunch"
+                          ? "bg-orange-500 text-white font-semibold shadow-xs ring-2 ring-orange-500/40"
+                          : "border border-border bg-background text-muted-foreground hover:text-orange-600 dark:hover:text-orange-400 hover:border-orange-500/40 hover:bg-orange-500/10"
+                      }`}
+                      title="Pintar intervalo de pausa de almoço na grelha"
+                    >
+                      <Utensils size={12} />
+                      <span>Pausa de Almoço</span>
+                    </button>
+
+                    {/* Botão Bloquear Tarefa */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTool(activeTool === "lock" ? "paint" : "lock");
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                        activeTool === "lock"
+                          ? "bg-amber-600 text-white font-semibold shadow-xs ring-2 ring-amber-500/40"
+                          : "border border-border bg-background text-muted-foreground hover:text-amber-700 dark:hover:text-amber-300 hover:border-amber-500/40 hover:bg-amber-500/10"
+                      }`}
+                      title="Clica numa tarefa no mapa para a fixar com cadeado"
+                    >
+                      <Lock size={12} />
+                      <span>Bloquear Tarefa</span>
+                    </button>
+
+                    {/* Botão Limpar Bloco */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeTool === "eraser") {
+                          setActiveTool("paint");
+                          setPaintType("work");
+                        } else {
+                          setActiveTool("eraser");
+                          setPaintType("off");
+                        }
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                        activeTool === "eraser"
+                          ? "bg-foreground text-background font-semibold shadow-xs"
+                          : "border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
+                      }`}
+                      title="Apagar tarefas na grelha"
+                    >
+                      <Eraser size={12} />
+                      <span>Limpar Bloco</span>
+                    </button>
+
+                    {/* Botão Destacar Atividade (imediatamente à beira das ferramentas) */}
+                    <button
+                      type="button"
+                      onClick={() => setFocusActiveActivity(!focusActiveActivity)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+                        focusActiveActivity
+                          ? "bg-primary/10 border-primary/40 text-primary font-semibold shadow-2xs"
+                          : "border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
+                      }`}
+                      title="Realça a atividade selecionada e esbate as outras no mapa"
+                    >
+                      <Sparkles
+                        size={12}
+                        className={
+                          focusActiveActivity ? "text-primary" : "text-muted-foreground"
+                        }
+                      />
+                      <span>Destacar Atividade</span>
+                      <span
+                        className={`ml-0.5 text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider ${
+                          focusActiveActivity
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {focusActiveActivity ? "ON" : "OFF"}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Dica Contextual à Direita */}
+                  {activeTool === "lunch" && (
+                    <div className="flex items-center gap-1.5 text-xs text-orange-600 dark:text-orange-400 font-medium animate-in fade-in-50">
+                      <Utensils size={12} className="shrink-0" />
+                      <span>Arrasta ou clica na grelha para pintar a Pausa de Almoço</span>
+                    </div>
+                  )}
+                  {activeTool === "lock" && (
+                    <div className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300 font-medium animate-in fade-in-50">
+                      <Lock size={12} className="shrink-0 text-amber-600 dark:text-amber-400" />
+                      <span>Passa o rato e clica numa tarefa para a trancar</span>
+                    </div>
+                  )}
+                  {activeTool === "eraser" && (
+                    <div className="flex items-center gap-1.5 text-xs text-destructive font-medium animate-in fade-in-50">
+                      <Eraser size={12} className="shrink-0" />
+                      <span>Arrasta o rato na grelha para apagar tarefas</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}            <div className="overflow-x-auto">
               <div className="min-w-[820px]">
                 {/* Dynamic Hour Header based on the day's Operating Hours */}
                 <div className="flex border-b border-border bg-muted/30">
@@ -3305,12 +3743,6 @@ const [publishModalState, setPublishModalState] = useState<{
                                       <div className="mt-1.5 pt-1.5 border-t border-border/60 space-y-0.5">
                                         <p className="text-xs font-semibold text-foreground">
                                           Teria a cargo: {displayLabel}
-                                          {b.activityName &&
-                                            b.activityName !== styleConfig.label && (
-                                              <span className="text-[10px] text-muted-foreground font-normal ml-1">
-                                                ({styleConfig.label})
-                                              </span>
-                                            )}
                                         </p>
                                         <p className="text-[11px] font-mono text-muted-foreground">
                                           {startTimeStr} – {endTimeStr} (
@@ -3396,7 +3828,7 @@ const [publishModalState, setPublishModalState] = useState<{
       {/* MODAL 1: COPIAR HORÁRIO ENTRE DIAS (COM DATEPICKER & DIAS FECHADOS)   */}
       {/* ===================================================================== */}
       <Dialog open={showCopyModal} onOpenChange={setShowCopyModal}>
-        <DialogContent className="w-full max-w-md p-0 overflow-visible rounded-xl border border-border bg-card shadow-2xl">
+        <DialogContent className="w-full max-w-lg p-0 overflow-visible rounded-xl border border-border bg-card shadow-2xl">
           <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10">
             <DialogTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Copy size={15} className="text-primary" />
@@ -3536,25 +3968,27 @@ const [publishModalState, setPublishModalState] = useState<{
             </div>
           </div>
 
-          <DialogFooter className="px-5 py-3 border-t border-border bg-muted/5">
-            <button
+          <DialogFooter className="px-6 py-4 border-t border-border bg-card flex items-center justify-end gap-2.5">
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setShowCopyModal(false)}
-              className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+              className="cursor-pointer text-xs"
             >
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              size="sm"
               disabled={!copyPickerIsoDate || !copyPickerStatus?.isOpen}
               onClick={handleConfirmCopySchedule}
-              className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors flex items-center gap-1.5"
+              className="cursor-pointer text-xs"
             >
-              <Copy size={12} />
               {copyDirection === "to_future"
                 ? "Copiar para Dia Selecionado"
                 : "Copiar para Este Dia"}
-            </button>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3563,11 +3997,11 @@ const [publishModalState, setPublishModalState] = useState<{
       {/* MODAL 2: VALIDAÇÃO E CONFIRMAÇÃO AO CONCLUIR EDIÇÃO                   */}
       {/* ===================================================================== */}
       <Dialog open={showFinishModal} onOpenChange={setShowFinishModal}>
-        <DialogContent className="w-full max-w-lg p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-          <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10">
+        <DialogContent className="w-full max-w-2xl p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+          <DialogHeader className="px-6 py-4 border-b border-border bg-muted/10">
             <DialogTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
               <CheckCircle2 size={16} className="text-primary" />
-              Confirmar e Validar Alterações de Escala
+              Confirmar e Guardar Alterações de Escala
             </DialogTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
               Revê os dias que vão ser alterados antes de guardar para garantir
@@ -3576,6 +4010,22 @@ const [publishModalState, setPublishModalState] = useState<{
           </DialogHeader>
 
           <div className="p-5 space-y-3 max-h-96 overflow-y-auto">
+            {/* Aviso Obrigatório: Escala Ficará em Rascunho e Terá de ser Novamente Publicada */}
+            <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
+              <AlertTriangle
+                size={16}
+                className="mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-400"
+              />
+              <div className="space-y-1">
+                <p className="font-semibold text-foreground">
+                  Aviso: O horário ficará como Rascunho (Draft)
+                </p>
+                <p className="leading-relaxed opacity-90">
+                  Ao confirmar e guardar as alterações efetuadas, a escala dos dias modificados passará para o estado de <strong>Rascunho</strong> e deixará de estar em vigor. Terá de ser <strong>novamente publicada</strong> para que as novas alterações fiquem visíveis para as equipas.
+                </p>
+              </div>
+            </div>
+
             {hasAnyIncompleteWarnings && (
               <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
                 <AlertTriangle
@@ -3624,9 +4074,8 @@ const [publishModalState, setPublishModalState] = useState<{
                       <button
                         type="button"
                         onClick={() => discardDayDraft(item.offset)}
-                        className="text-[11px] text-destructive hover:underline flex items-center gap-1 cursor-pointer"
+                        className="text-[11px] text-destructive hover:underline cursor-pointer"
                       >
-                        <Trash2 size={11} />
                         Descartar este dia
                       </button>
                     </ActionTooltip>
@@ -3666,9 +4115,11 @@ const [publishModalState, setPublishModalState] = useState<{
             )}
           </div>
 
-          <DialogFooter className="px-5 py-3 border-t border-border bg-muted/5 flex items-center justify-between gap-2">
-            <button
+          <DialogFooter className="px-6 py-4 border-t border-border bg-card flex items-center justify-between gap-3 w-full">
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => {
                 setDraftMatricesByDay({});
                 setDraftSlotMetaByDay({});
@@ -3678,37 +4129,38 @@ const [publishModalState, setPublishModalState] = useState<{
                 setShowFinishModal(false);
                 setEditMode(false);
               }}
-              className="px-3 py-1.5 rounded-lg border border-destructive/30 text-xs text-destructive hover:bg-destructive/10 transition-colors"
+              className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive whitespace-nowrap cursor-pointer text-xs"
             >
               Descartar Tudo e Sair
-            </button>
-            <div className="flex items-center gap-2">
-              <button
+            </Button>
+            <div className="flex items-center gap-2.5 flex-shrink-0">
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => setShowFinishModal(false)}
-                className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="whitespace-nowrap cursor-pointer text-xs"
               >
                 Continuar a Editar
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                size="sm"
                 onClick={handleConfirmSaveAllEdits}
                 disabled={modifiedDaysSummary.length === 0 || saveDaysMutation.isPending}
-                className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="whitespace-nowrap cursor-pointer text-xs"
               >
                 {saveDaysMutation.isPending ? (
-                  <Loader2 size={13} className="animate-spin" />
+                  <>
+                    <Loader2 size={13} className="animate-spin mr-1.5" />
+                    A gravar...
+                  </>
+                ) : hasAnyIncompleteWarnings ? (
+                  `Guardar Rascunho Mesmo Assim (${modifiedDaysSummary.length})`
                 ) : (
-                  <Check size={13} />
+                  `Guardar Rascunho e Sair (${modifiedDaysSummary.length})`
                 )}
-                <span>
-                  {saveDaysMutation.isPending
-                    ? "A gravar..."
-                    : hasAnyIncompleteWarnings
-                    ? `Guardar Rascunho Mesmo Assim (${modifiedDaysSummary.length})`
-                    : `Confirmar e Guardar (${modifiedDaysSummary.length})`}
-                </span>
-              </button>
+              </Button>
             </div>
           </DialogFooter>
         </DialogContent>
@@ -3731,16 +4183,20 @@ const [publishModalState, setPublishModalState] = useState<{
               concluir a edição, todas as alterações pendentes serão perdidas.
             </p>
           </DialogHeader>
-          <DialogFooter className="px-5 py-3 border-t border-border bg-muted/5 flex items-center justify-end gap-2">
-            <button
+          <DialogFooter className="px-6 py-4 border-t border-border bg-card flex items-center justify-end gap-2.5">
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setShowDiscardConfirmModal(false)}
-              className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              className="cursor-pointer text-xs"
             >
               Continuar a Editar
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="destructive"
+              size="sm"
               onClick={() => {
                 setDraftMatricesByDay({});
                 setDraftSlotMetaByDay({});
@@ -3753,19 +4209,19 @@ const [publishModalState, setPublishModalState] = useState<{
                 setPaintAid(null);
                 notify.info("Alterações descartadas.", "Edição Cancelada");
               }}
-              className="px-3.5 py-1.5 rounded-lg bg-destructive text-destructive-foreground text-xs font-medium hover:bg-destructive/90 transition-colors cursor-pointer"
+              className="cursor-pointer text-xs"
             >
               Descartar e Sair
-            </button>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Modal de Publicação de Escalas (Rascunho -> Publicada) */}
-            <PrintScheduleModal
+      <PrintScheduleModal
         open={printModalState.open}
         onClose={() => setPrintModalState((prev) => ({ ...prev, open: false }))}
-        initialTab={printModalState.initialTab}
+        initialDocModel={printModalState.initialDocModel}
         schoolName={selectedSchool?.name || "Escola"}
         agrupamentoName={agrupamento?.name || "Agrupamento de Escolas"}
         dateInfo={{
@@ -3776,9 +4232,16 @@ const [publishModalState, setPublishModalState] = useState<{
         operatingWindowStr={operatingWindowStr}
         workingAssistants={printableWorkingAssistants}
         absentAssistants={printableAbsentAssistants}
+        activeAssistants={activeAssistants}
+        schedulesList={schedulesList}
+        absences={absencesRes?.data || []}
+        operatingSources={operatingSources}
+        profilesByAssistant={profilesByAssistant}
+        exceptionsByAssistant={exceptionsByAssistant}
+        lunchBlocksByDate={lunchBlocksByDate}
       />
 
-<PublishSchedulesModal
+      <PublishSchedulesModal
         open={publishModalState.open}
         onClose={() => setPublishModalState({ open: false })}
         schedules={schedulesList}
@@ -3787,6 +4250,9 @@ const [publishModalState, setPublishModalState] = useState<{
         temporaryAssignments={temporaryAssignments}
         selectedSchoolId={selectedSchoolId}
         initialSelectedDate={publishModalState.preselectedDate}
+        profilesByAssistant={profilesByAssistant}
+        exceptionsByAssistant={exceptionsByAssistant}
+        operatingSources={operatingSources}
       />
     </TooltipProvider>
   );

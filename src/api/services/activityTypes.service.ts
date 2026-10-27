@@ -1,6 +1,5 @@
 import apiClient from "../client";
 import type { ApiResponse } from "../types/api.types";
-import type { ActivityType } from "../../types";
 
 export interface ActivityTypePayload {
   name: string;
