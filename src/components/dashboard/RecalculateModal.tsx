@@ -71,6 +71,11 @@ function formatMinutesToHours(mins: number): string {
   return `${h}h${String(m).padStart(2, "0")}`;
 }
 
+function toMinutes(timeStr: string): number {
+  const [h, m] = timeStr.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
 export default function RecalculateModal({
   open,
   onClose,
@@ -220,6 +225,53 @@ export default function RecalculateModal({
       end_time: endTime,
     };
   }, [activeConflict, selectedSub, transferTimeMode, transferCustomStart, transferCustomEnd]);
+
+  const effectiveTransferTimes = useMemo(() => {
+    if (!activeConflict || !selectedSub) return { start: "", end: "" };
+    if (transferTimeMode === "deficit") {
+      return { start: activeConflict.period_start, end: activeConflict.period_end };
+    }
+    if (transferTimeMode === "custom") {
+      return {
+        start: transferCustomStart || activeConflict.period_start,
+        end: transferCustomEnd || activeConflict.period_end,
+      };
+    }
+    return {
+      start: selectedSub.shift_start || "08:00",
+      end: selectedSub.shift_end || "17:00",
+    };
+  }, [activeConflict, selectedSub, transferTimeMode, transferCustomStart, transferCustomEnd]);
+
+  const shiftMismatch = useMemo(() => {
+    if (
+      !selectedSub ||
+      !selectedSub.shift_start ||
+      !selectedSub.shift_end ||
+      !effectiveTransferTimes.start ||
+      !effectiveTransferTimes.end
+    ) {
+      return null;
+    }
+    const shiftStartMin = toMinutes(selectedSub.shift_start);
+    const shiftEndMin = toMinutes(selectedSub.shift_end);
+    const trStartMin = toMinutes(effectiveTransferTimes.start);
+    const trEndMin = toMinutes(effectiveTransferTimes.end);
+
+    const earlyMinutes = Math.max(0, shiftStartMin - trStartMin);
+    const lateMinutes = Math.max(0, trEndMin - shiftEndMin);
+
+    if (earlyMinutes === 0 && lateMinutes === 0) return null;
+
+    return {
+      earlyMinutes,
+      lateMinutes,
+      shiftStart: selectedSub.shift_start,
+      shiftEnd: selectedSub.shift_end,
+      trStart: effectiveTransferTimes.start,
+      trEnd: effectiveTransferTimes.end,
+    };
+  }, [selectedSub, effectiveTransferTimes]);
 
   // Outros conflitos pendentes que esta transferência também cobrirá de imediato
   const coveredOtherConflicts = useMemo(() => {
@@ -842,33 +894,6 @@ export default function RecalculateModal({
                 </div>
               )}
 
-              {/* Banner Informativo de Transferências já Aprovadas com Ação Imediata */}
-              {approvedTransfers.length > 0 && (
-                <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 text-xs flex items-center justify-between gap-2.5 animate-in fade-in-50">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <CheckCircle2 size={16} className="text-primary flex-shrink-0" />
-                    <div className="truncate">
-                      <span className="font-semibold text-foreground mr-1.5">
-                        {approvedTransfers.length} {approvedTransfers.length === 1 ? "transferência configurada" : "transferências configuradas"}:
-                      </span>
-                      <span className="text-muted-foreground text-[11px] truncate">
-                        {approvedTransfers.map((t) => `${t.assistant_name} (${t.period})`).join(", ")}
-                      </span>
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={isRunning}
-                    onClick={() => handleFinalizeWithTransfers(approvedTransfers)}
-                    className="h-7 px-2.5 text-[11px] border-primary/40 text-primary hover:bg-primary/10 flex-shrink-0 font-medium"
-                  >
-                    Aplicar agora →
-                  </Button>
-                </div>
-              )}
-
               {/* Alerta de Falha de Cobertura */}
               <div className="p-3.5 rounded-xl border border-rose-300 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/30 flex items-start gap-3 text-xs text-rose-800 dark:text-rose-200">
                 <div className="w-8 h-8 rounded-full bg-rose-500/15 flex items-center justify-center flex-shrink-0 text-rose-600 dark:text-rose-400">
@@ -1004,6 +1029,21 @@ export default function RecalculateModal({
 
                             {/* Badges de Turno, Almoço e Ausências */}
                             <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                              {c.shift_covers_deficit === "full" && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-200/50 dark:border-emerald-800/50">
+                                  ✓ Cobre horário do défice
+                                </span>
+                              )}
+                              {c.shift_covers_deficit === "partial" && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded border border-amber-200/50 dark:border-amber-800/50">
+                                  ⚠️ Cobre {c.overlap_minutes}m do défice
+                                </span>
+                              )}
+                              {c.shift_covers_deficit === "outside" && c.works_today && !c.is_absent && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 px-1.5 py-0.5 rounded border border-rose-200/50 dark:border-rose-800/50">
+                                  ⚠️ Fora do horário habitual ({c.shift_start}–{c.shift_end})
+                                </span>
+                              )}
                               {c.shift_start && c.shift_end && (
                                 <span className="inline-flex items-center gap-1 text-[10px] font-mono bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded border border-blue-200/50 dark:border-blue-800/50">
                                   <Clock size={10} className="flex-shrink-0" />
@@ -1153,6 +1193,28 @@ export default function RecalculateModal({
                       <Info size={11} className="flex-shrink-0 text-primary" />
                       A pausa de almoço de 1h é adaptada e garantida pelo motor antes ou depois da cedência.
                     </p>
+
+                    {shiftMismatch && (
+                      <div className="p-3 rounded-xl border border-amber-300 dark:border-amber-800/70 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs space-y-1 animate-in fade-in-50">
+                        <div className="flex items-center gap-2 font-semibold">
+                          <AlertTriangle size={15} className="text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                          <span>Atenção: Horário ultrapassa o turno habitual do assistente</span>
+                        </div>
+                        <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                          O assistente tem horário contratual das <strong>{shiftMismatch.shiftStart} às {shiftMismatch.shiftEnd}</strong>.
+                          {shiftMismatch.earlyMinutes > 0 && shiftMismatch.lateMinutes > 0 && (
+                            <> A cedência selecionada ({shiftMismatch.trStart}–{shiftMismatch.trEnd}) inicia <strong>{formatMinutesToHours(shiftMismatch.earlyMinutes)} antes</strong> e termina <strong>{formatMinutesToHours(shiftMismatch.lateMinutes)} após</strong> o fim do turno habitual.</>
+                          )}
+                          {shiftMismatch.earlyMinutes > 0 && shiftMismatch.lateMinutes === 0 && (
+                            <> A cedência selecionada ({shiftMismatch.trStart}–{shiftMismatch.trEnd}) inicia <strong>{formatMinutesToHours(shiftMismatch.earlyMinutes)} antes</strong> da hora de entrada habitual.</>
+                          )}
+                          {shiftMismatch.lateMinutes > 0 && shiftMismatch.earlyMinutes === 0 && (
+                            <> A cedência selecionada ({shiftMismatch.trStart}–{shiftMismatch.trEnd}) ultrapassa o fim do turno habitual em <strong>{formatMinutesToHours(shiftMismatch.lateMinutes)}</strong>.</>
+                          )}
+                          {" "}O assistente estará a realizar horas para além do seu período habitual.
+                        </p>
+                      </div>
+                    )}
 
                     {coveredOtherConflicts.length > 0 && (
                       <div className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 text-[11px] flex items-start gap-2 animate-in fade-in-50">
@@ -1398,50 +1460,25 @@ export default function RecalculateModal({
                 {conflicts.length > 1 ? "Saltar este Défice" : "Ignorar Défice e Concluir"}
               </Button>
 
-              <div className="flex items-center gap-2">
-                {approvedTransfers.length > 0 && conflicts.length > 1 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={isRunning}
-                    onClick={() => handleFinalizeWithTransfers(approvedTransfers)}
-                    className="border-primary/40 text-primary hover:bg-primary/5"
-                  >
-                    {isRunning ? (
-                      <Loader2 size={13} className="animate-spin mr-1.5" />
-                    ) : (
-                      <Check size={13} className="mr-1.5" />
-                    )}
-                    Aplicar já ({approvedTransfers.length})
-                  </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => selectedSub && handleAdvanceFromConflict(selectedSub)}
+                disabled={!selectedSub || isRunning}
+                className="gap-2"
+              >
+                {isRunning ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    A validar e recalcular...
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} />
+                    Confirmar Designação
+                  </>
                 )}
-
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => selectedSub && handleAdvanceFromConflict(selectedSub)}
-                  disabled={!selectedSub || isRunning}
-                  className="gap-2"
-                >
-                  {isRunning ? (
-                    <>
-                      <Loader2 size={14} className="animate-spin" />
-                      A validar e recalcular...
-                    </>
-                  ) : willResolveAllRemaining || conflicts.length <= 1 ? (
-                    <>
-                      <Check size={14} />
-                      Confirmar e Gerar Escala
-                    </>
-                  ) : (
-                    <>
-                      <span>Guardar e Próximo Défice</span>
-                      <ArrowRight size={14} />
-                    </>
-                  )}
-                </Button>
-              </div>
+              </Button>
             </div>
           )}
 

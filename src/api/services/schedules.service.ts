@@ -75,6 +75,9 @@ export interface TransferCandidateApi {
   partial_absence?: string | null;
   absence_overlaps?: boolean;
   works_today?: boolean;
+  shift_covers_deficit?: "full" | "partial" | "outside";
+  overlap_minutes?: number;
+  deficit_duration_minutes?: number;
 }
 
 export interface SkippedCandidateApi {
