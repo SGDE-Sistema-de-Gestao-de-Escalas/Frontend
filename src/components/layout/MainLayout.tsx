@@ -26,6 +26,7 @@ export default function MainLayout() {
     if (path.includes("assistants")) adminPage = "assistants";
     else if (path.includes("absences")) adminPage = "absences";
     else if (path.includes("reports")) adminPage = "reports";
+    else if (path.includes("notifications")) adminPage = "notifications";
     else if (path.includes("config")) adminPage = "config";
     else if (path.includes("profile")) adminPage = "profile";
     else if (path.includes("platform-settings")) adminPage = "platform-settings";
