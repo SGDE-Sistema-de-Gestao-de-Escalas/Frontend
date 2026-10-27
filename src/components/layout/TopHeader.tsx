@@ -1,4 +1,3 @@
-import React from "react";
 import {
   ChevronRight,
   Home,
@@ -19,6 +18,8 @@ interface TopHeaderProps {
   onOpenMobileMenu?: () => void;
   onPlatformSettings?: () => void;
   onAccount?: () => void;
+  onSwitchRole?: () => void;
+  onLogout?: () => void;
 }
 
 export default function TopHeader({
@@ -27,7 +28,7 @@ export default function TopHeader({
   onPlatformSettings,
   onAccount,
 }: TopHeaderProps) {
-  const { role, switchRole, logout } = useAuth();
+  const { role, logout } = useAuth();
   const { dark, toggleDark } = useTheme();
 
   function toggleFullscreen() {
