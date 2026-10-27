@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   ArrowRightLeft,
+  Building2,
+  CalendarOff,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -279,23 +281,69 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
     );
   }
 
-  // CASO A: A escola encontra-se encerrada (Feriado, Fim de semana, Férias ou encerramento oficial)
+  // CASO A: A escola encontra-se encerrada (Feriado, Fim de semana, Férias ou encerramento oficial por Exceção)
   if (isSchoolClosed) {
+    const isException = dayStatus.reasonType === "exception";
+    const isHoliday = dayStatus.reasonType === "holiday";
+    const title =
+      dayStatus.title ||
+      (isException
+        ? "Encerramento Excecional"
+        : isHoliday
+        ? "Feriado"
+        : "Dia de Descanso");
+    const detail =
+      dayStatus.detail ||
+      (isException
+        ? `A escola encontra-se encerrada por exceção de funcionamento (${dayStatus.closedLabel || "Exceção"}).`
+        : isHoliday
+        ? `Feriado (${dayStatus.closedLabel || "Feriado"}).`
+        : "Hoje não tem serviço agendado. Desfrute do seu dia de descanso e aproveite o tempo com o que e quem mais gosta.");
+
     return (
       <div className="pt-2 pb-12">
         <div className="bg-card border border-border/80 rounded-2xl p-6 sm:p-8 text-center max-w-lg mx-auto shadow-xs my-6 flex flex-col items-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary mb-3">
-            <Sparkles size={22} className="text-primary" />
+          <div
+            className={`inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-3 ${
+              isException
+                ? "bg-destructive/10 text-destructive border border-destructive/20"
+                : isHoliday
+                ? "bg-[#D97706]/10 text-[#D97706] border border-[#D97706]/20"
+                : "bg-muted text-muted-foreground border border-border"
+            }`}
+          >
+            {isException ? (
+              <Building2 size={22} className="text-destructive" />
+            ) : isHoliday ? (
+              <Sparkles size={22} className="text-[#D97706]" />
+            ) : (
+              <CalendarOff size={22} className="text-muted-foreground" />
+            )}
           </div>
+          {isException && (
+            <Badge
+              variant="outline"
+              className="mb-2 text-destructive border-destructive/30 bg-destructive/5 text-xs font-semibold"
+            >
+              Encerramento Excecional
+            </Badge>
+          )}
+          {isHoliday && (
+            <Badge
+              variant="outline"
+              className="mb-2 text-[#D97706] border-[#D97706]/30 bg-[#D97706]/5 text-xs font-semibold"
+            >
+              Feriado
+            </Badge>
+          )}
           <h3 className="text-lg font-semibold text-foreground">
-            Dia de Descanso
+            {title}
           </h3>
           <p className="text-xs font-mono text-muted-foreground mt-0.5">
             {info.dayName}, {info.dateStr}
           </p>
           <p className="text-sm text-muted-foreground mt-3 leading-relaxed">
-            {dayStatus.closedLabel ||
-              "Hoje não tem serviço agendado. Desfrute do seu dia de descanso e aproveite o tempo com o que e quem mais gosta."}
+            {detail}
           </p>
         </div>
       </div>
@@ -845,9 +893,18 @@ export function StaffWeekView({
 
               <div>
                 {isClosed ? (
-                  <span className="text-xs text-muted-foreground">
-                    {status.closedLabel || "Encerrada"}
-                  </span>
+                  <Badge
+                    variant="outline"
+                    className={`text-xs ${
+                      status.reasonType === "exception"
+                        ? "border-destructive/30 text-destructive bg-destructive/10 font-medium"
+                        : status.reasonType === "holiday"
+                        ? "border-amber-500/30 text-amber-700 dark:text-amber-300 bg-amber-500/10 font-medium"
+                        : "border-border text-muted-foreground bg-muted/40"
+                    }`}
+                  >
+                    {status.closedLabel || (status.reasonType === "exception" ? "Exceção" : "Encerrada")}
+                  </Badge>
                 ) : !pubInfo.isPublished ? (
                   <span className="text-[11px] font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
                     {pubInfo.status === "draft" ? "Em preparação" : "Não publicada"}
@@ -1174,6 +1231,7 @@ export function StaffMonthView({
       info,
       blocks: activeBlocks,
       isClosed,
+      dayStatus,
       closedLabel: dayStatus.closedLabel,
       pubInfo,
       entryTime: entryBlock ? TIME_SLOTS[entryBlock.start] : null,
@@ -1415,9 +1473,20 @@ export function StaffMonthView({
           })()}
 
           {previewData.isClosed ? (
-            <p className="text-xs text-muted-foreground py-1">
-              Dia de descanso (Estabelecimento encerrado).
-            </p>
+            <div className="py-2 flex items-center gap-2">
+              <span
+                className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                  previewData.dayStatus?.reasonType === "exception"
+                    ? "bg-destructive"
+                    : previewData.dayStatus?.reasonType === "holiday"
+                    ? "bg-[#D97706]"
+                    : "bg-muted-foreground/60"
+                }`}
+              />
+              <p className="text-xs font-medium text-foreground">
+                {previewData.dayStatus?.title || "Estabelecimento encerrado."}
+              </p>
+            </div>
           ) : !previewData.pubInfo.isPublished ? (
             <div className="flex items-center gap-2 py-1">
               <span className="inline-block w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />

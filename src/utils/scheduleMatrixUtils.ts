@@ -459,19 +459,21 @@ export function resolveSchoolDayStatusByIsoDate(
           title: `Estabelecimento Encerrado — ${calDay.reason || "Feriado"}`,
           detail:
             "Feriado registado no calendário global. Todas as atividades letivas e escalas estão suspensas neste dia.",
+          closedLabel: calDay.reason || "Feriado",
           viewStartSlot: VIEW_START,
           viewEndSlot: VIEW_END,
         };
       }
       if (calDay.source === "exception") {
+        const exceptionName = calDay.reason || matchingException?.name || "Exceção de Funcionamento";
         return {
           isOpen: false,
           reasonType: "exception",
-          title: `Estabelecimento Encerrado — ${
-            calDay.reason || matchingException?.name || "Exceção de Funcionamento"
-          }`,
+          title: `Estabelecimento Encerrado — ${exceptionName}`,
           detail:
+            matchingException?.detail ||
             "Encerramento excecional definido nas regras de funcionamento da escola.",
+          closedLabel: exceptionName,
           viewStartSlot: VIEW_START,
           viewEndSlot: VIEW_END,
         };
@@ -483,6 +485,7 @@ export function resolveSchoolDayStatusByIsoDate(
         detail:
           calDay.reason ||
           "O estabelecimento de ensino encontra-se encerrado neste dia segundo o horário fixo em vigor.",
+        closedLabel: calDay.reason || "Encerramento semanal",
         viewStartSlot: VIEW_START,
         viewEndSlot: VIEW_END,
       };
@@ -546,6 +549,7 @@ export function resolveSchoolDayStatusByIsoDate(
       title: `Estabelecimento Encerrado — ${holiday.name}`,
       detail:
         "Feriado registado no calendário global. Todas as atividades letivas e escalas estão suspensas neste dia.",
+      closedLabel: holiday.name || "Feriado",
       viewStartSlot: VIEW_START,
       viewEndSlot: VIEW_END,
     };
@@ -559,7 +563,9 @@ export function resolveSchoolDayStatusByIsoDate(
         reasonType: "exception",
         title: `Estabelecimento Encerrado — ${matchingException.name}`,
         detail:
+          matchingException.detail ||
           "Encerramento excecional definido nas regras de funcionamento da escola.",
+        closedLabel: matchingException.name || "Exceção de Funcionamento",
         viewStartSlot: VIEW_START,
         viewEndSlot: VIEW_END,
       };
