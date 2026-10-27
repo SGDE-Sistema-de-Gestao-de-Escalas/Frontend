@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
+import { Checkbox } from "../ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -1167,17 +1168,16 @@ export default function AbsenceManagement() {
             <div className="space-y-3">
               {/* Opção Dia Inteiro vs Período com Horas */}
               <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/20">
-                <div>
+                <label htmlFor="absence-full-day" className="cursor-pointer select-none">
                   <span className="text-xs font-semibold text-foreground block">Dia Inteiro</span>
                   <span className="text-[11px] text-muted-foreground">
                     A ausência cobre a totalidade do horário de trabalho do assistente
                   </span>
-                </div>
-                <input
-                  type="checkbox"
+                </label>
+                <Checkbox
+                  id="absence-full-day"
                   checked={formIsFullDay}
-                  onChange={(e) => setFormIsFullDay(e.target.checked)}
-                  className="w-4 h-4 rounded text-primary focus:ring-primary border-border cursor-pointer"
+                  onCheckedChange={(val) => setFormIsFullDay(Boolean(val))}
                 />
               </div>
 

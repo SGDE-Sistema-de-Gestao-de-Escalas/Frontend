@@ -32,6 +32,7 @@ import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { Badge } from "../ui/badge";
 import DatePicker from "../common/DatePicker";
+import TimePicker from "../common/TimePicker";
 import CustomSelect from "../common/CustomSelect";
 import {
   useGenerateSchedules,
@@ -918,23 +919,21 @@ export default function RecalculateModal({
                     </div>
 
                     {transferTimeMode === "custom" && (
-                      <div className="flex items-center gap-2 pt-1 animate-in fade-in-50">
-                        <div className="flex-1">
-                          <label className="text-[10px] text-muted-foreground block mb-0.5">Início</label>
-                          <input
-                            type="time"
-                            value={transferCustomStart}
-                            onChange={(e) => setTransferCustomStart(e.target.value)}
-                            className="w-full h-8 px-2 text-xs font-mono rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:outline-none"
+                      <div className="grid grid-cols-2 gap-3 pt-1 animate-in fade-in-50">
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-muted-foreground block font-medium">Hora de Início</label>
+                          <TimePicker
+                            value={transferCustomStart || activeConflict.period_start || "08:00"}
+                            onChange={setTransferCustomStart}
+                            className="w-full"
                           />
                         </div>
-                        <div className="flex-1">
-                          <label className="text-[10px] text-muted-foreground block mb-0.5">Fim</label>
-                          <input
-                            type="time"
-                            value={transferCustomEnd}
-                            onChange={(e) => setTransferCustomEnd(e.target.value)}
-                            className="w-full h-8 px-2 text-xs font-mono rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:outline-none"
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-muted-foreground block font-medium">Hora de Fim</label>
+                          <TimePicker
+                            value={transferCustomEnd || activeConflict.period_end || "17:00"}
+                            onChange={setTransferCustomEnd}
+                            className="w-full"
                           />
                         </div>
                       </div>

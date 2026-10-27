@@ -11,6 +11,7 @@ import {
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import CustomSelect from "../common/CustomSelect";
+import { Checkbox } from "../ui/checkbox";
 import { useAssistantsList } from "../../hooks/api/useAssistants";
 import { useAbsenceTypesList } from "../../hooks/api/useAbsenceTypes";
 import { useCreateAbsence } from "../../hooks/api/useAbsences";
@@ -136,17 +137,16 @@ export default function QuickAbsenceModal({
 
           {/* Opção Dia Inteiro */}
           <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/20">
-            <div>
+            <label htmlFor="quick-absence-full-day" className="cursor-pointer select-none">
               <span className="text-xs font-semibold text-foreground block">Dia Inteiro</span>
               <span className="text-[11px] text-muted-foreground">
                 Cobre todo o horário de trabalho do assistente
               </span>
-            </div>
-            <input
-              type="checkbox"
+            </label>
+            <Checkbox
+              id="quick-absence-full-day"
               checked={isFullDay}
-              onChange={(e) => setIsFullDay(e.target.checked)}
-              className="w-4 h-4 rounded text-primary focus:ring-primary border-border cursor-pointer"
+              onCheckedChange={(val) => setIsFullDay(Boolean(val))}
             />
           </div>
 
