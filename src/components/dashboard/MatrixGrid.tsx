@@ -2729,11 +2729,11 @@ function paintSlot(aid: EntityId, slot: number) {
                             initialTab: "wall",
                           })
                         }
-                        className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
+                        className="flex items-center gap-2.5 cursor-pointer text-xs py-2 px-2.5 rounded-lg"
                       >
-                        <Printer size={13} />
+                        <Printer size={14} className="shrink-0 text-muted-foreground group-focus/dropdown-item:text-foreground group-hover/dropdown-item:text-foreground transition-colors" />
                         <div>
-                          <div className="font-medium">Escala do Dia (Afixação)</div>
+                          <div className="font-medium text-foreground">Escala do Dia (Afixação)</div>
                           <div className="text-[10px] text-muted-foreground">Formato oficial para o placard</div>
                         </div>
                       </DropdownMenuItem>
@@ -2744,11 +2744,11 @@ function paintSlot(aid: EntityId, slot: number) {
                             initialTab: "individual",
                           })
                         }
-                        className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
+                        className="flex items-center gap-2.5 cursor-pointer text-xs py-2 px-2.5 rounded-lg"
                       >
-                        <UserCheck size={13} />
+                        <UserCheck size={14} className="shrink-0 text-muted-foreground group-focus/dropdown-item:text-foreground group-hover/dropdown-item:text-foreground transition-colors" />
                         <div>
-                          <div className="font-medium">Horários Individuais</div>
+                          <div className="font-medium text-foreground">Horários Individuais</div>
                           <div className="text-[10px] text-muted-foreground">Fichas para entrega e assinatura</div>
                         </div>
                       </DropdownMenuItem>
@@ -2760,11 +2760,11 @@ function paintSlot(aid: EntityId, slot: number) {
                       </DropdownMenuLabel>
                       <DropdownMenuItem
                         onClick={handleExportDayCsv}
-                        className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
+                        className="flex items-center gap-2.5 cursor-pointer text-xs py-2 px-2.5 rounded-lg"
                       >
-                        <FileSpreadsheet size={13} />
+                        <FileSpreadsheet size={14} className="shrink-0 text-muted-foreground group-focus/dropdown-item:text-foreground group-hover/dropdown-item:text-foreground transition-colors" />
                         <div>
-                          <div className="font-medium">Descarregar Excel / CSV</div>
+                          <div className="font-medium text-foreground">Descarregar Excel / CSV</div>
                           <div className="text-[10px] text-muted-foreground">Tabela com horários e postos</div>
                         </div>
                       </DropdownMenuItem>
@@ -2775,11 +2775,11 @@ function paintSlot(aid: EntityId, slot: number) {
                             initialTab: "wall",
                           })
                         }
-                        className="flex items-center gap-2 cursor-pointer text-xs py-2 px-2"
+                        className="flex items-center gap-2.5 cursor-pointer text-xs py-2 px-2.5 rounded-lg"
                       >
-                        <Eye size={13} />
+                        <Eye size={14} className="shrink-0 text-muted-foreground group-focus/dropdown-item:text-foreground group-hover/dropdown-item:text-foreground transition-colors" />
                         <div>
-                          <div className="font-medium">Pré-visualizar Tudo...</div>
+                          <div className="font-medium text-foreground">Pré-visualizar Tudo...</div>
                           <div className="text-[10px] text-muted-foreground">Abrir central de documentos</div>
                         </div>
                       </DropdownMenuItem>
@@ -2827,11 +2827,11 @@ function paintSlot(aid: EntityId, slot: number) {
                               preselectedDate: dayInfo.isoDate,
                             })
                           }
-                          className="flex items-center gap-2 text-xs py-2 cursor-pointer"
+                          className="flex items-center gap-2.5 text-xs py-2 px-2.5 cursor-pointer rounded-lg"
                         >
-                          <Send size={12} />
+                          <Send size={13} className="shrink-0 text-muted-foreground group-focus/dropdown-item:text-foreground group-hover/dropdown-item:text-foreground transition-colors" />
                           <div>
-                            <div className="font-semibold">Publicar Este Dia</div>
+                            <div className="font-semibold text-foreground">Publicar Este Dia</div>
                             <div className="text-[10px] text-muted-foreground">{dayInfo.dayShort}, {dayInfo.dateStr}</div>
                           </div>
                         </DropdownMenuItem>
@@ -2843,11 +2843,11 @@ function paintSlot(aid: EntityId, slot: number) {
                                 preselectedDate: undefined,
                               })
                             }
-                            className="flex items-center gap-2 text-xs py-2 cursor-pointer"
+                            className="flex items-center gap-2.5 text-xs py-2 px-2.5 cursor-pointer rounded-lg"
                           >
-                            <Calendar size={12} />
+                            <Calendar size={13} className="shrink-0 text-muted-foreground group-focus/dropdown-item:text-foreground group-hover/dropdown-item:text-foreground transition-colors" />
                             <div>
-                              <div className="font-semibold">Publicar Vários Dias em Rascunho...</div>
+                              <div className="font-semibold text-foreground">Publicar Vários Dias em Rascunho...</div>
                               <div className="text-[10px] text-muted-foreground">{allDraftDays.length} {allDraftDays.length === 1 ? "dia pendente" : "dias pendentes"}</div>
                             </div>
                           </DropdownMenuItem>
