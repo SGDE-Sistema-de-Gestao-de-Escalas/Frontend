@@ -17,6 +17,7 @@ import {
   Send,
   Sparkles,
   Users,
+  Utensils,
   X,
 } from "lucide-react";
 import {
