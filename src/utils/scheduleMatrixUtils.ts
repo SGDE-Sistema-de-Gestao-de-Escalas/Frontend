@@ -1320,7 +1320,7 @@ export function buildDayMatrixFromApi(params: {
     if (lunch && lunch.start_time && lunch.end_time) {
       const ls = timeToSlotIndex(lunch.start_time);
       const le = timeToSlotIndex(lunch.end_time);
-      if (le > ls) {
+      if (le > ls && ls >= 46 && le <= 64) {
         lunchS = ls;
         lunchE = le;
       }
@@ -1367,7 +1367,7 @@ export function buildDayMatrixFromApi(params: {
         const gapStart = busyIntervals[idx].end;
         const gapEnd = busyIntervals[idx + 1].start;
         const gapSlots = gapEnd - gapStart;
-        if (gapSlots >= 2 && gapSlots <= 6 && gapStart >= 44 && gapEnd <= 62) {
+        if (gapSlots >= 2 && gapSlots <= 6 && gapStart >= 46 && gapEnd <= 62) {
           lunchS = gapStart;
           lunchE = gapEnd;
           break;

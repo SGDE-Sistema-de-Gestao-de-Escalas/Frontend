@@ -28,6 +28,7 @@ import {
   FileSpreadsheet,
   Printer,
   UserCheck,
+  Utensils,
   X
 } from "lucide-react";
 import {
@@ -202,7 +203,7 @@ export default function MatrixGrid({
     setHoveredLockTarget(null);
   }, [selectedSchoolId]);
 
-  type EditTool = "paint" | "lock" | "eraser";
+  type EditTool = "paint" | "lock" | "eraser" | "lunch";
   const [activeTool, setActiveTool] = useState<EditTool>("paint");
   const [hoveredLockTarget, setHoveredLockTarget] = useState<{ aid: EntityId; slot: number } | null>(null);
   const [paintType, setPaintType] = useState<BlockState>("work");
@@ -815,7 +816,7 @@ const [publishModalState, setPublishModalState] = useState<{
   }, [rulesForToday]);
 
   const availablePaintTypes = useMemo(() => {
-    return [...dayActivities, "off" as BlockState];
+    return [...dayActivities, "lunch" as BlockState, "off" as BlockState];
   }, [dayActivities]);
 
   useEffect(() => {
@@ -915,6 +916,14 @@ function paintSlot(aid: EntityId, slot: number) {
 
       if (paintType === "off") {
         delete assistantMeta[slot];
+      } else if (paintType === "lunch") {
+        assistantMeta[slot] = {
+          activityName: "Pausa Almoço",
+          activityColor: "#F97316",
+          activityTypeId: null,
+          ruleId: null,
+          isFallback: false,
+        };
       } else {
         const activeRule = highlightedRuleId
           ? dayRulesCatalog.find(
@@ -1398,10 +1407,39 @@ function paintSlot(aid: EntityId, slot: number) {
       let lunchSlotsCount = 0;
       let activeWorkSlots = 0;
 
+      let actualWorkSlots = 0;
+      let currentContinuousWork = 0;
+      let maxContinuousWork = 0;
+      let currentContinuousStart = -1;
+      let maxContStart = -1;
+      let maxContEnd = -1;
+      const lunchRanges: Array<{ start: number; end: number }> = [];
+      let currentLunchStart: number | null = null;
+
       for (let s = 0; s < row.length; s++) {
         const st = row[s];
-        if (st !== "off" && st !== "absent") {
+        if (st === "lunch") {
+          lunchSlotsCount++;
+          if (currentLunchStart === null) currentLunchStart = s;
+        } else if (currentLunchStart !== null) {
+          lunchRanges.push({ start: currentLunchStart, end: s });
+          currentLunchStart = null;
+        }
+
+        const isActualWork = st !== "off" && st !== "absent" && st !== "lunch";
+        if (isActualWork) {
+          actualWorkSlots++;
           activeWorkSlots++;
+          if (currentContinuousWork === 0) {
+            currentContinuousStart = s;
+          }
+          currentContinuousWork++;
+          if (currentContinuousWork > maxContinuousWork) {
+            maxContinuousWork = currentContinuousWork;
+            maxContStart = currentContinuousStart;
+            maxContEnd = s + 1;
+          }
+
           if (
             s < targetStatus.viewStartSlot ||
             s >= targetStatus.viewEndSlot
@@ -1419,10 +1457,14 @@ function paintSlot(aid: EntityId, slot: number) {
               outOfShiftSlots.push(s);
             }
           }
+        } else {
+          currentContinuousWork = 0;
+          currentContinuousStart = -1;
         }
-        if (st === "lunch") {
-          lunchSlotsCount++;
-        }
+      }
+
+      if (currentLunchStart !== null) {
+        lunchRanges.push({ start: currentLunchStart, end: row.length });
       }
 
       if (outOfShiftSlots.length > 0) {
@@ -1464,16 +1506,48 @@ function paintSlot(aid: EntityId, slot: number) {
         });
       }
 
-      if (activeWorkSlots >= 20 && lunchSlotsCount < 2) {
+      // Validação Legal (Artigo 213.º do Código do Trabalho):
+      // 1. Limite máximo de 5 horas consecutivas de trabalho contínuo sem intervalo de descanso (20 slots = 5h)
+      if (maxContinuousWork > 20) {
+        const firstCont = TIME_SLOTS[maxContStart] ?? "00:00";
+        const lastCont = TIME_SLOTS[Math.min(maxContEnd, 95)] ?? "24:00";
+        warnings.push({
+          id: `consecutive-work-${a.id}`,
+          severity: "warning",
+          title: `Mais de 5 horas seguidas sem pausa: ${a.name}`,
+          detail: `Trabalha ${formatDurationSlots(
+            maxContinuousWork
+          )} consecutivas (${firstCont}–${lastCont}) sem intervalo de descanso (limite legal: 5h).`,
+        });
+      }
+
+      // 2. Obrigatoriedade de pausa de almoço apenas se a jornada diária efetiva for superior a 5 horas
+      if (actualWorkSlots > 20 && lunchSlotsCount < 2) {
         warnings.push({
           id: `lunch-${a.id}`,
           severity: "warning",
           title: `Pausa de almoço insuficiente: ${a.name}`,
-          detail: `Tem apenas ${formatDurationSlots(
+          detail: `Com ${formatDurationSlots(
+            actualWorkSlots
+          )} de trabalho no dia, tem apenas ${formatDurationSlots(
             lunchSlotsCount
-          )} de Pausa de Almoço marcada neste dia.`,
+          )} de Pausa de Almoço marcada (mínimo legal: 1h).`,
         });
       }
+
+      // 3. Pausa de almoço fora da janela habitual de refeição (11:30 às 15:00)
+      lunchRanges.forEach((lr, lIdx) => {
+        if (lr.start < 46 || lr.end > 60) {
+          const lsStr = TIME_SLOTS[lr.start] ?? "00:00";
+          const leStr = TIME_SLOTS[Math.min(lr.end, 95)] ?? "24:00";
+          warnings.push({
+            id: `lunch-odd-${a.id}-${lIdx}`,
+            severity: "warning",
+            title: `Pausa de almoço em horário atípico: ${a.name}`,
+            detail: `Pausa de almoço marcada das ${lsStr} às ${leStr}. O intervalo habitual de refeição situa-se entre as 11:30 e as 15:00.`,
+          });
+        }
+      });
     });
 
     // 4. Detetar espaços em branco / horário incompleto para assistentes escalados
@@ -3240,7 +3314,23 @@ function paintSlot(aid: EntityId, slot: number) {
                   {/* Lado Esquerdo: Ações, Bloqueio, Limpeza e Destacar */}
                   <div className="flex items-center gap-2.5 flex-wrap min-w-0">
                     {/* Indicador de Pintura da Regra Selecionada */}
-                    {selectedRuleEval ? (
+                    {activeTool === "lunch" ? (
+                      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/30 text-xs font-semibold text-orange-600 dark:text-orange-400 shadow-2xs">
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#F97316]" />
+                        <span>Pintar: Pausa de Almoço</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTool("paint");
+                            setPaintType("work");
+                          }}
+                          className="ml-1 text-orange-600/70 hover:text-orange-600 cursor-pointer p-0.5 rounded hover:bg-orange-500/20"
+                          title="Desmarcar pausa de almoço"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ) : selectedRuleEval ? (
                       <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-xs font-semibold text-primary shadow-2xs">
                         <span
                           className={`w-2.5 h-2.5 rounded-full ${
@@ -3343,6 +3433,12 @@ function paintSlot(aid: EntityId, slot: number) {
                   </div>
 
                   {/* Dica Contextual à Direita */}
+                  {activeTool === "lunch" && (
+                    <div className="flex items-center gap-1.5 text-xs text-orange-600 dark:text-orange-400 font-medium animate-in fade-in-50">
+                      <Utensils size={12} className="shrink-0" />
+                      <span>Arrasta ou clica na grelha para pintar a Pausa de Almoço</span>
+                    </div>
+                  )}
                   {activeTool === "lock" && (
                     <div className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300 font-medium animate-in fade-in-50">
                       <Lock size={12} className="shrink-0 text-amber-600 dark:text-amber-400" />
