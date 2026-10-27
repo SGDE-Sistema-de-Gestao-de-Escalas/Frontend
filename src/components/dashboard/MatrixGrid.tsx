@@ -296,7 +296,12 @@ const [publishModalState, setPublishModalState] = useState<{
   const schedulesList = bootstrapData?.schedules || [];
   const absencesRes = bootstrapData?.absences;
   const scheduleRules = bootstrapData?.schedule_rules || [];
-  const activityTypes = bootstrapData?.activity_types || [];
+  const rawActivityTypes = bootstrapData?.activity_types || [];
+  const activityTypes = useMemo(() => {
+    return rawActivityTypes.filter(
+      (at) => !at.school_id || String(at.school_id) === String(selectedSchoolId)
+    );
+  }, [rawActivityTypes, selectedSchoolId]);
   const calendarDays = bootstrapData?.operating_calendar || [];
   const operatingRules = bootstrapData?.operating_rules || [];
   const operatingExceptions = bootstrapData?.operating_exceptions || [];
@@ -541,14 +546,17 @@ const [publishModalState, setPublishModalState] = useState<{
     activityTypes
       .filter((at) => at.active !== false)
       .forEach((at) => {
+        const normName = at.name.trim().toLowerCase();
+        if (seenNames.has(normName)) return;
+        seenNames.add(normName);
+
         const isLunchSurveillance =
-          at.name.toLowerCase().includes("vigilância almoço") ||
-          at.name.toLowerCase().includes("vigilancia almoco");
+          normName.includes("vigilância almoço") ||
+          normName.includes("vigilancia almoco");
         const color =
           isLunchSurveillance && (at.color === "#EF4444" || !at.color)
             ? "#A855F7"
             : at.color || "#3B82F6";
-        seenNames.add(at.name.toLowerCase());
         items.push({
           key: `act-${at.id}`,
           name: at.name,
@@ -560,11 +568,13 @@ const [publishModalState, setPublishModalState] = useState<{
       Object.values(slotMetaByAssistant).forEach((metaRow) => {
         if (!metaRow) return;
         Object.values(metaRow).forEach((meta) => {
-          if (meta?.activityName && !seenNames.has(meta.activityName.toLowerCase())) {
-            seenNames.add(meta.activityName.toLowerCase());
+          if (!meta?.activityName) return;
+          const normName = meta.activityName.trim().toLowerCase();
+          if (!seenNames.has(normName)) {
+            seenNames.add(normName);
             const isLunchSurveillance =
-              meta.activityName.toLowerCase().includes("vigilância almoço") ||
-              meta.activityName.toLowerCase().includes("vigilancia almoco");
+              normName.includes("vigilância almoço") ||
+              normName.includes("vigilancia almoco");
             const color =
               isLunchSurveillance && (meta.activityColor === "#EF4444" || !meta.activityColor)
                 ? "#A855F7"
@@ -590,16 +600,32 @@ const [publishModalState, setPublishModalState] = useState<{
       );
     }
 
-    items.push({
-      key: "system-lunch",
-      name: "Pausa Almoço",
-      color: "#F97316",
-    });
-    items.push({
-      key: "system-absent",
-      name: "Falta / Ausência",
-      color: "#EF4444",
-    });
+    if (
+      !seenNames.has("pausa almoço") &&
+      !seenNames.has("pausa almoco") &&
+      !seenNames.has("almoço") &&
+      !seenNames.has("almoco")
+    ) {
+      seenNames.add("pausa almoço");
+      items.push({
+        key: "system-lunch",
+        name: "Pausa Almoço",
+        color: "#F97316",
+      });
+    }
+    if (
+      !seenNames.has("falta / ausência") &&
+      !seenNames.has("falta") &&
+      !seenNames.has("ausência") &&
+      !seenNames.has("ausencia")
+    ) {
+      seenNames.add("falta / ausência");
+      items.push({
+        key: "system-absent",
+        name: "Falta / Ausência",
+        color: "#EF4444",
+      });
+    }
 
     return items;
   }, [activityTypes, slotMetaByAssistant]);
