@@ -163,6 +163,7 @@ export default function AbsenceManagement() {
   const [formAssistantId, setFormAssistantId] = useState<string>("");
   const [formAbsenceTypeId, setFormAbsenceTypeId] = useState<string>("");
   const [formStartDate, setFormStartDate] = useState<string>(todayStr);
+  const [formIsFullDay, setFormIsFullDay] = useState<boolean>(true);
   const [formStartTime, setFormStartTime] = useState<string>("08:00");
   const [formEndDate, setFormEndDate] = useState<string>(todayStr);
   const [formEndTime, setFormEndTime] = useState<string>("17:00");
@@ -1163,75 +1164,97 @@ export default function AbsenceManagement() {
             </div>
 
             {/* Datas e Horas */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                  Data de Início *
-                </label>
-                <DatePicker
-                  value={formStartDate}
-                  hasError={!!formErrors.startDate}
-                  onChange={(v) => {
-                    setFormStartDate(v);
-                    if (formErrors.startDate) {
-                      setFormErrors((p) => ({ ...p, startDate: undefined }));
-                    }
-                    if (v && formEndDate && formEndDate < v) {
+            <div className="space-y-3">
+              {/* Opção Dia Inteiro vs Período com Horas */}
+              <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/20">
+                <div>
+                  <span className="text-xs font-semibold text-foreground block">Dia Inteiro</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    A ausência cobre a totalidade do horário de trabalho do assistente
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formIsFullDay}
+                  onChange={(e) => setFormIsFullDay(e.target.checked)}
+                  className="w-4 h-4 rounded text-primary focus:ring-primary border-border cursor-pointer"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                    Data de Início *
+                  </label>
+                  <DatePicker
+                    value={formStartDate}
+                    hasError={!!formErrors.startDate}
+                    onChange={(v) => {
+                      setFormStartDate(v);
+                      if (formErrors.startDate) {
+                        setFormErrors((p) => ({ ...p, startDate: undefined }));
+                      }
+                      if (v && formEndDate && formEndDate < v) {
+                        setFormEndDate(v);
+                      }
+                    }}
+                    className="w-full"
+                  />
+                  {formErrors.startDate && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {formErrors.startDate}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                    Data de Fim *
+                  </label>
+                  <DatePicker
+                    value={formEndDate}
+                    hasError={!!formErrors.endDate}
+                    minDate={formStartDate || undefined}
+                    onChange={(v) => {
                       setFormEndDate(v);
-                    }
-                  }}
-                  className="w-full"
-                />
-                {formErrors.startDate && (
-                  <p className="text-[11px] text-destructive mt-1 font-medium">
-                    {formErrors.startDate}
-                  </p>
+                      if (formErrors.endDate) {
+                        setFormErrors((p) => ({ ...p, endDate: undefined }));
+                      }
+                    }}
+                    className="w-full"
+                  />
+                  {formErrors.endDate && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {formErrors.endDate}
+                    </p>
+                  )}
+                </div>
+
+                {!formIsFullDay && (
+                  <>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                        Hora Inicial
+                      </label>
+                      <TimePicker
+                        value={formStartTime}
+                        onChange={setFormStartTime}
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                        Hora Final
+                      </label>
+                      <TimePicker
+                        value={formEndTime}
+                        onChange={setFormEndTime}
+                        className="w-full"
+                      />
+                    </div>
+                  </>
                 )}
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                  Hora Inicial
-                </label>
-                <TimePicker
-                  value={formStartTime}
-                  onChange={setFormStartTime}
-                  className="w-full"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                  Data de Fim *
-                </label>
-                <DatePicker
-                  value={formEndDate}
-                  hasError={!!formErrors.endDate}
-                  minDate={formStartDate || undefined}
-                  onChange={(v) => {
-                    setFormEndDate(v);
-                    if (formErrors.endDate) {
-                      setFormErrors((p) => ({ ...p, endDate: undefined }));
-                    }
-                  }}
-                  className="w-full"
-                />
-                {formErrors.endDate && (
-                  <p className="text-[11px] text-destructive mt-1 font-medium">
-                    {formErrors.endDate}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                  Hora Final
-                </label>
-                <TimePicker
-                  value={formEndTime}
-                  onChange={setFormEndTime}
-                  className="w-full"
-                />
               </div>
             </div>
 
