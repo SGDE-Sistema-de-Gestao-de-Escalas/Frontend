@@ -242,10 +242,10 @@ export default function MatrixGrid({
   }
     const [printModalState, setPrintModalState] = useState<{
     open: boolean;
-    initialTab: "wall" | "individual";
+    initialDocModel?: "wall" | "individual";
   }>({
     open: false,
-    initialTab: "wall",
+    initialDocModel: "wall",
   });
 
 const [publishModalState, setPublishModalState] = useState<{
@@ -2706,85 +2706,20 @@ function paintSlot(aid: EntityId, slot: number) {
 
                   <div className="h-4 w-[1px] bg-border mx-0.5" />
 
-                  {/* Dropdown Menu Imprimir / Exportar */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
-                      >
-                        <Printer size={12} />
-                        <span>Imprimir / Exportar</span>
-                        <ChevronDown size={11} className="opacity-70 ml-0.5" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56 p-1.5">
-                      <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1">
-                        Documentos para Impressão
-                      </DropdownMenuLabel>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          setPrintModalState({
-                            open: true,
-                            initialTab: "wall",
-                          })
-                        }
-                        className="flex items-center gap-2.5 cursor-pointer text-xs py-2 px-2.5 rounded-lg"
-                      >
-                        <Printer size={14} className="shrink-0 text-muted-foreground group-focus/dropdown-item:text-foreground group-hover/dropdown-item:text-foreground transition-colors" />
-                        <div>
-                          <div className="font-medium text-foreground">Escala do Dia (Afixação)</div>
-                          <div className="text-[10px] text-muted-foreground">Formato oficial para o placard</div>
-                        </div>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          setPrintModalState({
-                            open: true,
-                            initialTab: "individual",
-                          })
-                        }
-                        className="flex items-center gap-2.5 cursor-pointer text-xs py-2 px-2.5 rounded-lg"
-                      >
-                        <UserCheck size={14} className="shrink-0 text-muted-foreground group-focus/dropdown-item:text-foreground group-hover/dropdown-item:text-foreground transition-colors" />
-                        <div>
-                          <div className="font-medium text-foreground">Horários Individuais</div>
-                          <div className="text-[10px] text-muted-foreground">Fichas para entrega e assinatura</div>
-                        </div>
-                      </DropdownMenuItem>
-
-                      <DropdownMenuSeparator className="my-1" />
-
-                      <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1">
-                        Exportação de Dados
-                      </DropdownMenuLabel>
-                      <DropdownMenuItem
-                        onClick={handleExportDayCsv}
-                        className="flex items-center gap-2.5 cursor-pointer text-xs py-2 px-2.5 rounded-lg"
-                      >
-                        <FileSpreadsheet size={14} className="shrink-0 text-muted-foreground group-focus/dropdown-item:text-foreground group-hover/dropdown-item:text-foreground transition-colors" />
-                        <div>
-                          <div className="font-medium text-foreground">Descarregar Excel / CSV</div>
-                          <div className="text-[10px] text-muted-foreground">Tabela com horários e postos</div>
-                        </div>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          setPrintModalState({
-                            open: true,
-                            initialTab: "wall",
-                          })
-                        }
-                        className="flex items-center gap-2.5 cursor-pointer text-xs py-2 px-2.5 rounded-lg"
-                      >
-                        <Eye size={14} className="shrink-0 text-muted-foreground group-focus/dropdown-item:text-foreground group-hover/dropdown-item:text-foreground transition-colors" />
-                        <div>
-                          <div className="font-medium text-foreground">Pré-visualizar Tudo...</div>
-                          <div className="text-[10px] text-muted-foreground">Abrir central de documentos</div>
-                        </div>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  {/* Botão Imprimir / Exportar */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPrintModalState({
+                        open: true,
+                        initialDocModel: "wall",
+                      })
+                    }
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
+                  >
+                    <Printer size={12} />
+                    <span>Imprimir / Exportar</span>
+                  </button>
                 </div>
               )}
 
@@ -4258,10 +4193,10 @@ function paintSlot(aid: EntityId, slot: number) {
       </Dialog>
 
       {/* Modal de Publicação de Escalas (Rascunho -> Publicada) */}
-            <PrintScheduleModal
+      <PrintScheduleModal
         open={printModalState.open}
         onClose={() => setPrintModalState((prev) => ({ ...prev, open: false }))}
-        initialTab={printModalState.initialTab}
+        initialDocModel={printModalState.initialDocModel}
         schoolName={selectedSchool?.name || "Escola"}
         agrupamentoName={agrupamento?.name || "Agrupamento de Escolas"}
         dateInfo={{
@@ -4272,6 +4207,13 @@ function paintSlot(aid: EntityId, slot: number) {
         operatingWindowStr={operatingWindowStr}
         workingAssistants={printableWorkingAssistants}
         absentAssistants={printableAbsentAssistants}
+        activeAssistants={activeAssistants}
+        schedulesList={schedulesList}
+        absences={absencesRes?.data || []}
+        operatingSources={operatingSources}
+        profilesByAssistant={profilesByAssistant}
+        exceptionsByAssistant={exceptionsByAssistant}
+        lunchBlocksByDate={lunchBlocksByDate}
       />
 
       <PublishSchedulesModal

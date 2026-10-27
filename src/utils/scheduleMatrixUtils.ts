@@ -471,7 +471,7 @@ export function resolveSchoolDayStatusByIsoDate(
           reasonType: "exception",
           title: `Estabelecimento Encerrado — ${exceptionName}`,
           detail:
-            matchingException?.detail ||
+            matchingException?.status_message ||
             "Encerramento excecional definido nas regras de funcionamento da escola.",
           closedLabel: exceptionName,
           viewStartSlot: VIEW_START,
@@ -563,7 +563,7 @@ export function resolveSchoolDayStatusByIsoDate(
         reasonType: "exception",
         title: `Estabelecimento Encerrado — ${matchingException.name}`,
         detail:
-          matchingException.detail ||
+          matchingException.status_message ||
           "Encerramento excecional definido nas regras de funcionamento da escola.",
         closedLabel: matchingException.name || "Exceção de Funcionamento",
         viewStartSlot: VIEW_START,
