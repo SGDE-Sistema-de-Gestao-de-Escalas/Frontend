@@ -427,7 +427,7 @@ const [publishModalState, setPublishModalState] = useState<{
       };
     });
 
-    // Adiciona a atividade de Fallback (ex: Apoio Escola / Apoio Turmas/escola) para estar disponível na lista de regras para pintar
+    // Adiciona exatamente UMA atividade de Fallback (ex: Apoio Escola) para estar disponível na lista de regras para pintar
     const fallbackActivities = activityTypes.filter(
       (at) =>
         Boolean(at.is_fallback) ||
@@ -435,42 +435,28 @@ const [publishModalState, setPublishModalState] = useState<{
         (at.is_fallback as any) === "1"
     );
 
-    if (fallbackActivities.length > 0) {
-      fallbackActivities.forEach((fbAct) => {
-        rules.push({
-          id: `fallback-${fbAct.id}`,
-          title: fbAct.name || "Apoio Escola",
-          state: mapActivityToBlockState(fbAct.name, true),
-          startSlot: 24,
-          endSlot: 84,
-          min: 0,
-          type: "fallback",
-          daysOfWeek: [0, 1, 2, 3, 4],
-          priorityNames: ["Sem restrição de fila"],
-          isFallback: true,
-        });
-      });
-    } else {
-      // Se não houver explicitamente is_fallback = true na BD, procura pelo nome "Apoio" ou usa a predefinida
-      const fallbackByName = activityTypes.find(
+    const primaryFallback =
+      fallbackActivities[0] ||
+      activityTypes.find(
         (at) =>
           at.name?.toLowerCase().includes("apoio escola") ||
           at.name?.toLowerCase().includes("apoio geral") ||
           at.name?.toLowerCase().includes("apoio turmas")
-      );
-      rules.push({
-        id: fallbackByName ? `fallback-${fallbackByName.id}` : "fallback-default",
-        title: fallbackByName?.name || "Apoio Escola",
-        state: "work",
-        startSlot: 24,
-        endSlot: 84,
-        min: 0,
-        type: "fallback",
-        daysOfWeek: [0, 1, 2, 3, 4],
-        priorityNames: ["Atividade padrão de preenchimento"],
-        isFallback: true,
-      });
-    }
+      ) ||
+      null;
+
+    rules.push({
+      id: primaryFallback ? `fallback-${primaryFallback.id}` : "fallback-default",
+      title: primaryFallback?.name || "Apoio Escola",
+      state: primaryFallback ? mapActivityToBlockState(primaryFallback.name, true) : "work",
+      startSlot: 24,
+      endSlot: 84,
+      min: 0,
+      type: "fallback",
+      daysOfWeek: [0, 1, 2, 3, 4],
+      priorityNames: ["Todos os Assistentes"],
+      isFallback: true,
+    });
 
     return rules;
   }, [scheduleRules, activityTypes]);
@@ -3003,9 +2989,10 @@ const [publishModalState, setPublishModalState] = useState<{
                         const isDimmedBySpotlight =
                           isSpotlightActive && !matchesPaintActivity;
 
-                        const rangeStr = rule.isFallback
-                          ? "Sem restrição horária"
+                        const timeRangeStr = rule.isFallback
+                          ? null
                           : `${TIME_SLOTS[rule.startSlot]}–${TIME_SLOTS[rule.endSlot]}`;
+
                         return (
                           <button
                             key={rule.id}
@@ -3016,7 +3003,7 @@ const [publishModalState, setPublishModalState] = useState<{
                                 isRuleSelected ? null : rule.id
                               );
                             }}
-                            className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1.5 ${
+                            className={`px-3 py-2 rounded-xl border text-left transition-all flex flex-col justify-center gap-1 ${
                               isRuleSelected
                                 ? "border-primary bg-primary/8 ring-2 ring-primary/35 shadow-xs"
                                 : matchesPaintActivity
@@ -3028,8 +3015,9 @@ const [publishModalState, setPublishModalState] = useState<{
                                 : "opacity-100"
                             }`}
                           >
+                            {/* Linha 1: Nome da regra + Horário à frente + Tipo + Contador */}
                             <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-1.5 min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
                                 <span
                                   className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
                                     BLOCK_STYLES[rule.state].bg
@@ -3038,56 +3026,59 @@ const [publishModalState, setPublishModalState] = useState<{
                                 <span className="text-xs font-semibold text-foreground truncate">
                                   {rule.title}
                                 </span>
+                                {timeRangeStr && (
+                                  <span className="text-[11px] font-mono font-medium text-muted-foreground/80 flex-shrink-0">
+                                    {timeRangeStr}
+                                  </span>
+                                )}
                               </div>
-                              {rule.isFallback ? (
-                                <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded flex items-center gap-1 flex-shrink-0 bg-blue-100 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border border-blue-200/50 dark:border-blue-800/50">
-                                  <Sparkles size={10} />
-                                  Fallback ({rule.assigned})
-                                </span>
-                              ) : (
+
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
                                 <span
-                                  className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded flex items-center gap-1 flex-shrink-0 ${
-                                    rule.isMet
-                                      ? "bg-[#0E7C59]/15 text-[#0E7C59]"
+                                  className={`uppercase tracking-wider font-semibold text-[9px] ${
+                                    rule.isFallback
+                                      ? "text-muted-foreground"
                                       : rule.type === "mandatory"
-                                      ? "bg-destructive/15 text-destructive"
-                                      : "bg-[#D97706]/15 text-[#D97706]"
+                                      ? "text-primary"
+                                      : "text-muted-foreground"
                                   }`}
                                 >
-                                  {rule.isMet ? (
-                                    <CheckCircle2 size={10} />
-                                  ) : (
-                                    <AlertTriangle size={10} />
-                                  )}
-                                  {rule.assigned}/{rule.min}
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                              <span className="font-mono font-medium text-foreground/80">
-                                {rangeStr} · {rule.title}
-                              </span>
-                              <span
-                                className={`uppercase tracking-wider font-semibold text-[9px] ${
-                                  rule.isFallback
-                                    ? "text-blue-600 dark:text-blue-400 font-bold"
+                                  {rule.isFallback
+                                    ? "Fallback"
                                     : rule.type === "mandatory"
-                                    ? "text-primary"
-                                    : "text-muted-foreground"
-                                }`}
-                              >
-                                {rule.isFallback
-                                  ? "Atividade Fallback"
-                                  : rule.type === "mandatory"
-                                  ? "Obrigatória"
-                                  : "Facultativa"}
-                              </span>
+                                    ? "Obrigatória"
+                                    : "Facultativa"}
+                                </span>
+
+                                {rule.isFallback ? (
+                                  <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground flex-shrink-0">
+                                    {rule.assigned}
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded flex items-center gap-1 flex-shrink-0 ${
+                                      rule.isMet
+                                        ? "bg-[#0E7C59]/15 text-[#0E7C59]"
+                                        : rule.type === "mandatory"
+                                        ? "bg-destructive/15 text-destructive"
+                                        : "bg-[#D97706]/15 text-[#D97706]"
+                                    }`}
+                                  >
+                                    {rule.isMet ? (
+                                      <CheckCircle2 size={10} />
+                                    ) : (
+                                      <AlertTriangle size={10} />
+                                    )}
+                                    {rule.assigned}/{rule.min}
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
+                            {/* Linha 2: Fila / Preenchimento */}
                             <p className="text-[10px] text-muted-foreground truncate">
                               {rule.isFallback
-                                ? "Atividade padrão de preenchimento e apoio escolar"
+                                ? "Atividade padrão de preenchimento flexível"
                                 : `Fila: ${rule.priorityNames.join(" · ")}`}
                             </p>
                           </button>
