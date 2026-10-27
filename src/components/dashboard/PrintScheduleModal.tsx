@@ -1,21 +1,16 @@
 import { useMemo, useState, useEffect } from "react";
-import {
-  Calendar,
-  FileSpreadsheet,
-  FileText,
-  Printer,
-  UserCheck,
-  Users,
-} from "lucide-react";
+import { Printer } from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
+import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import DatePicker from "../common/DatePicker";
 import {
   Select,
@@ -1000,18 +995,18 @@ export default function PrintScheduleModal({
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
       <DialogContent className="w-full max-w-xl p-0 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
         {/* Header do Modal */}
-        <DialogHeader className="px-6 py-5 border-b border-border bg-muted/10">
+        <DialogHeader className="px-6 py-5 border-b border-border bg-card">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-xs">
               <Printer size={20} />
             </div>
             <div>
-              <DialogTitle className="text-base font-semibold text-foreground flex items-center gap-2">
+              <DialogTitle className="text-base font-semibold text-foreground">
                 Imprimir e Exportar Horários
               </DialogTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                 {schoolName} · {agrupamentoName}
-              </p>
+              </DialogDescription>
             </div>
           </div>
         </DialogHeader>
@@ -1020,9 +1015,8 @@ export default function PrintScheduleModal({
         <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
           {/* SECÇÃO 1: INTERVALO DE DATAS */}
           <div className="space-y-2.5">
-            <label className="text-xs font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <Calendar size={13} className="text-primary" />
-              <span>Intervalo de Datas</span>
+            <label className="text-xs font-semibold text-foreground uppercase tracking-wide">
+              Intervalo de Datas
             </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1102,110 +1096,68 @@ export default function PrintScheduleModal({
           <div className="h-px bg-border/60" />
 
           {/* SECÇÃO 2: MODELO DE DOCUMENTO */}
-          <div className="space-y-3">
-            <label className="text-xs font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <FileText size={13} className="text-primary" />
-              <span>Modelo de Documento</span>
+          <div className="space-y-2.5">
+            <label className="text-xs font-semibold text-foreground uppercase tracking-wide">
+              Modelo de Documento:
             </label>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Card 1: Afixação */}
-              <button
-                type="button"
-                onClick={() => setDocModel("wall")}
-                className={cn(
-                  "relative p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2.5",
+            <RadioGroup
+              value={docModel}
+              onValueChange={(val) => setDocModel(val as "wall" | "individual")}
+              className="grid grid-cols-1 sm:grid-cols-2 gap-2.5"
+            >
+              <label
+                htmlFor="model-wall"
+                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                   docModel === "wall"
-                    ? "border-primary bg-primary/5 ring-1 ring-primary shadow-xs"
-                    : "border-border bg-card hover:bg-muted/50 hover:border-border/80"
-                )}
+                    ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
+                    : "border-border bg-card/60 hover:bg-muted/40 hover:border-border/80"
+                }`}
               >
-                <div className="flex items-start justify-between">
-                  <div
-                    className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center",
-                      docModel === "wall"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    <FileText size={16} />
-                  </div>
-                  <div
-                    className={cn(
-                      "w-4 h-4 rounded-full border flex items-center justify-center transition-colors",
-                      docModel === "wall"
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-muted-foreground/40"
-                    )}
-                  >
-                    {docModel === "wall" && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-foreground">
+                <RadioGroupItem
+                  value="wall"
+                  id="model-wall"
+                  className="mt-0.5"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground">
                     Escala Diária (Para Afixação)
-                  </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
                     Mapa geral completo com equipa e turnos para afixar no placard.
-                  </div>
+                  </p>
                 </div>
-              </button>
+              </label>
 
-              {/* Card 2: Fichas Individuais */}
-              <button
-                type="button"
-                onClick={() => setDocModel("individual")}
-                className={cn(
-                  "relative p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2.5",
+              <label
+                htmlFor="model-individual"
+                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                   docModel === "individual"
-                    ? "border-primary bg-primary/5 ring-1 ring-primary shadow-xs"
-                    : "border-border bg-card hover:bg-muted/50 hover:border-border/80"
-                )}
+                    ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
+                    : "border-border bg-card/60 hover:bg-muted/40 hover:border-border/80"
+                }`}
               >
-                <div className="flex items-start justify-between">
-                  <div
-                    className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center",
-                      docModel === "individual"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    <UserCheck size={16} />
-                  </div>
-                  <div
-                    className={cn(
-                      "w-4 h-4 rounded-full border flex items-center justify-center transition-colors",
-                      docModel === "individual"
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-muted-foreground/40"
-                    )}
-                  >
-                    {docModel === "individual" && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-foreground">
+                <RadioGroupItem
+                  value="individual"
+                  id="model-individual"
+                  className="mt-0.5"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground">
                     Fichas Individuais (Para Entrega)
-                  </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
                     Talões com horário, pausas e postos para assinatura e conhecimento.
-                  </div>
+                  </p>
                 </div>
-              </button>
-            </div>
+              </label>
+            </RadioGroup>
 
             {/* Seletor Customizado de Assistente quando Fichas Individuais */}
             {docModel === "individual" && (
               <div className="space-y-1.5 p-3 rounded-xl border border-border bg-muted/20 animate-in fade-in-50 duration-200">
-                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <Users size={13} className="text-primary" />
-                  <span>Assistente a emitir:</span>
+                <label className="text-xs font-medium text-foreground block">
+                  Assistente a emitir:
                 </label>
                 <Select
                   value={selectedAssistantFilter}
@@ -1243,108 +1195,67 @@ export default function PrintScheduleModal({
           <div className="h-px bg-border/60" />
 
           {/* SECÇÃO 3: FORMATO DE SAÍDA */}
-          <div className="space-y-3">
-            <label className="text-xs font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <Printer size={13} className="text-primary" />
-              <span>Formato de Saída</span>
+          <div className="space-y-2.5">
+            <label className="text-xs font-semibold text-foreground uppercase tracking-wide">
+              Formato de Saída:
             </label>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Formato 1: PDF / Impressão */}
-              <button
-                type="button"
-                onClick={() => setOutputFormat("pdf")}
-                className={cn(
-                  "relative p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2.5",
+            <RadioGroup
+              value={outputFormat}
+              onValueChange={(val) => setOutputFormat(val as "pdf" | "csv")}
+              className="grid grid-cols-1 sm:grid-cols-2 gap-2.5"
+            >
+              <label
+                htmlFor="format-pdf"
+                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                   outputFormat === "pdf"
-                    ? "border-primary bg-primary/5 ring-1 ring-primary shadow-xs"
-                    : "border-border bg-card hover:bg-muted/50 hover:border-border/80"
-                )}
+                    ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
+                    : "border-border bg-card/60 hover:bg-muted/40 hover:border-border/80"
+                }`}
               >
-                <div className="flex items-start justify-between">
-                  <div
-                    className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center",
-                      outputFormat === "pdf"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    <Printer size={16} />
-                  </div>
-                  <div
-                    className={cn(
-                      "w-4 h-4 rounded-full border flex items-center justify-center transition-colors",
-                      outputFormat === "pdf"
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-muted-foreground/40"
-                    )}
-                  >
-                    {outputFormat === "pdf" && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-foreground">
+                <RadioGroupItem
+                  value="pdf"
+                  id="format-pdf"
+                  className="mt-0.5"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground">
                     PDF / Impressão Direta
-                  </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
                     Abre o diálogo de impressão ou guarda diretamente em PDF A4.
-                  </div>
+                  </p>
                 </div>
-              </button>
+              </label>
 
-              {/* Formato 2: Excel / CSV */}
-              <button
-                type="button"
-                onClick={() => setOutputFormat("csv")}
-                className={cn(
-                  "relative p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2.5",
+              <label
+                htmlFor="format-csv"
+                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                   outputFormat === "csv"
-                    ? "border-primary bg-primary/5 ring-1 ring-primary shadow-xs"
-                    : "border-border bg-card hover:bg-muted/50 hover:border-border/80"
-                )}
+                    ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
+                    : "border-border bg-card/60 hover:bg-muted/40 hover:border-border/80"
+                }`}
               >
-                <div className="flex items-start justify-between">
-                  <div
-                    className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center",
-                      outputFormat === "csv"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    <FileSpreadsheet size={16} />
-                  </div>
-                  <div
-                    className={cn(
-                      "w-4 h-4 rounded-full border flex items-center justify-center transition-colors",
-                      outputFormat === "csv"
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-muted-foreground/40"
-                    )}
-                  >
-                    {outputFormat === "csv" && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-foreground">
+                <RadioGroupItem
+                  value="csv"
+                  id="format-csv"
+                  className="mt-0.5"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground">
                     Excel / CSV (.csv)
-                  </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
                     Tabela estruturada com UTF-8 BOM compatível com Microsoft Excel.
-                  </div>
+                  </p>
                 </div>
-              </button>
-            </div>
+              </label>
+            </RadioGroup>
           </div>
         </div>
 
         {/* Footer do Modal */}
-        <DialogFooter className="px-6 py-4 border-t border-border bg-muted/10 flex items-center justify-between gap-3">
+        <DialogFooter className="px-6 py-4 border-t border-border bg-card flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-xs font-normal">
               {selectedDaysCount} {selectedDaysCount === 1 ? "dia" : "dias"}
@@ -1359,28 +1270,22 @@ export default function PrintScheduleModal({
             <Button
               type="button"
               variant="outline"
+              size="sm"
               onClick={onClose}
-              className="text-xs font-medium cursor-pointer"
+              className="cursor-pointer"
             >
               Cancelar
             </Button>
             <Button
               type="button"
+              size="sm"
               onClick={handleExecute}
               disabled={selectedDaysCount === 0 || !!dateError}
-              className="text-xs font-semibold cursor-pointer gap-2"
+              className="cursor-pointer font-medium"
             >
-              {outputFormat === "pdf" ? (
-                <>
-                  <Printer size={14} />
-                  <span>Imprimir / Gerar PDF</span>
-                </>
-              ) : (
-                <>
-                  <FileSpreadsheet size={14} />
-                  <span>Descarregar CSV / Excel</span>
-                </>
-              )}
+              {outputFormat === "pdf"
+                ? "Imprimir / Gerar PDF"
+                : "Descarregar CSV / Excel"}
             </Button>
           </div>
         </DialogFooter>
