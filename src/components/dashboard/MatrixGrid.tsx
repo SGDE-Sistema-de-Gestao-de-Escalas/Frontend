@@ -3376,6 +3376,30 @@ function paintSlot(aid: EntityId, slot: number) {
                     {/* Separador vertical */}
                     <div className="h-5 w-[1px] bg-border hidden sm:block" />
 
+                    {/* Botão Pausa de Almoço */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeTool === "lunch") {
+                          setActiveTool("paint");
+                          setPaintType("work");
+                        } else {
+                          setActiveTool("lunch");
+                          setPaintType("lunch");
+                          setHighlightedRuleId(null);
+                        }
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                        activeTool === "lunch"
+                          ? "bg-orange-500 text-white font-semibold shadow-xs ring-2 ring-orange-500/40"
+                          : "border border-border bg-background text-muted-foreground hover:text-orange-600 dark:hover:text-orange-400 hover:border-orange-500/40 hover:bg-orange-500/10"
+                      }`}
+                      title="Pintar intervalo de pausa de almoço na grelha"
+                    >
+                      <Utensils size={12} />
+                      <span>Pausa de Almoço</span>
+                    </button>
+
                     {/* Botão Bloquear Tarefa */}
                     <button
                       type="button"
