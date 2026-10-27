@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { Eye, Loader2, Lock, UserX } from "lucide-react";
+import { useMemo } from "react";
+import { Loader2, Lock } from "lucide-react";
 import type { BlockState, EntityId } from "../../types";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -128,16 +128,6 @@ export default function AssistantDayModal({
     delivery: "border-l-[#10B981] bg-[#10B981]/8",
   };
 
-  const textMap: Record<BlockState, string> = {
-    work: "text-[#6366F1]",
-    surveillance: "text-[#A855F7]",
-    lunch: "text-[#F59E0B]",
-    absent: "text-destructive",
-    off: "text-muted-foreground",
-    cleaning: "text-[#06B6D4]",
-    collection: "text-[#EC4899]",
-    delivery: "text-[#10B981]",
-  };
 
   const summary = {
     work: 0,

@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSchool } from "../context/SchoolContext";
 import DashboardSection from "../components/dashboard/DashboardSection";
 import AssistantDayModal from "../components/dashboard/AssistantDayModal";
 import QuickAbsenceModal from "../components/dashboard/QuickAbsenceModal";
 import NoSchoolPlaceholder from "../components/common/NoSchoolPlaceholder";
-import type { EntityId, BlockState } from "../types";
-import type { SlotEntryMetadata } from "../utils/scheduleMatrixUtils";
+import type { EntityId } from "../types";
 
 export default function Dashboard() {
   const [selectedAssistantData, setSelectedAssistantData] = useState<{

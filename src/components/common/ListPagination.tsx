@@ -1,4 +1,3 @@
-import React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import CustomSelect from "./CustomSelect";
 import ActionTooltip from "./ActionTooltip";

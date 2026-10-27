@@ -2,7 +2,6 @@ import React from "react";
 import {
   BarChart2,
   Calendar,
-  FileText,
   Inbox,
   Menu,
   Users,
@@ -23,14 +22,14 @@ export default function MobileBottomNav({
   const { role } = useAuth();
   const isStaff = role === "staff";
 
-  const adminItems = [
+  const adminItems: Array<{ id: string; label: string; icon: React.ReactNode; badge?: number | string }> = [
     { id: "dashboard", label: "Dashboard", icon: <Calendar size={18} /> },
     { id: "assistants", label: "Assistentes", icon: <Users size={18} /> },
     { id: "absences", label: "Ausências", icon: <Inbox size={18} />, badge: 3 },
     { id: "reports", label: "Relatórios", icon: <BarChart2 size={18} /> },
   ];
 
-  const staffItems = [
+  const staffItems: Array<{ id: string; label: string; icon: React.ReactNode; badge?: number | string }> = [
     { id: "schedule", label: "Horário", icon: <Calendar size={18} /> },
     { id: "absences", label: "Ausências", icon: <Inbox size={18} /> },
   ];

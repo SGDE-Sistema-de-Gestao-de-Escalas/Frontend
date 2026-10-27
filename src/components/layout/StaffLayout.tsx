@@ -6,7 +6,6 @@ import Sidebar from "./Sidebar";
 import SidebarContent from "./SidebarContent";
 import TopHeader from "./TopHeader";
 import StaffScheduleSection from "../staff/StaffScheduleSection";
-import RegisterAbsence from "../staff/RegisterAbsence";
 import StaffAbsenceDetail from "../staff/StaffAbsenceDetail";
 import AccountProfilePage from "../settings/AccountProfilePage";
 

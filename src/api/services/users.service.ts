@@ -1,6 +1,6 @@
 import apiClient from "../client";
 import type { ApiResponse, PaginatedResponse } from "../types/api.types";
-import type { AdminUser, EntityId } from "../../types";
+import type { EntityId } from "../../types";
 
 export interface UserApiPayload {
   name?: string;

@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import assistantTemporaryAssignmentsService, {
-  type AssistantTemporaryAssignmentApi,
-  type ListTemporaryAssignmentsParams,
+    type ListTemporaryAssignmentsParams,
 } from "../../api/services/assistantTemporaryAssignments.service";
 import { useSchool } from "../../context/SchoolContext";
 import { schoolScopedKey } from "../../lib/queryClient";

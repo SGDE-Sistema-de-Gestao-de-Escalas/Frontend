@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   ArrowRightLeft,
@@ -21,7 +21,6 @@ import { Badge } from "../ui/badge";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "../ui/tooltip";
 import { Button } from "../ui/button";
@@ -136,7 +135,7 @@ function useStaffScheduleData(dayOffset: number) {
       per_page: 250,
     });
 
-  const { data: absencesRes, isLoading: isLoadingAbsences } = useAbsencesList({
+  const { data: absencesRes } = useAbsencesList({
     start_date: loadedRange.start,
     end_date: loadedRange.end,
     assistant_id: user.assistant_id ?? undefined,

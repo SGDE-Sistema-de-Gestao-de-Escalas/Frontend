@@ -51,7 +51,7 @@ export function useCreateHoliday() {
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: HOLIDAYS_QUERY_KEY });
       const msg = res?.message || "O feriado foi registado com sucesso no calendário.";
-      notify.success(msg, undefined, "Feriado Criado");
+      notify.success(msg, "Feriado Criado");
     },
     onError: (error: any) => {
       const message =
@@ -79,7 +79,7 @@ export function useUpdateHoliday() {
         queryKey: [...HOLIDAYS_QUERY_KEY, "detail", variables.id],
       });
       const msg = res?.message || "Os dados do feriado foram atualizados com sucesso.";
-      notify.success(msg, undefined, "Feriado Atualizado");
+      notify.success(msg, "Feriado Atualizado");
     },
     onError: (error: any) => {
       const message =
@@ -103,7 +103,7 @@ export function useDeleteHoliday() {
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: HOLIDAYS_QUERY_KEY });
       const msg = res?.message || "O feriado foi removido do calendário.";
-      notify.success(msg, undefined, "Feriado Removido");
+      notify.success(msg, "Feriado Removido");
     },
     onError: (error: any) => {
       const message =

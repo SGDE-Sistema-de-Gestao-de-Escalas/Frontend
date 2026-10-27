@@ -41,8 +41,11 @@ export interface BackendScheduleEntryResource {
 export interface BackendScheduleResource {
   id: string;
   school_id: string;
+  school_name?: string | null;
   assistant_id: string;
   assistant_name: string | null;
+  shift_start?: string | null;
+  shift_end?: string | null;
   is_temporary_transfer?: boolean;
   origin_school_id?: string | null;
   origin_school_name?: string | null;

@@ -21,6 +21,12 @@ import type {
   OperatingException,
   OperatingRule,
 } from "../types/operatingHours.types";
+
+export type {
+  AssistantScheduleProfileApi,
+  AssistantExceptionApi,
+};
+
 import { TIME_SLOTS, VIEW_END, VIEW_START } from "../components/dashboard/blockStyles";
 
 const DAY_NAMES_PT = [
@@ -68,7 +74,7 @@ const MONTH_NAMES_PT = [
 /**
  * Devolve a data civil local de hoje à meia-noite (12:00 para evitar desvios DST).
  */
-export function getTodayBaseDate(): Date {
+function getTodayBaseDate(): Date {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
 }
@@ -98,7 +104,7 @@ export function getOffsetFromIsoDate(isoDate: string): number {
  * Obtém a informação formatada de uma data civil real com base no offset em dias (0 = hoje).
  * O campo `dow` segue a convenção Segunda = 0 ... Domingo = 6.
  */
-export function getDateInfo(dayOffset: number): DateInfo & { isoDate: string } {
+export function getDateInfo(dayOffset: number): DateInfo & { isoDate: string; offset: number } {
   const d = getTodayBaseDate();
   d.setDate(d.getDate() + dayOffset);
   const jsDay = d.getDay(); // 0 = Dom ... 6 = Sáb
@@ -116,6 +122,7 @@ export function getDateInfo(dayOffset: number): DateInfo & { isoDate: string } {
     day: dayNum,
     monthLabel: `${MONTH_SHORTS_PT[monthIdx]} ${year}`,
     dow,
+    offset: dayOffset,
     isoDate: `${year}-${mm}-${dd}`,
   };
 }
@@ -363,6 +370,7 @@ export interface SchoolDayStatus {
   viewStartSlot: number;
   viewEndSlot: number;
   scheduleSourceLabel?: string | null;
+  closedLabel?: string | null;
 }
 
 export interface OperatingStatusSources {
@@ -603,18 +611,6 @@ export function resolveSchoolDayStatusByIsoDate(
 /**
  * Determina o estado de abertura da escola numa data (usando o offset em dias face a hoje).
  */
-export function resolveSchoolDayStatus(
-  dayOffset: number,
-  calendarDays?: OperatingCalendarDay[],
-  extraSources?: Omit<OperatingStatusSources, "calendarDays">
-): SchoolDayStatus {
-  const info = getDateInfo(dayOffset);
-  return resolveSchoolDayStatusByIsoDate(info.isoDate, {
-    calendarDays,
-    ...extraSources,
-  });
-}
-
 /**
  * Verifica se existe escala gerada no Backend para uma determinada data civil (`YYYY-MM-DD`).
  */

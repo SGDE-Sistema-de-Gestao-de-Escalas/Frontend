@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Calendar, Check, Upload, X } from "lucide-react";
 import type { MyAbsence } from "../../types";
 import { Card } from "../ui/card";

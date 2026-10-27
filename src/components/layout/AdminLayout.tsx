@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { AdminPage } from "../../types";
+import type { AdminPage, EntityId } from "../../types";
 import { Sheet, SheetContent } from "../ui/sheet";
 import MobileBottomNav from "./MobileBottomNav";
 import Sidebar from "./Sidebar";
@@ -51,7 +51,7 @@ export default function AdminLayout({
     currentPage || initialPage
   );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [selectedAssistantId, setSelectedAssistantId] = useState<number | null>(
+  const [selectedAssistantId, setSelectedAssistantId] = useState<EntityId | null>(
     null
   );
   const [absenceFor, setAbsenceFor] = useState<string | null>(null);

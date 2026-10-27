@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AssistantProfile from "../components/assistants/AssistantProfile";
 import { useSchool } from "../context/SchoolContext";

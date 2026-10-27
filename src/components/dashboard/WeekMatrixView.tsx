@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import { Lock } from "lucide-react";
 import type { BlockState, EntityId } from "../../types";
 import { Card } from "../ui/card";

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Card } from "../ui/card";
 import { useAssistantsList } from "../../hooks/api/useAssistants";

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   AlertTriangle,
   ChevronDown,
@@ -6,7 +6,6 @@ import {
   RefreshCw,
   X,
   Calendar,
-  AlertCircle,
 } from "lucide-react";
 import { Badge } from "../ui/badge";
 import type {

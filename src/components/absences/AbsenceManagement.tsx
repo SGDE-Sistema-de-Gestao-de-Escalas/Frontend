@@ -1,12 +1,10 @@
-import React, { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
-  Calendar,
   Check,
   ChevronLeft,
   ChevronRight,
   Clock,
   Download,
-  Filter,
   Inbox,
   Loader2,
   Paperclip,
@@ -14,7 +12,6 @@ import {
   Plus,
   RotateCcw,
   Trash2,
-  User,
   X,
   XCircle,
 } from "lucide-react";
@@ -31,7 +28,6 @@ import {
 import DatePicker, { formatToIsoDate } from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
-import CustomSelect from "../common/CustomSelect";
 import SearchableSelect from "../common/SearchableSelect";
 import AssistantSelect, { isAssistantActive } from "../common/AssistantSelect";
 import ActionTooltip from "../common/ActionTooltip";
@@ -50,18 +46,17 @@ import { useSchool } from "../../context/SchoolContext";
 import absencesService, {
   type BackendAbsenceResource,
 } from "../../api/services/absences.service";
-import type { EntityId, Assistant } from "../../types";
 import { notify } from "../common/FeedbackNotification";
 
 export default function AbsenceManagement() {
   const { selectedSchoolId } = useSchool();
 
   // Dados remotos via TanStack Query (com status "all" para trazer ativos e inativos)
-  const { data: assistants = [], isLoading: isLoadingAssistants } = useAssistantsList({
+  const { data: assistants = [], isLoading: _isLoadingAssistants } = useAssistantsList({
     status: "all",
     per_page: 200,
   });
-  const { data: absenceTypes = [], isLoading: isLoadingAbsenceTypes } = useAbsenceTypesList();
+  const { data: absenceTypes = [], isLoading: _isLoadingAbsenceTypes } = useAbsenceTypesList();
 
   // Filtros
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "justified" | "unjustified">("all");
