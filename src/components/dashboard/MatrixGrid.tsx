@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   AlertTriangle,
   ArrowDownLeft,
@@ -7,7 +7,6 @@ import {
   Calendar,
   CalendarClock,
   CalendarOff,
-  Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -24,13 +23,9 @@ import {
   ShieldAlert,
   Sparkles,
   Send,
-  Trash2,
   UserX,
   ChevronDown,
-  Download,
   FileSpreadsheet,
-  FileText,
-  Layers,
   Printer,
   UserCheck,
   X
@@ -52,7 +47,6 @@ import type { Assistant, BlockState, EntityId, ScheduleMatrix } from "../../type
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
-import { Checkbox } from "../ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -77,7 +71,6 @@ import {
   type MergedScheduleBlockMeta,
 } from "./blockStyles";
 import { useSchool } from "../../context/SchoolContext";
-import { schoolScopedKey } from "../../lib/queryClient";
 import { useDashboardBootstrap } from "../../hooks/api/useDashboardBootstrap";
 import { useSaveScheduleDays } from "../../hooks/api/useSchedules";
 import type {
@@ -205,8 +198,13 @@ export default function MatrixGrid({
     setEditMode(false);
     setIsPainting(false);
     setPaintAid(null);
+    setActiveTool("paint");
+    setHoveredLockTarget(null);
   }, [selectedSchoolId]);
 
+  type EditTool = "paint" | "lock" | "eraser";
+  const [activeTool, setActiveTool] = useState<EditTool>("paint");
+  const [hoveredLockTarget, setHoveredLockTarget] = useState<{ aid: EntityId; slot: number } | null>(null);
   const [paintType, setPaintType] = useState<BlockState>("work");
   const [focusActiveActivity, setFocusActiveActivity] = useState(true);
   const [highlightedRuleId, setHighlightedRuleId] = useState<string | null>(
@@ -304,7 +302,6 @@ const [publishModalState, setPublishModalState] = useState<{
   const holidays = bootstrapData?.holidays || [];
   const temporaryAssignments = bootstrapData?.temporary_assignments || [];
 
-  const isOperatingLoading = false;
   const isDayLoading = isBootstrapLoading && assistantsList.length === 0;
 
   const operatingSources = useMemo(
@@ -804,7 +801,7 @@ const [publishModalState, setPublishModalState] = useState<{
   );
 
   // Activities that apply to this day
-  const availablePaintTypes = useMemo(() => {
+  const dayActivities = useMemo(() => {
     const ruleStates = new Set<BlockState>();
     rulesForToday.forEach((r) => ruleStates.add(r.state));
     const ordered: BlockState[] = [];
@@ -813,9 +810,13 @@ const [publishModalState, setPublishModalState] = useState<{
     ).forEach((s) => {
       if (ruleStates.has(s) || s === "work" || s === "collection") ordered.push(s);
     });
-    ordered.push("lunch", "off");
+    ordered.push("lunch");
     return ordered;
   }, [rulesForToday]);
+
+  const availablePaintTypes = useMemo(() => {
+    return [...dayActivities, "off" as BlockState];
+  }, [dayActivities]);
 
   useEffect(() => {
     if (!availablePaintTypes.includes(paintType)) {
@@ -832,7 +833,65 @@ const [publishModalState, setPublishModalState] = useState<{
     return () => window.removeEventListener("mouseup", stop);
   }, []);
 
-  function paintSlot(aid: EntityId, slot: number) {
+    function toggleBlockLockAtSlot(aid: EntityId, targetSlot: number) {
+    if (!canEditCurrentDay) return;
+    if (!baselineMatricesRef.current[dayOffset]) {
+      baselineMatricesRef.current[dayOffset] = cloneMatrix(baseDayMatrix);
+    }
+
+    const currentMatrix = draftMatricesByDay[dayOffset] ?? baseDayMatrix;
+    const assistantSlots = currentMatrix[aid] ?? Array(96).fill("off");
+    const currentSlotState = assistantSlots[targetSlot];
+
+    if (!currentSlotState || currentSlotState === "off") {
+      return;
+    }
+
+    const assistantMeta = {
+      ...(slotMetaByAssistant[aid] ?? {}),
+      ...(draftSlotMetaByDay[dayOffset]?.[aid] ?? {}),
+    };
+
+    const blocks = slotsToBlocks(assistantSlots, assistantMeta);
+    const targetBlock = blocks.find(
+      (b) => targetSlot >= b.start && targetSlot < b.start + b.count
+    );
+
+    if (!targetBlock) return;
+
+    const newIsLocked = !Boolean(targetBlock.isLocked);
+
+    setDraftMatricesByDay((prev) => {
+      const curDay = prev[dayOffset] ?? baseDayMatrix;
+      return {
+        ...prev,
+        [dayOffset]: cloneMatrix(curDay),
+      };
+    });
+
+    setDraftSlotMetaByDay((prev) => {
+      const dayMeta = { ...(prev[dayOffset] ?? {}) };
+      const curAssistantMeta = { ...(dayMeta[aid] ?? slotMetaByAssistant[aid] ?? {}) };
+
+      for (let s = targetBlock.start; s < targetBlock.start + targetBlock.count; s++) {
+        const existingSlot = curAssistantMeta[s] ?? slotMetaByAssistant[aid]?.[s] ?? {};
+        curAssistantMeta[s] = {
+          ...existingSlot,
+          isLocked: newIsLocked,
+        };
+      }
+
+      dayMeta[aid] = curAssistantMeta;
+      return {
+        ...prev,
+        [dayOffset]: dayMeta,
+      };
+    });
+
+
+  }
+
+function paintSlot(aid: EntityId, slot: number) {
     if (!canEditCurrentDay) return;
     if (!baselineMatricesRef.current[dayOffset]) {
       baselineMatricesRef.current[dayOffset] = cloneMatrix(baseDayMatrix);
@@ -879,7 +938,7 @@ const [publishModalState, setPublishModalState] = useState<{
           activityName: activeRule?.title || matchedAct?.name || (isFallbackAct ? "Apoio Escola" : defaultLabel) || "Atividade",
           activityColor: matchedAct?.color || (isFallbackAct ? "#3B82F6" : undefined),
           activityTypeId: matchedAct?.id || null,
-          ruleId: activeRule?.isFallback ? null : (activeRule?.id ? Number(activeRule.id) || null : null),
+          ruleId: activeRule?.isFallback ? null : (activeRule?.id ? String(activeRule.id) : null),
           isFallback: isFallbackAct,
         };
       }
@@ -1512,6 +1571,11 @@ const [publishModalState, setPublishModalState] = useState<{
     ]
   );
 
+  const selectedRuleEval = useMemo(
+    () => ruleEvaluations.find((r) => r.id === highlightedRuleId) ?? null,
+    [ruleEvaluations, highlightedRuleId]
+  );
+
   // Altura sincronizada do painel de regras para ajustar o scroll dos avisos em tempo real
   const rulesPanelRef = useRef<HTMLDivElement>(null);
   const [rulesPanelHeight, setRulesPanelHeight] = useState<number | null>(null);
@@ -1560,6 +1624,26 @@ const [publishModalState, setPublishModalState] = useState<{
           if (diff) changedAssistantsCount++;
         });
 
+        // Contabilizar alterações de bloqueio (isLocked) no rascunho
+        const draftDayMeta = draftSlotMetaByDay[offset];
+        const baseDayMeta = slotMetaByAssistant;
+        let lockChangesCount = 0;
+        if (draftDayMeta) {
+          activeAssistants.forEach((a) => {
+            const aMeta = draftDayMeta[a.id];
+            if (aMeta) {
+              Object.keys(aMeta).forEach((slotStr) => {
+                const s = Number(slotStr);
+                const draftIsLocked = Boolean(aMeta[s]?.isLocked);
+                const baseIsLocked = Boolean(baseDayMeta[a.id]?.[s]?.isLocked);
+                if (draftIsLocked !== baseIsLocked) {
+                  lockChangesCount++;
+                }
+              });
+            }
+          });
+        }
+
         const evalResult = evaluateDaySchedule(offset, draft);
         const copiedMeta = copiedFromByDay[offset];
         const copiedFromInfo = copiedMeta
@@ -1569,8 +1653,8 @@ const [publishModalState, setPublishModalState] = useState<{
         return {
           offset,
           info: getDateInfo(offset),
-          changedAssistantsCount,
-          changedSlotsCount,
+          changedAssistantsCount: changedAssistantsCount || (lockChangesCount > 0 ? 1 : 0),
+          changedSlotsCount: changedSlotsCount + lockChangesCount,
           warnings: evalResult.liveWarnings,
           copiedFromLabel: copiedFromInfo
             ? `${copiedFromInfo.dayName}, ${copiedFromInfo.dateStr}`
@@ -2075,7 +2159,6 @@ const [publishModalState, setPublishModalState] = useState<{
                           const durationStr = formatDurationSlots(b.count);
 
                           const isBlockOutsideAssistantShift =
-                            b.state !== "off" &&
                             b.state !== "absent" &&
                             (b.start < shiftBounds.startSlot ||
                               b.start + b.count > shiftBounds.endSlot);
@@ -2083,6 +2166,13 @@ const [publishModalState, setPublishModalState] = useState<{
                           const isBlockOutOfSchoolHours =
                             b.start < viewStartSlot ||
                             b.start + b.count > viewEndSlot;
+
+                          const isHoveredByLockTool =
+                            activeTool === "lock" &&
+                            hoveredLockTarget !== null &&
+                            hoveredLockTarget.aid === assistant.id &&
+                            hoveredLockTarget.slot >= b.start &&
+                            hoveredLockTarget.slot < b.start + b.count;
 
                           const isMatchesSpotlight = b.state === paintType;
                           const spotlightClass = isSpotlightActive
@@ -2132,10 +2222,14 @@ const [publishModalState, setPublishModalState] = useState<{
                               } ${radiusClass} ${separatorClass} ${
                                 (b.activityColor === "#EF4444" && (b.activityName?.toLowerCase().includes("vigilância almoço") || b.activityName?.toLowerCase().includes("vigilancia almoco")) ? "#A855F7" : b.activityColor) ? "" : styleConfig.bg
                               } ${spotlightClass} ${
-                                isBlockOutsideAssistantShift && canEditCurrentDay
+                                isHoveredByLockTool
+                                  ? "ring-2 ring-amber-400 ring-offset-1 shadow-lg brightness-110 z-30"
+                                  : isBlockOutsideAssistantShift && canEditCurrentDay
                                   ? "ring-2 ring-destructive ring-offset-1 z-10"
                                   : isBlockOutOfSchoolHours && canEditCurrentDay
                                   ? "ring-2 ring-[#D97706]"
+                                  : isLocked && canEditCurrentDay
+                                  ? "ring-2 ring-amber-400 ring-offset-1"
                                   : ""
                               } text-white shadow-2xs overflow-hidden transition-all flex items-center px-2 gap-1.5 text-left`}
                               style={{
@@ -2160,10 +2254,10 @@ const [publishModalState, setPublishModalState] = useState<{
                                   )}
                                   {isLocked && (
                                     <Lock
-                                      size={10}
+                                      size={12}
                                       className={`${
                                         showDurationChip ? "" : "ml-auto"
-                                      } flex-shrink-0 text-white/80`}
+                                      } flex-shrink-0 text-amber-200 fill-amber-300/40`}
                                     />
                                   )}
                                 </>
@@ -2171,7 +2265,17 @@ const [publishModalState, setPublishModalState] = useState<{
 
                               {!showLabel && isLocked && (
                                 <div className="w-full flex items-center justify-center">
-                                  <Lock size={8} className="text-white/80" />
+                                  <Lock size={12} className="text-amber-200 fill-amber-300/40" />
+                                </div>
+                              )}
+
+                              {/* Overlay de destaque do bloco completo no modo Bloquear Tarefa */}
+                              {isHoveredByLockTool && (
+                                <div className="absolute inset-0 bg-amber-500/35 backdrop-blur-[0.5px] border-2 border-amber-400 rounded-[inherit] flex items-center justify-center gap-1.5 text-amber-100 font-bold text-xs pointer-events-none z-30 animate-in fade-in-50">
+                                  <Lock size={12} className="text-amber-200 fill-amber-300/40 animate-pulse" />
+                                  <span className="drop-shadow-sm truncate">
+                                    {isLocked ? "Desbloquear Tarefa" : "Bloquear Tarefa"}
+                                  </span>
                                 </div>
                               )}
                             </div>
@@ -2215,7 +2319,7 @@ const [publishModalState, setPublishModalState] = useState<{
                                   </div>
                                   {isLocked && (
                                     <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                                      <Lock size={9} />
+                                      <Lock size={12} />
                                       Fixo
                                     </span>
                                   )}
@@ -2252,17 +2356,25 @@ const [publishModalState, setPublishModalState] = useState<{
                                 <Tooltip key={slot}>
                                   <TooltipTrigger asChild>
                                     <div
-                                      className="flex-none h-full cursor-crosshair group/slot flex items-center justify-center px-[1px]"
+                                      className={`flex-none h-full ${activeTool === "lock" ? "cursor-pointer" : "cursor-crosshair"} group/slot flex items-center justify-center px-[1px]`}
                                       style={{
                                         width: `${(1 / viewSlotsCount) * 100}%`,
                                       }}
                                       onMouseDown={(e) => {
                                         e.preventDefault();
+                                        if (activeTool === "lock") {
+                                          toggleBlockLockAtSlot(assistant.id, slot);
+                                          return;
+                                        }
                                         setIsPainting(true);
                                         setPaintAid(assistant.id);
                                         paintSlot(assistant.id, slot);
                                       }}
                                       onMouseEnter={() => {
+                                        if (activeTool === "lock") {
+                                          setHoveredLockTarget({ aid: assistant.id, slot });
+                                          return;
+                                        }
                                         if (
                                           isPainting &&
                                           paintAid === assistant.id
@@ -2270,15 +2382,28 @@ const [publishModalState, setPublishModalState] = useState<{
                                           paintSlot(assistant.id, slot);
                                         }
                                       }}
+                                      onMouseLeave={() => {
+                                        if (activeTool === "lock") {
+                                          setHoveredLockTarget((prev) =>
+                                            prev?.aid === assistant.id && prev?.slot === slot ? null : prev
+                                          );
+                                        }
+                                      }}
+                                      onContextMenu={(e) => {
+                                        e.preventDefault();
+                                        toggleBlockLockAtSlot(assistant.id, slot);
+                                      }}
                                     >
-                                      {/* Hover brush preview pill */}
-                                      <div
-                                        className={`w-full h-8 rounded-sm opacity-0 group-hover/slot:opacity-45 transition-opacity ${
-                                          paintType === "off"
-                                            ? "bg-destructive/50 border border-destructive"
-                                            : BLOCK_STYLES[paintType].bg
-                                        }`}
-                                      />
+                                      {/* Hover brush preview pill (apenas no modo pintura/borracha; no modo lock o bloco inteiro ilumina-se) */}
+                                      {activeTool !== "lock" && (
+                                        <div
+                                          className={`w-full h-8 rounded-sm opacity-0 group-hover/slot:opacity-45 transition-opacity ${
+                                            paintType === "off"
+                                              ? "bg-destructive/50 border border-destructive"
+                                              : BLOCK_STYLES[paintType].bg
+                                          }`}
+                                        />
+                                      )}
                                     </div>
                                   </TooltipTrigger>
                                   <TooltipContent
@@ -2906,67 +3031,10 @@ const [publishModalState, setPublishModalState] = useState<{
               </div>
             )}
 
-            {/* EDIT MODE WORKSPACE: Day Activities Brush + Day Rules & Live Feedback */}
+            {/* EDIT MODE WORKSPACE: Painel de Regras do Dia + Toolbar colada ao Mapa */}
             {canEditCurrentDay && (
               <div className="border-b border-border bg-muted/15 divide-y divide-border/60">
-                {/* 1. Day-Filtered Activity Paint Palette */}
-                <div className="px-4 py-3 flex items-center gap-3 flex-wrap">
-                  <span className="text-xs font-semibold text-foreground">
-                    Pintar atividade ({dayInfo.dayName}):
-                  </span>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {availablePaintTypes.map((type) => {
-                      const isEraser = type === "off";
-                      const isSelected = paintType === type;
-                      return (
-                        <button
-                          key={type}
-                          type="button"
-                          onClick={() => setPaintType(type)}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                            isSelected
-                              ? isEraser
-                                ? "ring-2 ring-foreground bg-foreground text-background border-transparent font-semibold"
-                                : "ring-2 ring-primary ring-offset-1 border-transparent " +
-                                  BLOCK_STYLES[type].bg +
-                                  " text-white font-semibold shadow-xs"
-                              : isSpotlightActive
-                              ? "border-border bg-card text-muted-foreground opacity-55 hover:opacity-100 hover:text-foreground"
-                              : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
-                          }`}
-                        >
-                          {isEraser ? (
-                            <Eraser size={11} />
-                          ) : (
-                            <div
-                              className={`w-2.5 h-2.5 rounded-sm ${
-                                isSelected
-                                  ? "bg-white/30"
-                                  : BLOCK_STYLES[type].bg
-                              }`}
-                            />
-                          )}
-                          {isEraser ? "Limpar Bloco" : BLOCK_STYLES[type].label}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Toggle to highlight active activity vs show all at 100% */}
-                  <div className="ml-auto flex items-center gap-3 flex-wrap">
-                    <label className="flex items-center gap-2 text-xs text-foreground font-medium cursor-pointer select-none">
-                      <Checkbox
-                        checked={focusActiveActivity}
-                        onCheckedChange={(checked) =>
-                          setFocusActiveActivity(checked === true)
-                        }
-                      />
-                      <span>Destacar atividade selecionada</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* 2. Day Rules + Live Engine Feedback Panel */}
+                {/* 1. Day Rules & Live Engine Feedback Panel */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-border/60">
                   {/* Left: Rules established for this day */}
                   <div ref={rulesPanelRef} className="lg:col-span-7 p-3.5 space-y-2">
@@ -2998,6 +3066,7 @@ const [publishModalState, setPublishModalState] = useState<{
                             key={rule.id}
                             type="button"
                             onClick={() => {
+                              setActiveTool("paint");
                               setPaintType(rule.state);
                               setHighlightedRuleId(
                                 isRuleSelected ? null : rule.id
@@ -3164,10 +3233,131 @@ const [publishModalState, setPublishModalState] = useState<{
                     )}
                   </div>
                 </div>
-              </div>
-            )}
+              
 
-            <div className="overflow-x-auto">
+                {/* 2. TOOLBAR COLADA AO MAPA: Ferramentas + Destacar Atividade */}
+                <div className="px-4 py-2 border-t border-border bg-card/75 backdrop-blur-xs flex items-center justify-between gap-3 flex-wrap">
+                  {/* Lado Esquerdo: Ações, Bloqueio, Limpeza e Destacar */}
+                  <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+                    {/* Indicador de Pintura da Regra Selecionada */}
+                    {selectedRuleEval ? (
+                      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-xs font-semibold text-primary shadow-2xs">
+                        <span
+                          className={`w-2.5 h-2.5 rounded-full ${
+                            BLOCK_STYLES[selectedRuleEval.state]?.bg || "bg-primary"
+                          }`}
+                        />
+                        <span className="truncate max-w-[200px] sm:max-w-[280px]">
+                          Pintar: {selectedRuleEval.title}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHighlightedRuleId(null);
+                            setPaintType("work");
+                          }}
+                          className="ml-1 text-primary/70 hover:text-primary cursor-pointer p-0.5 rounded hover:bg-primary/20"
+                          title="Desmarcar regra"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/40 border border-border text-xs text-muted-foreground select-none">
+                        <span className="w-2 h-2 rounded-full bg-primary/50" />
+                        <span>Clica numa regra acima para pintar</span>
+                      </div>
+                    )}
+
+                    {/* Separador vertical */}
+                    <div className="h-5 w-[1px] bg-border hidden sm:block" />
+
+                    {/* Botão Bloquear Tarefa */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTool(activeTool === "lock" ? "paint" : "lock");
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                        activeTool === "lock"
+                          ? "bg-amber-600 text-white font-semibold shadow-xs ring-2 ring-amber-500/40"
+                          : "border border-border bg-background text-muted-foreground hover:text-amber-700 dark:hover:text-amber-300 hover:border-amber-500/40 hover:bg-amber-500/10"
+                      }`}
+                      title="Clica numa tarefa no mapa para a fixar com cadeado"
+                    >
+                      <Lock size={12} />
+                      <span>Bloquear Tarefa</span>
+                    </button>
+
+                    {/* Botão Limpar Bloco */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeTool === "eraser") {
+                          setActiveTool("paint");
+                          setPaintType("work");
+                        } else {
+                          setActiveTool("eraser");
+                          setPaintType("off");
+                        }
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                        activeTool === "eraser"
+                          ? "bg-foreground text-background font-semibold shadow-xs"
+                          : "border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
+                      }`}
+                      title="Apagar tarefas na grelha"
+                    >
+                      <Eraser size={12} />
+                      <span>Limpar Bloco</span>
+                    </button>
+
+                    {/* Botão Destacar Atividade (imediatamente à beira das ferramentas) */}
+                    <button
+                      type="button"
+                      onClick={() => setFocusActiveActivity(!focusActiveActivity)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+                        focusActiveActivity
+                          ? "bg-primary/10 border-primary/40 text-primary font-semibold shadow-2xs"
+                          : "border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
+                      }`}
+                      title="Realça a atividade selecionada e esbate as outras no mapa"
+                    >
+                      <Sparkles
+                        size={12}
+                        className={
+                          focusActiveActivity ? "text-primary" : "text-muted-foreground"
+                        }
+                      />
+                      <span>Destacar Atividade</span>
+                      <span
+                        className={`ml-0.5 text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider ${
+                          focusActiveActivity
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {focusActiveActivity ? "ON" : "OFF"}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Dica Contextual à Direita */}
+                  {activeTool === "lock" && (
+                    <div className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300 font-medium animate-in fade-in-50">
+                      <Lock size={12} className="shrink-0 text-amber-600 dark:text-amber-400" />
+                      <span>Passa o rato e clica numa tarefa para a trancar</span>
+                    </div>
+                  )}
+                  {activeTool === "eraser" && (
+                    <div className="flex items-center gap-1.5 text-xs text-destructive font-medium animate-in fade-in-50">
+                      <Eraser size={12} className="shrink-0" />
+                      <span>Arrasta o rato na grelha para apagar tarefas</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}            <div className="overflow-x-auto">
               <div className="min-w-[820px]">
                 {/* Dynamic Hour Header based on the day's Operating Hours */}
                 <div className="flex border-b border-border bg-muted/30">

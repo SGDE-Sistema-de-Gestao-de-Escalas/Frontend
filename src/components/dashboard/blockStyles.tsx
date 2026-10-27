@@ -34,16 +34,6 @@ export const VIEW_START = 24; // slot 24 = 06:00
 export const VIEW_END = 84; // slot 84 = 21:00 (exclusive)
 export const VIEW_SLOTS = VIEW_END - VIEW_START; // 60 slots = 15 hours
 
-export const EDIT_TYPES: BlockState[] = [
-  "collection",
-  "work",
-  "surveillance",
-  "lunch",
-  "cleaning",
-  "delivery",
-  "absent",
-  "off",
-];
 
 export const PRESET_COLORS = [
   "#6366F1", "#A855F7", "#EC4899", "#EF4444", "#F59E0B", "#10B981",
@@ -173,6 +163,11 @@ export function areAdjacentSlotsCompatible(
 ): boolean {
   // 1. O estado base do bloco tem de ser estritamente igual
   if (prevState !== nextState) return false;
+
+  // 1.1 Se o estado de bloqueio (cadeado) for diferente, não fundem
+  if (Boolean(prevMeta?.isLocked) !== Boolean(nextMeta?.isLocked)) {
+    return false;
+  }
 
   // 2. Estados de sistema sem regras específicas fundem sempre
   if (prevState === "off" || prevState === "lunch" || prevState === "absent") {

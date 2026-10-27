@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowRight,
   Building2,
   Calendar,
   Check,
@@ -13,10 +12,7 @@ import {
   HelpCircle,
   Info,
   Loader2,
-  RefreshCw,
-  Send,
   Sparkles,
-  Users,
   Utensils,
   X,
 } from "lucide-react";
@@ -30,7 +26,6 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import { Badge } from "../ui/badge";
 import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import CustomSelect from "../common/CustomSelect";
@@ -99,7 +94,7 @@ export default function RecalculateModal({
 
   const [startDate, setStartDate] = useState(initialStartDate || todayIso);
   const [endDate, setEndDate] = useState(initialEndDate || initialStartDate || defaultEndIso);
-  const [strategy, setStrategy] = useState<"auto" | "fill" | "full">("auto");
+  const [strategy, setStrategy] = useState<"auto" | "full">("auto");
   const [respectExceptions, setRespectExceptions] = useState(true);
   const [step, setStep] = useState<"form" | "gap" | "done">("form");
   const [showPublishOverwriteConfirm, setShowPublishOverwriteConfirm] = useState(false);
@@ -322,12 +317,6 @@ export default function RecalculateModal({
     });
   }, [prospectiveTransfer, activeConflict, conflicts]);
 
-  const willResolveAllRemaining = useMemo(() => {
-    if (!prospectiveTransfer || !activeConflict) return false;
-    return conflicts.every(
-      (c) => c === activeConflict || isConflictCoveredByTransfer(c, prospectiveTransfer)
-    );
-  }, [prospectiveTransfer, activeConflict, conflicts]);
 
   // Se todos os défices foram resolvidos e estamos no passo "gap", avança imediatamente para "done"
   useEffect(() => {
@@ -417,7 +406,7 @@ export default function RecalculateModal({
     setTransferCustomEnd("");
 
     try {
-      const preserveLocked = strategy !== "full" && respectExceptions;
+      const preserveLocked = strategy === "auto" && respectExceptions;
       const result = await generateMutation.mutateAsync({
         start_date: startDate,
         end_date: endDate,
@@ -527,7 +516,7 @@ export default function RecalculateModal({
 
     // Recalcula no backend com a nova lista acumulada de transferências
     try {
-      const preserveLocked = strategy !== "full" && respectExceptions;
+      const preserveLocked = strategy === "auto" && respectExceptions;
       const updatedResult = await generateMutation.mutateAsync({
         start_date: startDate,
         end_date: endDate,
@@ -583,7 +572,7 @@ export default function RecalculateModal({
   ) {
     if (transfersToApply.length > 0 && generationResult) {
       try {
-        const preserveLocked = strategy !== "full" && respectExceptions;
+        const preserveLocked = strategy === "auto" && respectExceptions;
         const updatedResult = await generateMutation.mutateAsync({
           start_date: startDate,
           end_date: endDate,
@@ -838,23 +827,10 @@ export default function RecalculateModal({
                       label: (
                         <div className="py-0.5 text-left w-full min-w-0 pr-4">
                           <p className="text-xs font-semibold text-foreground leading-snug">
-                            Automática / Equilibrada (Recomendado)
+                            Preencher e Otimizar Escala (Recomendado)
                           </p>
                           <p className="text-[11px] text-muted-foreground whitespace-normal break-words leading-relaxed mt-1">
-                            Aplica as 3 Rondas Obrigatórias, prioridades contratuais, descansos e preenchimento equilibrado de turnos.
-                          </p>
-                        </div>
-                      ),
-                    },
-                    {
-                      value: "fill",
-                      label: (
-                        <div className="py-0.5 text-left w-full min-w-0 pr-4">
-                          <p className="text-xs font-semibold text-foreground leading-snug">
-                            Preencher apenas lacunas de cobertura
-                          </p>
-                          <p className="text-[11px] text-muted-foreground whitespace-normal break-words leading-relaxed mt-1">
-                            Aloca apenas períodos com défice de cobertura, mantendo intactas as escalas já definidas anteriormente.
+                            Ajusta e equilibra a escala cobrindo as necessidades e regras em falta, mantendo intactas as tarefas fixadas manualmente com cadeado.
                           </p>
                         </div>
                       ),
@@ -864,10 +840,10 @@ export default function RecalculateModal({
                       label: (
                         <div className="py-0.5 text-left w-full min-w-0 pr-4">
                           <p className="text-xs font-semibold text-foreground leading-snug">
-                            Regeneração completa
+                            Regeneração Completa (Limpar do zero)
                           </p>
                           <p className="text-[11px] text-muted-foreground whitespace-normal break-words leading-relaxed mt-1">
-                            Recalcula a totalidade da escala do zero, substituindo integralmente quaisquer turnos pré-existentes no período.
+                            Recalcula a totalidade da escala do zero, substituindo integralmente quaisquer turnos e bloqueios pré-existentes no período.
                           </p>
                         </div>
                       ),
@@ -877,25 +853,34 @@ export default function RecalculateModal({
               </div>
 
               {/* Opção de Bloqueios e Exceções */}
-              <label
-                htmlFor="respect-exceptions"
-                className="flex items-start gap-3 p-3 rounded-xl border border-border bg-muted/20 hover:bg-muted/30 cursor-pointer transition-colors"
-              >
-                <Checkbox
-                  id="respect-exceptions"
-                  checked={respectExceptions}
-                  onCheckedChange={(checked) => setRespectExceptions(checked === true)}
-                  className="mt-0.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground">
-                    Preservar blocos manuais bloqueados e exceções individuais
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Mantém intactos os horários fixados manualmente com cadeado e respeita as restrições contratuais individuais.
-                  </p>
+              {strategy === "auto" ? (
+                <label
+                  htmlFor="respect-exceptions"
+                  className="flex items-start gap-3 p-3 rounded-xl border border-border bg-muted/20 hover:bg-muted/30 cursor-pointer transition-colors"
+                >
+                  <Checkbox
+                    id="respect-exceptions"
+                    checked={respectExceptions}
+                    onCheckedChange={(checked) => setRespectExceptions(checked === true)}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground">
+                      Preservar blocos manuais bloqueados
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Mantém inalteradas todas as tarefas e horários fixados com cadeado pelo administrador.
+                    </p>
+                  </div>
+                </label>
+              ) : (
+                <div className="p-3.5 rounded-xl border border-border bg-muted/30 text-xs flex items-start gap-2.5 text-muted-foreground">
+                  <Info size={14} className="mt-0.5 text-primary shrink-0" />
+                  <span>
+                    Na <strong>regeneração completa</strong>, todos os turnos e bloqueios manuais existentes no período são substituídos para gerar uma escala 100% nova do zero.
+                  </span>
                 </div>
-              </label>
+              )}
 
               {/* Alerta se o período já se encontra publicado */}
               {hasPublishedSchedulesInRange && (
