@@ -118,9 +118,10 @@ interface DayRuleConfig {
   startSlot: number;
   endSlot: number;
   min: number;
-  type: "mandatory" | "optional";
+  type: "mandatory" | "optional" | "fallback";
   daysOfWeek: number[]; // 0 = Seg ... 4 = Sex
   priorityNames: string[];
+  isFallback?: boolean;
 }
 
 interface MatrixGridProps {
@@ -421,8 +422,43 @@ const [publishModalState, setPublishModalState] = useState<{
         priorityNames: (rule.assistants || [])
           .sort((a, b) => a.priority - b.priority)
           .map((a) => `${a.priority}º ${a.name.split(" ")[0]}`),
+        isFallback: false,
       };
     });
+
+    // Adiciona a atividade de Fallback (ex: Apoio Escola) para estar disponível na lista de regras para pintar
+    const fallbackActivities = activityTypes.filter((at) => at.is_fallback);
+    if (fallbackActivities.length > 0) {
+      fallbackActivities.forEach((fbAct) => {
+        rules.push({
+          id: `fallback-${fbAct.id}`,
+          title: fbAct.name || "Apoio Escola",
+          state: mapActivityToBlockState(fbAct.name, true),
+          startSlot: 24,
+          endSlot: 84,
+          min: 0,
+          type: "fallback",
+          daysOfWeek: [0, 1, 2, 3, 4],
+          priorityNames: ["Sem restrição de fila"],
+          isFallback: true,
+        });
+      });
+    } else {
+      rules.push({
+        id: "fallback-default",
+        title: "Apoio Escola",
+        state: "work",
+        startSlot: 24,
+        endSlot: 84,
+        min: 0,
+        type: "fallback",
+        daysOfWeek: [0, 1, 2, 3, 4],
+        priorityNames: ["Atividade padrão de preenchimento"],
+        isFallback: true,
+      });
+    }
+
+    return rules;
   }, [scheduleRules, activityTypes]);
 
   const schoolStatus = getStatusForIsoDate(dayInfo.isoDate);
@@ -829,21 +865,22 @@ const [publishModalState, setPublishModalState] = useState<{
 
         const defaultLabel = BLOCK_STYLES[paintType]?.label;
         const matchedAct = activeRule
-          ? activityTypes.find(
-              (at) => at.name.toLowerCase() === activeRule.title.toLowerCase()
-            )
+          ? (activeRule.isFallback
+              ? activityTypes.find((at) => at.is_fallback || at.name.toLowerCase() === activeRule.title.toLowerCase())
+              : activityTypes.find((at) => at.name.toLowerCase() === activeRule.title.toLowerCase()))
           : activityTypes.find(
               (at) =>
                 at.name.toLowerCase() === defaultLabel?.toLowerCase() ||
                 mapActivityToBlockState(at.name, at.is_fallback) === paintType
             );
 
+        const isFallbackAct = Boolean(activeRule?.isFallback || matchedAct?.is_fallback || paintType === "work");
         assistantMeta[slot] = {
-          activityName: activeRule?.title || matchedAct?.name || defaultLabel || "Atividade",
-          activityColor: matchedAct?.color,
+          activityName: activeRule?.title || matchedAct?.name || (isFallbackAct ? "Apoio Escola" : defaultLabel) || "Atividade",
+          activityColor: matchedAct?.color || (isFallbackAct ? "#3B82F6" : undefined),
           activityTypeId: matchedAct?.id || null,
-          ruleId: activeRule?.id || null,
-          isFallback: Boolean(matchedAct?.is_fallback),
+          ruleId: activeRule?.isFallback ? null : (activeRule?.id ? Number(activeRule.id) || null : null),
+          isFallback: isFallbackAct,
         };
       }
 
@@ -1219,6 +1256,7 @@ const [publishModalState, setPublishModalState] = useState<{
 
     const evaluations = rules.map((rule) => {
       let minAssignedInWindow = Infinity;
+      let totalAssignedAnySlot = 0;
       const assignedNamesSet = new Set<string>();
 
       for (let s = rule.startSlot; s < rule.endSlot; s++) {
@@ -1236,10 +1274,19 @@ const [publishModalState, setPublishModalState] = useState<{
       }
       if (minAssignedInWindow === Infinity) minAssignedInWindow = 0;
 
+      if (rule.isFallback) {
+        workingOnDay.forEach((a) => {
+          const row = mat[a.id] || [];
+          if (row.some((st) => st === rule.state)) {
+            totalAssignedAnySlot++;
+          }
+        });
+      }
+
       return {
         ...rule,
-        assigned: minAssignedInWindow,
-        isMet: minAssignedInWindow >= rule.min,
+        assigned: rule.isFallback ? totalAssignedAnySlot : minAssignedInWindow,
+        isMet: rule.isFallback ? true : minAssignedInWindow >= rule.min,
         assignedNames: Array.from(assignedNamesSet),
       };
     });
@@ -1252,7 +1299,7 @@ const [publishModalState, setPublishModalState] = useState<{
     }[] = [];
 
     evaluations.forEach((ev) => {
-      if (!ev.isMet) {
+      if (!ev.isFallback && !ev.isMet) {
         const rangeStr = `${TIME_SLOTS[ev.startSlot]}–${TIME_SLOTS[ev.endSlot]}`;
         warnings.push({
           id: `rule-${ev.id}`,
@@ -1268,11 +1315,26 @@ const [publishModalState, setPublishModalState] = useState<{
 
     workingOnDay.forEach((a) => {
       const row = mat[a.id] || [];
-      const bounds = getShiftBoundsFromRow(
-        row,
-        targetStatus.viewStartSlot,
-        targetStatus.viewEndSlot
-      );
+      const fixedBounds =
+        targetOffset === dayOffset
+          ? fixedShiftBoundsByAssistant[a.id]
+          : resolveAssistantShiftBounds({
+              assistantId: a.id,
+              isoDate: info.isoDate,
+              dow: info.dow,
+              viewStartSlot: targetStatus.viewStartSlot,
+              viewEndSlot: targetStatus.viewEndSlot,
+              profiles: profilesByAssistant[String(a.id)],
+              exceptions: exceptionsByAssistant[String(a.id)],
+              baseDayRow: baseDayMatrix[a.id],
+              schedulesList,
+              lunchBlocksForDate: lunchBlocksByDate[info.isoDate],
+              absences: absencesRes?.data || [],
+            });
+
+      const shiftStartSlot = fixedBounds?.startSlot;
+      const shiftEndSlot = fixedBounds?.endSlot;
+      const outOfShiftSlots: number[] = [];
       const outOfBoundsSlots: number[] = [];
       let lunchSlotsCount = 0;
       let activeWorkSlots = 0;
@@ -1287,10 +1349,41 @@ const [publishModalState, setPublishModalState] = useState<{
           ) {
             outOfBoundsSlots.push(s);
           }
+          if (
+            shiftStartSlot !== null &&
+            shiftEndSlot !== null &&
+            shiftStartSlot !== undefined &&
+            shiftEndSlot !== undefined &&
+            shiftEndSlot > shiftStartSlot
+          ) {
+            if (s < shiftStartSlot || s >= shiftEndSlot) {
+              outOfShiftSlots.push(s);
+            }
+          }
         }
         if (st === "lunch") {
           lunchSlotsCount++;
         }
+      }
+
+      if (outOfShiftSlots.length > 0) {
+        const firstOut = TIME_SLOTS[outOfShiftSlots[0]];
+        const lastOut =
+          TIME_SLOTS[
+            Math.min(outOfShiftSlots[outOfShiftSlots.length - 1] + 1, 95)
+          ];
+        const shiftStr =
+          shiftStartSlot !== undefined && shiftEndSlot !== undefined
+            ? `${TIME_SLOTS[shiftStartSlot]}–${TIME_SLOTS[shiftEndSlot]}`
+            : "";
+        warnings.push({
+          id: `out-of-shift-${a.id}`,
+          severity: "critical",
+          title: `Atividades fora do horário do assistente: ${a.name}`,
+          detail: `Tem ${formatDurationSlots(
+            outOfShiftSlots.length
+          )} (${firstOut}–${lastOut}) marcados fora do seu turno habitual (${shiftStr}).`,
+        });
       }
 
       if (outOfBoundsSlots.length > 0) {
@@ -1680,6 +1773,13 @@ const [publishModalState, setPublishModalState] = useState<{
                       (sIdx < viewStartSlot || sIdx >= viewEndSlot)
                   );
 
+                  const hasOutOfShiftPaint = rowSlots.some(
+                    (st, sIdx) =>
+                      st !== "off" &&
+                      st !== "absent" &&
+                      (sIdx < shiftBounds.startSlot || sIdx >= shiftBounds.endSlot)
+                  );
+
                   const clampedShiftStart = Math.max(
                     shiftBounds.startSlot,
                     viewStartSlot
@@ -1774,6 +1874,16 @@ const [publishModalState, setPublishModalState] = useState<{
                               >
                                 <span className="inline-flex items-center text-blue-600 dark:text-blue-400 shrink-0">
                                   <ArrowDownLeft size={11} />
+                                </span>
+                              </ActionTooltip>
+                            )}
+                            {hasOutOfShiftPaint && (
+                              <ActionTooltip content={`Tem atividades marcadas fora do horário contratual do assistente (${shiftRangeStr})`}>
+                                <span className="inline-flex items-center">
+                                  <AlertTriangle
+                                    size={11}
+                                    className="text-destructive flex-shrink-0"
+                                  />
                                 </span>
                               </ActionTooltip>
                             )}
@@ -1910,6 +2020,7 @@ const [publishModalState, setPublishModalState] = useState<{
                         {/* Highlighted Rule Window */}
                         {canEditCurrentDay &&
                           highlightedRule &&
+                          !highlightedRule.isFallback &&
                           Math.min(highlightedRule.endSlot, viewEndSlot) >
                             Math.max(
                               highlightedRule.startSlot,
@@ -1963,7 +2074,13 @@ const [publishModalState, setPublishModalState] = useState<{
                             "24:00";
                           const durationStr = formatDurationSlots(b.count);
 
-                          const isBlockOutOfShift =
+                          const isBlockOutsideAssistantShift =
+                            b.state !== "off" &&
+                            b.state !== "absent" &&
+                            (b.start < shiftBounds.startSlot ||
+                              b.start + b.count > shiftBounds.endSlot);
+
+                          const isBlockOutOfSchoolHours =
                             b.start < viewStartSlot ||
                             b.start + b.count > viewEndSlot;
 
@@ -2015,7 +2132,9 @@ const [publishModalState, setPublishModalState] = useState<{
                               } ${radiusClass} ${separatorClass} ${
                                 (b.activityColor === "#EF4444" && (b.activityName?.toLowerCase().includes("vigilância almoço") || b.activityName?.toLowerCase().includes("vigilancia almoco")) ? "#A855F7" : b.activityColor) ? "" : styleConfig.bg
                               } ${spotlightClass} ${
-                                isBlockOutOfShift && canEditCurrentDay
+                                isBlockOutsideAssistantShift && canEditCurrentDay
+                                  ? "ring-2 ring-destructive ring-offset-1 z-10"
+                                  : isBlockOutOfSchoolHours && canEditCurrentDay
                                   ? "ring-2 ring-[#D97706]"
                                   : ""
                               } text-white shadow-2xs overflow-hidden transition-all flex items-center px-2 gap-1.5 text-left`}
@@ -2870,9 +2989,9 @@ const [publishModalState, setPublishModalState] = useState<{
                         const isDimmedBySpotlight =
                           isSpotlightActive && !matchesPaintActivity;
 
-                        const rangeStr = `${TIME_SLOTS[rule.startSlot]}–${
-                          TIME_SLOTS[rule.endSlot]
-                        }`;
+                        const rangeStr = rule.isFallback
+                          ? "Sem restrição horária"
+                          : `${TIME_SLOTS[rule.startSlot]}–${TIME_SLOTS[rule.endSlot]}`;
                         return (
                           <button
                             key={rule.id}
@@ -2906,22 +3025,29 @@ const [publishModalState, setPublishModalState] = useState<{
                                   {rule.title}
                                 </span>
                               </div>
-                              <span
-                                className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded flex items-center gap-1 flex-shrink-0 ${
-                                  rule.isMet
-                                    ? "bg-[#0E7C59]/15 text-[#0E7C59]"
-                                    : rule.type === "mandatory"
-                                    ? "bg-destructive/15 text-destructive"
-                                    : "bg-[#D97706]/15 text-[#D97706]"
-                                }`}
-                              >
-                                {rule.isMet ? (
-                                  <CheckCircle2 size={10} />
-                                ) : (
-                                  <AlertTriangle size={10} />
-                                )}
-                                {rule.assigned}/{rule.min}
-                              </span>
+                              {rule.isFallback ? (
+                                <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded flex items-center gap-1 flex-shrink-0 bg-blue-100 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border border-blue-200/50 dark:border-blue-800/50">
+                                  <Sparkles size={10} />
+                                  Fallback ({rule.assigned})
+                                </span>
+                              ) : (
+                                <span
+                                  className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded flex items-center gap-1 flex-shrink-0 ${
+                                    rule.isMet
+                                      ? "bg-[#0E7C59]/15 text-[#0E7C59]"
+                                      : rule.type === "mandatory"
+                                      ? "bg-destructive/15 text-destructive"
+                                      : "bg-[#D97706]/15 text-[#D97706]"
+                                  }`}
+                                >
+                                  {rule.isMet ? (
+                                    <CheckCircle2 size={10} />
+                                  ) : (
+                                    <AlertTriangle size={10} />
+                                  )}
+                                  {rule.assigned}/{rule.min}
+                                </span>
+                              )}
                             </div>
 
                             <div className="flex items-center justify-between text-[10px] text-muted-foreground">
@@ -2930,19 +3056,25 @@ const [publishModalState, setPublishModalState] = useState<{
                               </span>
                               <span
                                 className={`uppercase tracking-wider font-semibold text-[9px] ${
-                                  rule.type === "mandatory"
+                                  rule.isFallback
+                                    ? "text-blue-600 dark:text-blue-400 font-bold"
+                                    : rule.type === "mandatory"
                                     ? "text-primary"
                                     : "text-muted-foreground"
                                 }`}
                               >
-                                {rule.type === "mandatory"
+                                {rule.isFallback
+                                  ? "Atividade Fallback"
+                                  : rule.type === "mandatory"
                                   ? "Obrigatória"
                                   : "Facultativa"}
                               </span>
                             </div>
 
                             <p className="text-[10px] text-muted-foreground truncate">
-                              Fila: {rule.priorityNames.join(" · ")}
+                              {rule.isFallback
+                                ? "Atividade padrão de preenchimento e apoio escolar"
+                                : `Fila: ${rule.priorityNames.join(" · ")}`}
                             </p>
                           </button>
                         );
