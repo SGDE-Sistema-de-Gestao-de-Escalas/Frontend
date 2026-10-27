@@ -1503,11 +1503,15 @@ export default function PublishSchedulesModal({
                         : null
                     }
                   >
-                    <button
-                      type="button"
-                      disabled={!validationsByDate[previewDate]?.canPublish}
-                      onClick={() => toggleDate(previewDate)}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all shadow-2xs ${
+                    <label
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!validationsByDate[previewDate]?.canPublish) {
+                          e.preventDefault();
+                          return;
+                        }
+                      }}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all shadow-2xs select-none ${
                         !validationsByDate[previewDate]?.canPublish
                           ? "opacity-50 cursor-not-allowed border-border text-muted-foreground bg-muted/20"
                           : selectedDates.includes(previewDate)
@@ -1518,10 +1522,14 @@ export default function PublishSchedulesModal({
                       <Checkbox
                         checked={selectedDates.includes(previewDate)}
                         disabled={!validationsByDate[previewDate]?.canPublish}
-                        onCheckedChange={() => toggleDate(previewDate)}
+                        onCheckedChange={() => {
+                          if (validationsByDate[previewDate]?.canPublish) {
+                            toggleDate(previewDate);
+                          }
+                        }}
                       />
                       <span>Incluir na Publicação</span>
-                    </button>
+                    </label>
                   </ActionTooltip>
                 </div>
               </div>
