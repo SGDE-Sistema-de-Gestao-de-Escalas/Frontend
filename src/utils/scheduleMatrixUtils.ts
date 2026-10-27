@@ -1236,8 +1236,19 @@ export function resolveAssistantShiftBounds(params: {
       absences
     );
     if (absInfo.absent) {
-      absenceStartSlot = absInfo.startSlot ?? null;
-      absenceEndSlot = absInfo.endSlot ?? null;
+      if (absInfo.isFullDay) {
+        absenceStartSlot = finalStart;
+        absenceEndSlot = finalEnd;
+      } else {
+        absenceStartSlot =
+          absInfo.startSlot !== undefined && absInfo.startSlot >= 0
+            ? Math.max(absInfo.startSlot, finalStart)
+            : finalStart;
+        absenceEndSlot =
+          absInfo.endSlot !== undefined && absInfo.endSlot <= 96
+            ? Math.min(absInfo.endSlot, finalEnd)
+            : finalEnd;
+      }
       absenceReason = absInfo.reason ?? "Ausência Registada";
     }
   }
@@ -1431,16 +1442,30 @@ export function buildDayMatrixFromApi(params: {
       }
     }
 
-    // Se o assistente tem ausência registada que coincida com o horário de almoço, a falta absorve a refeição
+    // Se o assistente tem ausência registada que coincida com o horário de almoço ou dia inteiro, a falta absorve a refeição
     const absInfoForLunch = checkAssistantAbsenceOnDate(assistant, isoDate, absences);
-    const absStartForLunch = absInfoForLunch.absent && absInfoForLunch.startSlot !== undefined ? absInfoForLunch.startSlot : -1;
-    const absEndForLunch = absInfoForLunch.absent && absInfoForLunch.endSlot !== undefined ? absInfoForLunch.endSlot : -1;
-    if (absInfoForLunch.absent && absStartForLunch >= 0 && absEndForLunch > absStartForLunch && lunchS !== null && lunchE !== null) {
-      const overlapStart = Math.max(lunchS, absStartForLunch);
-      const overlapEnd = Math.min(lunchE, absEndForLunch);
-      if (overlapEnd > overlapStart) {
+    if (absInfoForLunch.absent) {
+      if (absInfoForLunch.isFullDay) {
         lunchS = null;
         lunchE = null;
+      } else {
+        const absStartForLunch =
+          absInfoForLunch.startSlot !== undefined ? absInfoForLunch.startSlot : -1;
+        const absEndForLunch =
+          absInfoForLunch.endSlot !== undefined ? absInfoForLunch.endSlot : -1;
+        if (
+          absStartForLunch >= 0 &&
+          absEndForLunch > absStartForLunch &&
+          lunchS !== null &&
+          lunchE !== null
+        ) {
+          const overlapStart = Math.max(lunchS, absStartForLunch);
+          const overlapEnd = Math.min(lunchE, absEndForLunch);
+          if (overlapEnd > overlapStart) {
+            lunchS = null;
+            lunchE = null;
+          }
+        }
       }
     }
 
@@ -1459,18 +1484,31 @@ export function buildDayMatrixFromApi(params: {
     // 3. Aplicar ausências registadas na API para este assistente nesta data
     const absInfo = checkAssistantAbsenceOnDate(assistant, isoDate, absences);
     if (absInfo.absent) {
-      const aStart =
-        absInfo.startSlot !== undefined && absInfo.startSlot > 0
-          ? absInfo.startSlot
-          : 32;
-      const aEnd =
-        absInfo.endSlot !== undefined && absInfo.endSlot < 96
-          ? absInfo.endSlot
-          : 68;
+      let aStart: number;
+      let aEnd: number;
+
+      if (absInfo.isFullDay) {
+        // Falta de dia inteiro cobre estritamente o turno do assistente
+        aStart = bounds.startSlot;
+        aEnd = bounds.endSlot;
+      } else {
+        // Falta parcial delimita dentro do turno do assistente
+        const rawStart =
+          absInfo.startSlot !== undefined && absInfo.startSlot >= 0
+            ? absInfo.startSlot
+            : bounds.startSlot;
+        const rawEnd =
+          absInfo.endSlot !== undefined && absInfo.endSlot <= 96
+            ? absInfo.endSlot
+            : bounds.endSlot;
+        aStart = Math.max(rawStart, bounds.startSlot);
+        aEnd = Math.min(rawEnd, bounds.endSlot);
+      }
+
       for (let i = aStart; i < aEnd && i < 96; i++) {
         row[i] = "absent";
         metaRow[i] = {
-          activityName: absInfo.reason || "Ausente",
+          activityName: absInfo.reason || "Falta / Ausência",
         };
       }
     }

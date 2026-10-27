@@ -1240,21 +1240,32 @@ function paintSlot(aid: EntityId, slot: number) {
 
       if (absInfo.absent && (absInfo.isFullDay || isShiftCovered)) {
         const copiedRow = copiedInfo?.sourcePlannedMatrix?.[a.id];
+        const fixedBounds = fixedShiftBoundsByAssistant[a.id];
         const fallbackRow = baseDayMatrix[a.id] || Array(96).fill("off");
-        const plannedRow = copiedRow ?? fallbackRow;
+        const resolvedBounds: AssistantResolvedShiftBounds =
+          fixedBounds ||
+          getShiftBoundsFromRow(
+            fallbackRow,
+            viewStartSlot,
+            viewEndSlot
+          );
+
+        let plannedRow = copiedRow ?? fallbackRow;
+        // Para falta de dia inteiro sem cópia explícita, a linha reflete estritamente o turno do assistente
+        if (!copiedRow && absInfo.isFullDay) {
+          const row = Array(96).fill("off") as BlockState[];
+          const bStart = resolvedBounds.startSlot;
+          const bEnd = resolvedBounds.endSlot;
+          for (let i = bStart; i < bEnd && i < 96; i++) {
+            row[i] = "absent";
+          }
+          plannedRow = row;
+        }
+
         const srcDateInfo =
           copiedInfo !== undefined
             ? getDateInfo(copiedInfo.sourceOffset)
             : null;
-
-        const fixedBounds = fixedShiftBoundsByAssistant[a.id];
-        const resolvedBounds: AssistantResolvedShiftBounds =
-          fixedBounds ||
-          getShiftBoundsFromRow(
-            plannedRow,
-            viewStartSlot,
-            viewEndSlot
-          );
 
         absent.push({
           assistant: a,
