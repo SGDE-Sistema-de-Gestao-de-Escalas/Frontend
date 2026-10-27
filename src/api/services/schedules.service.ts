@@ -66,6 +66,15 @@ export interface TransferCandidateApi {
   selectable: boolean;
   score: number;
   origin_impact_detail: string | null;
+  shift_start?: string | null;
+  shift_end?: string | null;
+  lunch_start?: string | null;
+  lunch_end?: string | null;
+  lunch_duration?: number | null;
+  is_absent?: boolean;
+  partial_absence?: string | null;
+  absence_overlaps?: boolean;
+  works_today?: boolean;
 }
 
 export interface SkippedCandidateApi {
@@ -153,6 +162,8 @@ export interface ApprovedTransferPayload {
   assistant_id: string;
   date: string;
   rule_id?: string;
+  start_time?: string | null;
+  end_time?: string | null;
   notes?: string;
 }
 

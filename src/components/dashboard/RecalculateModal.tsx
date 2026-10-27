@@ -697,22 +697,31 @@ export default function RecalculateModal({
                   <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                     {filteredSubstitutes.map((c) => {
                       const isSelected = String(selectedSubstituteId) === String(c.assistant_id);
+                      const isDisabled = c.is_absent || c.selectable === false;
                       const initials = getInitials(c.name);
                       return (
                         <button
                           key={c.assistant_id}
                           type="button"
-                          onClick={() => setSelectedSubstituteId(isSelected ? null : c.assistant_id)}
-                          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all text-left ${
-                            isSelected
+                          disabled={isDisabled}
+                          onClick={() => {
+                            if (isDisabled) return;
+                            setSelectedSubstituteId(isSelected ? null : c.assistant_id);
+                          }}
+                          className={`w-full flex items-start gap-3 px-3.5 py-2.5 rounded-xl border transition-all text-left ${
+                            isDisabled
+                              ? "border-border/60 bg-muted/20 opacity-60 cursor-not-allowed"
+                              : isSelected
                               ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
                               : "border-border hover:bg-muted/40 bg-card"
                           }`}
                         >
                           <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold font-mono ${
+                            className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold font-mono mt-0.5 ${
                               isSelected
                                 ? "bg-primary text-primary-foreground"
+                                : isDisabled
+                                ? "bg-muted text-muted-foreground"
                                 : "bg-primary/10 text-primary"
                             }`}
                           >
@@ -725,20 +734,52 @@ export default function RecalculateModal({
                               </p>
                               <span
                                 className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
-                                  c.causes_origin_shortfall
+                                  isDisabled
+                                    ? "bg-muted text-muted-foreground"
+                                    : c.causes_origin_shortfall
                                     ? "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300"
                                     : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300"
                                 }`}
                               >
-                                {c.causes_origin_shortfall
+                                {c.is_absent
+                                  ? "Indisponível"
+                                  : c.causes_origin_shortfall
                                   ? `Score ${c.score}% · Afeta origem`
                                   : `Score ${c.score}% · Livre na origem`}
                               </span>
                             </div>
+
                             <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
                               <Building2 size={11} className="flex-shrink-0" />
                               {c.origin_school_name ?? "Escola do Agrupamento"}
                             </p>
+
+                            {/* Badges de Turno, Almoço e Ausências */}
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                              {c.shift_start && c.shift_end && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-mono bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded border border-blue-200/50 dark:border-blue-800/50">
+                                  <Clock size={10} className="flex-shrink-0" />
+                                  Turno: {c.shift_start}–{c.shift_end}
+                                </span>
+                              )}
+                              {c.lunch_start && c.lunch_end && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-mono bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded border border-amber-200/50 dark:border-amber-800/50">
+                                  <Utensils size={10} className="flex-shrink-0" />
+                                  Almoço: {c.lunch_start}–{c.lunch_end} ({c.lunch_duration ?? 60}m)
+                                </span>
+                              )}
+                              {c.is_absent && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 px-1.5 py-0.5 rounded border border-rose-200/50 dark:border-rose-800/50">
+                                  Ausente (Dia todo)
+                                </span>
+                              )}
+                              {!c.is_absent && c.partial_absence && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded border border-amber-200/50 dark:border-amber-800/50">
+                                  ⚠️ {c.partial_absence}
+                                </span>
+                              )}
+                            </div>
+
                             {c.causes_origin_shortfall && c.origin_impact_detail && (
                               <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1 leading-snug">
                                 {c.origin_impact_detail}
@@ -746,7 +787,7 @@ export default function RecalculateModal({
                             )}
                           </div>
                           {isSelected && (
-                            <Check size={16} className="text-primary flex-shrink-0" />
+                            <Check size={16} className="text-primary flex-shrink-0 mt-0.5" />
                           )}
                         </button>
                       );
@@ -755,15 +796,117 @@ export default function RecalculateModal({
                 )}
               </div>
 
-              {/* Resumo do Selecionado */}
+              {/* Resumo e Configuração do Selecionado */}
               {selectedSub && (
-                <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 flex items-center gap-2.5 text-xs animate-in fade-in-50">
-                  <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-[10px] font-bold text-primary">{getInitials(selectedSub.name)}</span>
+                <div className="p-3.5 rounded-xl border border-primary/30 bg-primary/5 space-y-3 animate-in fade-in-50">
+                  <div className="flex items-start gap-2.5 text-xs">
+                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 text-primary font-bold">
+                      {getInitials(selectedSub.name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-foreground text-xs">{selectedSub.name}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {selectedSub.origin_school_name ?? "Escola de Origem"}
+                        {selectedSub.shift_start && ` · Turno: ${selectedSub.shift_start}–${selectedSub.shift_end}`}
+                        {selectedSub.lunch_start && ` · Almoço: ${selectedSub.lunch_start}–${selectedSub.lunch_end}`}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0 text-muted-foreground leading-snug">
-                    <strong className="text-foreground">{selectedSub.name}</strong> ({selectedSub.origin_school_name ?? "outra escola"}) será transferido para cobrir{" "}
-                    <strong className="font-mono text-foreground">{activeConflict.period_start}–{activeConflict.period_end}</strong> em {activeConflict.date}.
+
+                  {/* Seletor de Período da Transferência */}
+                  <div className="space-y-1.5 pt-2 border-t border-primary/15">
+                    <label className="text-[11px] font-semibold text-foreground flex items-center justify-between">
+                      <span>Período de cedência para esta escola:</span>
+                      <span className="text-[10px] text-muted-foreground font-normal">
+                        Necessidade da regra: {activeConflict.period_start}–{activeConflict.period_end}
+                      </span>
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setTransferTimeMode("deficit")}
+                        className={`p-2 rounded-lg border text-left transition-all ${
+                          transferTimeMode === "deficit"
+                            ? "border-primary bg-background shadow-xs ring-1 ring-primary/20 font-medium text-foreground"
+                            : "border-border bg-card/60 text-muted-foreground hover:bg-card"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold">Período do Défice</span>
+                          <span className="font-mono text-[10px] text-primary">{activeConflict.period_start}–{activeConflict.period_end}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          Cobre apenas a necessidade; restante horário mantido na origem.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setTransferTimeMode("full_day")}
+                        className={`p-2 rounded-lg border text-left transition-all ${
+                          transferTimeMode === "full_day"
+                            ? "border-primary bg-background shadow-xs ring-1 ring-primary/20 font-medium text-foreground"
+                            : "border-border bg-card/60 text-muted-foreground hover:bg-card"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold">Dia Inteiro</span>
+                          <span className="font-mono text-[10px] text-primary">
+                            {selectedSub.shift_start ? `${selectedSub.shift_start}–${selectedSub.shift_end}` : "Turno Todo"}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          Transfere todo o horário diário do assistente para esta escola.
+                        </p>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (transferTimeMode !== "custom") {
+                            setTransferTimeMode("custom");
+                            setTransferCustomStart(activeConflict.period_start);
+                            setTransferCustomEnd(activeConflict.period_end);
+                          } else {
+                            setTransferTimeMode("deficit");
+                          }
+                        }}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        {transferTimeMode === "custom" ? "← Voltar aos modos predefinidos" : "Personalizar horas específicas..."}
+                      </button>
+                    </div>
+
+                    {transferTimeMode === "custom" && (
+                      <div className="flex items-center gap-2 pt-1 animate-in fade-in-50">
+                        <div className="flex-1">
+                          <label className="text-[10px] text-muted-foreground block mb-0.5">Início</label>
+                          <input
+                            type="time"
+                            value={transferCustomStart}
+                            onChange={(e) => setTransferCustomStart(e.target.value)}
+                            className="w-full h-8 px-2 text-xs font-mono rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:outline-none"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-[10px] text-muted-foreground block mb-0.5">Fim</label>
+                          <input
+                            type="time"
+                            value={transferCustomEnd}
+                            onChange={(e) => setTransferCustomEnd(e.target.value)}
+                            className="w-full h-8 px-2 text-xs font-mono rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-[10px] text-muted-foreground pt-1 flex items-center gap-1">
+                      <Info size={11} className="flex-shrink-0 text-primary" />
+                      A pausa de almoço de 1h é adaptada e garantida pelo motor antes ou depois da cedência.
+                    </p>
                   </div>
                 </div>
               )}
