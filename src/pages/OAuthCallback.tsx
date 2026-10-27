@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { notify } from "../components/common/FeedbackNotification";
 import { Loader2 } from "lucide-react";

@@ -6,16 +6,29 @@ import {
   UpdateAssistantExceptionPayload,
 } from "../../types/assistantSchedule.types";
 import { EntityId } from "../../types";
+import { useSchool } from "../../context/SchoolContext";
+import { schoolScopedKey } from "../../lib/queryClient";
 
 export const ASSISTANT_EXCEPTIONS_KEY = ["assistant-exceptions"];
 
 export function useAssistantExceptions(assistantId?: EntityId) {
+  const { selectedSchoolId } = useSchool();
   const aid = assistantId ? String(assistantId) : "";
 
   return useQuery({
-    queryKey: [...ASSISTANT_EXCEPTIONS_KEY, aid],
+    queryKey: schoolScopedKey("assistant-exceptions", selectedSchoolId, aid),
     queryFn: () => assistantExceptionsService.getAll(aid),
-    enabled: !!aid,
+    enabled: !!selectedSchoolId && !!aid,
+  });
+}
+
+export function useAllAssistantExceptions() {
+  const { selectedSchoolId } = useSchool();
+
+  return useQuery({
+    queryKey: schoolScopedKey("assistant-exceptions", selectedSchoolId, "all"),
+    queryFn: () => assistantExceptionsService.getAll(),
+    enabled: !!selectedSchoolId,
   });
 }
 
@@ -25,10 +38,10 @@ export function useCreateAssistantException() {
   return useMutation({
     mutationFn: (payload: CreateAssistantExceptionPayload) =>
       assistantExceptionsService.create(payload),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: [...ASSISTANT_EXCEPTIONS_KEY, String(variables.assistant_id)],
-      });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ASSISTANT_EXCEPTIONS_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("Regra de exceção registada com sucesso.", "Exceção Criada");
     },
     onError: (error: any) => {
@@ -51,10 +64,10 @@ export function useUpdateAssistantException() {
       data: UpdateAssistantExceptionPayload;
       assistantId: string;
     }) => assistantExceptionsService.update(id, data),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: [...ASSISTANT_EXCEPTIONS_KEY, String(variables.assistantId)],
-      });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ASSISTANT_EXCEPTIONS_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("Regra de exceção atualizada com sucesso.", "Exceção Atualizada");
     },
     onError: (error: any) => {
@@ -75,10 +88,10 @@ export function useDeleteAssistantException() {
       id: string | number;
       assistantId: string;
     }) => assistantExceptionsService.delete(id),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: [...ASSISTANT_EXCEPTIONS_KEY, String(variables.assistantId)],
-      });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ASSISTANT_EXCEPTIONS_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("Regra de exceção eliminada com sucesso.", "Exceção Eliminada");
     },
     onError: (error: any) => {

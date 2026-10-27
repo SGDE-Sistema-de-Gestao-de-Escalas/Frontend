@@ -14,7 +14,8 @@ export const operatingHoursService = {
   // ── 1) Horário fixo de funcionamento — /api/operating-rules ──────────────────
   async getRules(params?: { status?: string }, _schoolId?: string): Promise<{ data: OperatingRule[] }> {
     try {
-      const response = await apiClient.get<any>("/operating-rules", { params });
+      const queryParams = params?.status && params.status !== "all" ? { status: params.status } : undefined;
+      const response = await apiClient.get<any>("/operating-rules", { params: queryParams });
       const list = Array.isArray(response?.data?.data)
         ? response.data.data
         : Array.isArray(response?.data)
@@ -52,7 +53,8 @@ export const operatingHoursService = {
   // ── 2) Exceções de funcionamento — /api/operating-exceptions ─────────────────
   async getExceptions(params?: { status?: string }, _schoolId?: string): Promise<{ data: OperatingException[] }> {
     try {
-      const response = await apiClient.get<any>("/operating-exceptions", { params });
+      const queryParams = params?.status && params.status !== "all" ? { status: params.status } : undefined;
+      const response = await apiClient.get<any>("/operating-exceptions", { params: queryParams });
       const list = Array.isArray(response?.data?.data)
         ? response.data.data
         : Array.isArray(response?.data)

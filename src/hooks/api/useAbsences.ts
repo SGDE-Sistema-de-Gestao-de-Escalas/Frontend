@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notify } from "../../components/common/FeedbackNotification";
 import absencesService, {
   BackendAbsenceResource,
@@ -24,6 +24,7 @@ export function useAbsencesList(filters?: AbsenceFilterParams) {
     queryFn: async (): Promise<PaginatedAbsencesResult> => {
       return await absencesService.getAll(filters);
     },
+    placeholderData: keepPreviousData,
     enabled: !!selectedSchoolId,
   });
 }
@@ -46,7 +47,6 @@ export function useAbsenceCounts(filters?: Omit<AbsenceFilterParams, "page" | "p
       return await absencesService.getCounts(filters);
     },
     enabled: !!selectedSchoolId,
-    staleTime: 30000,
   });
 }
 
@@ -58,9 +58,18 @@ export function useCreateAbsence() {
 
   return useMutation({
     mutationFn: (data: CreateAbsencePayload) => absencesService.create(data),
-    onSuccess: () => {
+    onSuccess: (data: BackendAbsenceResource) => {
       queryClient.invalidateQueries({ queryKey: ABSENCES_QUERY_KEY });
-      notify.success("A ausência foi registada com sucesso.", "Ausência Registada");
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
+      if (data?.impact?.requires_recalculation) {
+        notify.warning(
+          `Esta ausência afeta a escala gerada em ${data.impact.affected_dates.length} dia(s). É necessário recalcular o horário.`,
+          "Recálculo de Escala Necessário"
+        );
+      } else {
+        notify.success("A ausência foi registada com sucesso.", "Ausência Registada");
+      }
     },
     onError: (error: any) => {
       const message =
@@ -81,9 +90,18 @@ export function useUpdateAbsence() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string | number; data: UpdateAbsencePayload }) =>
       absencesService.update(id, data),
-    onSuccess: () => {
+    onSuccess: (data: BackendAbsenceResource) => {
       queryClient.invalidateQueries({ queryKey: ABSENCES_QUERY_KEY });
-      notify.success("A ausência foi atualizada com sucesso.", "Ausência Atualizada");
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
+      if (data?.impact?.requires_recalculation) {
+        notify.warning(
+          `Esta ausência afeta a escala gerada em ${data.impact.affected_dates.length} dia(s). É necessário recalcular o horário.`,
+          "Recálculo de Escala Necessário"
+        );
+      } else {
+        notify.success("A ausência foi atualizada com sucesso.", "Ausência Atualizada");
+      }
     },
     onError: (error: any) => {
       const message =
@@ -111,6 +129,8 @@ export function useUpdateAbsenceStatus() {
     }) => absencesService.updateStatus(id, status, notes),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ABSENCES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       const isJustified =
         variables.status === "justified" || variables.status === "justificada";
       notify.success(
@@ -172,6 +192,8 @@ export function useDeleteAbsence() {
     mutationFn: (id: string | number) => absencesService.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ABSENCES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("A ausência foi eliminada com sucesso.", "Ausência Eliminada");
     },
     onError: (error: any) => {

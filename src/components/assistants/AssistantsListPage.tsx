@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ChevronRight,
   Download,
@@ -19,6 +19,7 @@ import { useSchool } from "../../context/SchoolContext";
 import ListToolbar from "../common/ListToolbar";
 import ListPagination from "../common/ListPagination";
 import ImportAssistantsModal from "./ImportAssistantsModal";
+import ActionTooltip from "../common/ActionTooltip";
 
 interface AssistantsListPageProps {
   onAddNew: () => void;
@@ -37,8 +38,17 @@ export default function AssistantsListPage({
   const [pageSize, setPageSize] = useState(10);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
-  const { selectedSchool } = useSchool();
+  const { selectedSchool, selectedSchoolId } = useSchool();
   const exportMutation = useExportAssistantsCsv();
+
+  // Resetar pesquisa e página ao trocar de escola
+  useEffect(() => {
+    setSearch("");
+    setDebouncedSearch("");
+    setCurrentPage(1);
+    setTab("ativos");
+    setIsImportModalOpen(false);
+  }, [selectedSchoolId]);
 
   // Debounce da pesquisa para não sobrecarregar a API a cada tecla (2 segundos)
   useEffect(() => {
@@ -184,35 +194,37 @@ export default function AssistantsListPage({
         extraFilters={
           <div className="flex items-center gap-1.5">
             {/* Botão de Exportar CSV */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleExportCsv}
-              disabled={exportMutation.isPending}
-              className="h-8 px-2.5 text-xs gap-1.5 border-border bg-card/60 hover:bg-muted text-foreground transition-colors shadow-xs"
-              title="Exportar assistentes para CSV"
-            >
-              {exportMutation.isPending ? (
-                <Loader2 size={13} className="animate-spin text-muted-foreground" />
-              ) : (
-                <Download size={13} className="text-muted-foreground" />
-              )}
-              <span className="hidden sm:inline">Exportar</span>
-            </Button>
+            <ActionTooltip content="Exportar assistentes para ficheiro CSV">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleExportCsv}
+                disabled={exportMutation.isPending}
+                className="h-8 px-2.5 text-xs gap-1.5 border-border bg-card/60 hover:bg-muted text-foreground transition-colors shadow-xs cursor-pointer"
+              >
+                {exportMutation.isPending ? (
+                  <Loader2 size={13} className="animate-spin text-muted-foreground" />
+                ) : (
+                  <Download size={13} className="text-muted-foreground" />
+                )}
+                <span className="hidden sm:inline">Exportar</span>
+              </Button>
+            </ActionTooltip>
 
             {/* Botão de Importar CSV */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsImportModalOpen(true)}
-              className="h-8 px-2.5 text-xs gap-1.5 border-border bg-card/60 hover:bg-muted text-foreground transition-colors shadow-xs"
-              title="Importar assistentes por CSV"
-            >
-              <FileSpreadsheet size={13} className="text-muted-foreground" />
-              <span>Importar CSV</span>
-            </Button>
+            <ActionTooltip content="Importar assistentes a partir de ficheiro CSV">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsImportModalOpen(true)}
+                className="h-8 px-2.5 text-xs gap-1.5 border-border bg-card/60 hover:bg-muted text-foreground transition-colors shadow-xs cursor-pointer"
+              >
+                <FileSpreadsheet size={13} className="text-muted-foreground" />
+                <span>Importar CSV</span>
+              </Button>
+            </ActionTooltip>
           </div>
         }
       />

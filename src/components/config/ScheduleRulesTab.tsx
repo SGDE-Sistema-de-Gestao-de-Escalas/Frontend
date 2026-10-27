@@ -1,8 +1,6 @@
 import React, { useState } from "react";
 import {
   AlertTriangle,
-  ArrowUpDown,
-  Check,
   CheckCircle,
   ChevronDown,
   ChevronUp,
@@ -11,7 +9,6 @@ import {
   Loader2,
   Pencil,
   Plus,
-  ShieldAlert,
   Trash2,
   Users,
 } from "lucide-react";
@@ -79,8 +76,7 @@ export default function ScheduleRulesTab() {
   const [showMissingSubstitutesWarning, setShowMissingSubstitutesWarning] = useState(false);
 
   const isEditing = editingRuleId !== null;
-  const selectedActivity = activityTypes.find((a) => a.id === formActivityId);
-  const ruleEligibleActivityTypes = activityTypes.filter(
+    const ruleEligibleActivityTypes = activityTypes.filter(
     (a) => a.active !== false && !isFallbackActivityType(a)
   );
   function toggleDay(i: number) {
@@ -380,7 +376,7 @@ export default function ScheduleRulesTab() {
                           {isAllDays ? (
                             <span className="text-xs text-muted-foreground font-medium">Todos</span>
                           ) : isWeekdays ? (
-                            <span className="text-xs text-muted-foreground font-medium">Seg–Sex</span>
+                            <span className="text-xs text-muted-foreground font-medium">Seg – Sex</span>
                           ) : (
                             DAYS.map((d, idx) => {
                               const isActive = daysOfWeek.includes(idx);
@@ -402,7 +398,7 @@ export default function ScheduleRulesTab() {
                         </div>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">
-                        {rule.period_start}–{rule.period_end}
+                        {rule.period_start} – {rule.period_end}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs font-semibold">
                         {rule.min}
@@ -840,24 +836,8 @@ export default function ScheduleRulesTab() {
                           {/* Lado direito: Botões subir/descer discretos + Checkbox de seleção */}
                           <div className="flex items-center gap-2 shrink-0">
                             <div className="flex items-center gap-0.5">
-                              <button
-                                type="button"
-                                disabled={index === 0}
-                                onClick={() => moveAssistant(index, "up")}
-                                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
-                                title="Subir na lista"
-                              >
-                                <ChevronUp size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                disabled={index === orderedAssistantIds.length - 1}
-                                onClick={() => moveAssistant(index, "down")}
-                                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
-                                title="Descer na lista"
-                              >
-                                <ChevronDown size={13} />
-                              </button>
+                              <ActionTooltip content="Subir prioridade"><button type="button" disabled={index === 0} onClick={() => moveAssistant(index, "up")} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:hover:bg-transparent transition-colors cursor-pointer"><ChevronUp size={13} /></button></ActionTooltip>
+                              <ActionTooltip content="Descer prioridade"><button type="button" disabled={index === orderedAssistantIds.length - 1} onClick={() => moveAssistant(index, "down")} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:hover:bg-transparent transition-colors cursor-pointer"><ChevronDown size={13} /></button></ActionTooltip>
                             </div>
 
                             {/* Checkbox com check branco */}
@@ -1006,3 +986,4 @@ export default function ScheduleRulesTab() {
     </div>
   );
 }
+

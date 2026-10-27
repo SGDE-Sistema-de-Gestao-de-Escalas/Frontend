@@ -1,13 +1,12 @@
 import React, { useState } from "react";
 import {
   AlertTriangle,
-  BarChart2,
+  CheckCircle2,
   Clock,
-  Info,
+  Loader2,
   Lock,
   Pencil,
   Plus,
-  Save,
   Trash2,
 } from "lucide-react";
 import { Card } from "../ui/card";
@@ -19,15 +18,7 @@ import DatePicker from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import ActionTooltip from "../common/ActionTooltip";
 import { notify } from "../common/FeedbackNotification";
-import {
-  BLOCK_STYLES,
-  slotsToBlocks,
-  VIEW_START,
-  VIEW_END,
-  VIEW_SLOTS,
-} from "../dashboard/blockStyles";
-import { HOUR_LABELS } from "../../api/mockData";
-import type { BlockState, EntityId } from "../../types";
+import type { EntityId } from "../../types";
 import {
   useAssistantSchedules,
   useCreateAssistantSchedule,
@@ -38,6 +29,7 @@ import {
   apiProfileToScheduleItem,
   scheduleItemToApiPayload,
 } from "../../api/services/assistantSchedules.service";
+import { computeActiveRotatingShift } from "../../utils/scheduleMatrixUtils";
 
 export interface AssistantScheduleItem {
   id: string | number;
@@ -120,10 +112,13 @@ export default function AssistantScheduleManager({
   }, [apiProfiles]);
 
   const [showAddScheduleModal, setShowAddScheduleModal] = useState(false);
-  const [editingScheduleId, setEditingScheduleId] = useState<number | null>(null);
+  const [editingScheduleId, setEditingScheduleId] = useState<string | number | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [scheduleFieldErrors, setScheduleFieldErrors] = useState<{ start?: string; end?: string }>({});
   const [scheduleToDelete, setScheduleToDelete] = useState<AssistantScheduleItem | null>(null);
+
+  const isSavingSchedule =
+    createScheduleMutation.isPending || updateScheduleMutation.isPending;
 
   // Form states for adding/editing schedule
   const [shiftProfile, setShiftProfile] = useState<"fixed" | "rotating">("fixed");
@@ -294,7 +289,7 @@ export default function AssistantScheduleManager({
     setShowAddScheduleModal(true);
   }
 
-  function handleSaveSchedule() {
+  async function handleSaveSchedule() {
     setScheduleError(null);
     setScheduleFieldErrors({});
 
@@ -353,19 +348,21 @@ export default function AssistantScheduleManager({
         }
       }
 
-      setSchedules((prev) =>
-        prev.map((s) => (s.id === editingSchedule.id ? { ...s, to: endVal } : s))
-      );
-      if (assistantId) {
-        updateScheduleMutation.mutate({
-          id: editingSchedule.id,
-          assistantId: String(assistantId),
-          data: { valid_until: endVal },
-        });
+      try {
+        if (assistantId) {
+          await updateScheduleMutation.mutateAsync({
+            id: editingSchedule.id,
+            assistantId: String(assistantId),
+            data: { valid_until: endVal },
+          });
+        }
+        setShowAddScheduleModal(false);
+        setEditingScheduleId(null);
+      } catch (err: any) {
+        const beMsg =
+          err?.response?.data?.message || "Não foi possível atualizar a data de término.";
+        setScheduleError(beMsg);
       }
-      notify.success("Data de fim de vigência atualizada!");
-      setShowAddScheduleModal(false);
-      setEditingScheduleId(null);
       return;
     }
 
@@ -439,51 +436,43 @@ export default function AssistantScheduleManager({
           }),
     };
 
-    setSchedules((prev) => {
-      let list = editingScheduleId
-        ? prev.map((s) => (s.id === editingScheduleId ? itemToSave : s))
-        : [itemToSave, ...prev];
-
-      if (activeSchedule && activeSchedule.id !== editingScheduleId && startVal > activeSchedule.from) {
-        const eve = addDays(startVal, -1);
-        list = list.map((s) => {
-          if (s.id === activeSchedule.id) {
-            return { ...s, to: eve };
-          }
-          return s;
-        });
+    try {
+      if (assistantId) {
+        if (editingScheduleId) {
+          await updateScheduleMutation.mutateAsync({
+            id: editingScheduleId,
+            assistantId: String(assistantId),
+            data: {
+              valid_from: itemToSave.from,
+              valid_until: itemToSave.to,
+            },
+          });
+        } else {
+          await createScheduleMutation.mutateAsync(
+            scheduleItemToApiPayload(String(assistantId), itemToSave)
+          );
+        }
       }
 
-      return list.sort((a, b) => (b.from > a.from ? 1 : -1));
-    });
-
-    if (assistantId) {
-      if (editingScheduleId) {
-        updateScheduleMutation.mutate({
-          id: editingScheduleId,
-          assistantId: String(assistantId),
-          data: {
-            valid_from: itemToSave.from,
-            valid_until: itemToSave.to,
-          },
-        });
-      } else {
-        createScheduleMutation.mutate(
-          scheduleItemToApiPayload(String(assistantId), itemToSave)
-        );
+      // Sucesso confirmado pelo servidor: fechar modal
+      setShowAddScheduleModal(false);
+      setEditingScheduleId(null);
+    } catch (err: any) {
+      // Em caso de erro: modal permanece aberta com os dados para correção
+      const beMsg =
+        err?.response?.data?.message || "Não foi possível registar o horário.";
+      setScheduleError(beMsg);
+      const beErrors = err?.response?.data?.errors;
+      if (beErrors) {
+        const fieldErrors: { start?: string; end?: string } = {};
+        if (beErrors.valid_from) fieldErrors.start = beErrors.valid_from[0];
+        if (beErrors.valid_until) fieldErrors.end = beErrors.valid_until[0];
+        setScheduleFieldErrors(fieldErrors);
       }
     }
-
-    notify.success(
-      editingScheduleId
-        ? "Horário atualizado com sucesso!"
-        : "Novo horário adicionado!"
-    );
-    setShowAddScheduleModal(false);
-    setEditingScheduleId(null);
   }
 
-  function handleConfirmDeleteSchedule() {
+  async function handleConfirmDeleteSchedule() {
     if (!scheduleToDelete) return;
 
     const isActiveSchedule =
@@ -502,33 +491,17 @@ export default function AssistantScheduleManager({
       return;
     }
 
-    const isFuture = getScheduleTypeStatus(scheduleToDelete, schedules) === "future";
-
-    setSchedules((prev) => {
-      const nextList = prev.filter((s) => s.id !== scheduleToDelete.id);
-      if (isFuture) {
-        return nextList.map((s) => {
-          if (getScheduleTypeStatus(s, nextList) === "active") {
-            return { ...s, to: null };
-          }
-          return s;
+    try {
+      if (assistantId && scheduleToDelete) {
+        await deleteScheduleMutation.mutateAsync({
+          id: scheduleToDelete.id,
+          assistantId: String(assistantId),
         });
       }
-      return nextList;
-    });
-
-    if (assistantId && scheduleToDelete) {
-      deleteScheduleMutation.mutate({
-        id: scheduleToDelete.id,
-        assistantId: String(assistantId),
-      });
+      setScheduleToDelete(null);
+    } catch {
+      // Erro tratado e notificado pelo hook
     }
-
-    notify.success(
-      isFuture
-        ? "Horário agendado eliminado. A vigência do horário atual ficou em aberto."
-        : "Registo histórico de horário eliminado com sucesso."
-    );
     setScheduleToDelete(null);
   }
 
@@ -576,6 +549,15 @@ export default function AssistantScheduleManager({
           const status = getScheduleTypeStatus(h, schedules);
           const isActiveSchedule = status === "active";
           const isFutureSchedule = status === "future";
+          const rotatingInfo =
+            h.type === "rotating"
+              ? computeActiveRotatingShift(
+                  h.from,
+                  h.period || "Quinzenal",
+                  h.startsWith || "A",
+                  TODAY_STR
+                )
+              : null;
 
           return (
             <div
@@ -615,11 +597,21 @@ export default function AssistantScheduleManager({
                     }`}
                   >
                     {isActiveSchedule
-                      ? "Em Vigor"
+                      ? rotatingInfo
+                        ? `Em Vigor: Turno ${rotatingInfo.activeLabel}`
+                        : "Em Vigor"
                       : isFutureSchedule
                       ? "Agendado"
                       : "Histórico"}
                   </Badge>
+                  {isActiveSchedule && rotatingInfo && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30 font-medium"
+                    >
+                      Ciclo do Turno {rotatingInfo.activeLabel} (até {formatDatePT(rotatingInfo.cycleEndDate)})
+                    </Badge>
+                  )}
                   <span className="text-[11px] font-mono text-muted-foreground">
                     {formatDatePT(h.from)}
                     {h.to ? ` → ${formatDatePT(h.to)}` : " → Em aberto"}
@@ -790,37 +782,106 @@ export default function AssistantScheduleManager({
                     </div>
                   </>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
-                    {(["A", "B"] as const).map((ab) => {
-                      const s = ab === "A" ? h.shiftA : h.shiftB;
-                      const clr = ab === "A" ? "#6366F1" : "#A855F7";
-                      return (
-                        <div
-                          key={ab}
-                          className="flex items-center gap-2 p-2 rounded-lg border border-border/50"
-                        >
-                          <div
-                            className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
-                            style={{ backgroundColor: clr }}
-                          >
-                            {ab}
-                          </div>
-                          <span>
-                            {s?.entry} – {s?.exit}
-                            {s?.lunch && (
-                              <span className="text-muted-foreground ml-1.5 text-[11px]">
-                                · Almoço: {s.lunch.start}–{s.lunch.end} ({s.lunch.duration}m)
-                              </span>
-                            )}
+                  <div className="space-y-3">
+                    {isActiveSchedule && rotatingInfo && (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                          <span className="text-foreground">
+                            <strong>Turno em Vigor Hoje ({formatDatePT(TODAY_STR)}):</strong>{" "}
+                            <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                              Turno {rotatingInfo.activeLabel}
+                            </span>{" "}
+                            ({(rotatingInfo.activeLabel === "A" ? h.shiftA : h.shiftB)?.entry} às{" "}
+                            {(rotatingInfo.activeLabel === "A" ? h.shiftA : h.shiftB)?.exit})
                           </span>
                         </div>
-                      );
-                    })}
-                    <div className="col-span-2 text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">
-                        Dias:
-                      </span>{" "}
-                      {h.days.join(", ")} · Começa com Horário {h.startsWith}
+                        <div className="flex items-center gap-2.5 text-muted-foreground text-[11px]">
+                          <span className="font-medium text-foreground">
+                            Almoço:{" "}
+                            {(rotatingInfo.activeLabel === "A" ? h.shiftA?.lunch : h.shiftB?.lunch) ? (
+                              <strong>
+                                {(rotatingInfo.activeLabel === "A" ? h.shiftA?.lunch : h.shiftB?.lunch)?.start} às{" "}
+                                {(rotatingInfo.activeLabel === "A" ? h.shiftA?.lunch : h.shiftB?.lunch)?.end} (
+                                {(rotatingInfo.activeLabel === "A" ? h.shiftA?.lunch : h.shiftB?.lunch)?.duration} min)
+                              </strong>
+                            ) : (
+                              "Sem pausa definida"
+                            )}
+                          </span>
+                          <span>•</span>
+                          <span>Até {formatDatePT(rotatingInfo.cycleEndDate)}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      {(["A", "B"] as const).map((ab) => {
+                        const s = ab === "A" ? h.shiftA : h.shiftB;
+                        const clr = ab === "A" ? "#6366F1" : "#A855F7";
+                        const isCurrentlyActive = isActiveSchedule && rotatingInfo?.activeLabel === ab;
+
+                        return (
+                          <div
+                            key={ab}
+                            className={`p-3 rounded-lg border transition-all ${
+                              isCurrentlyActive
+                                ? "border-emerald-500/80 bg-emerald-500/5 ring-1 ring-emerald-500/30 shadow-xs"
+                                : "border-border/60 bg-muted/10 opacity-75"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between pb-2 mb-2 border-b border-border/40">
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                                  style={{ backgroundColor: clr }}
+                                >
+                                  {ab}
+                                </div>
+                                <span className="font-semibold text-xs text-foreground">
+                                  Turno {ab}
+                                </span>
+                              </div>
+                              {isCurrentlyActive ? (
+                                <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-[10px] h-5 px-1.5 gap-1 font-semibold">
+                                  <CheckCircle2 size={10} /> Em Vigor Hoje
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/60">
+                                  {isActiveSchedule && rotatingInfo
+                                    ? `Inicia a ${formatDatePT(addDays(rotatingInfo.cycleEndDate, 1))}`
+                                    : "Alternado"}
+                                </Badge>
+                              )}
+                            </div>
+
+                            <div className="space-y-1.5 text-xs">
+                              <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Horário de Trabalho:</span>
+                                <span className="font-medium text-foreground">
+                                  {s?.entry} às {s?.exit}
+                                </span>
+                              </div>
+                              <div
+                                className={`flex items-center justify-between p-1.5 rounded ${
+                                  isCurrentlyActive
+                                    ? "bg-emerald-500/10 text-emerald-950 dark:text-emerald-200"
+                                    : "bg-muted/30 text-muted-foreground"
+                                }`}
+                              >
+                                <span>Pausa de Almoço:</span>
+                                <span className="font-semibold text-foreground">
+                                  {s?.lunch ? `${s.lunch.start} às ${s.lunch.end} (${s.lunch.duration}m)` : "Sem pausa"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Dias:</span> {h.days.join(", ")} · Começa com Horário {h.startsWith}
                     </div>
                   </div>
                 )}
@@ -846,29 +907,36 @@ export default function AssistantScheduleManager({
               : "Defina o perfil de turno e o período de vigência"
           }
           onClose={() => {
-            setShowAddScheduleModal(false);
-            setEditingScheduleId(null);
-            setScheduleError(null);
+            if (!isSavingSchedule) {
+              setShowAddScheduleModal(false);
+              setEditingScheduleId(null);
+              setScheduleError(null);
+            }
           }}
           maxWidth="max-w-4xl"
           footer={
             <>
               <button
                 type="button"
+                disabled={isSavingSchedule}
                 onClick={() => {
                   setShowAddScheduleModal(false);
                   setEditingScheduleId(null);
                   setScheduleError(null);
                 }}
-                className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
+                disabled={isSavingSchedule}
                 onClick={handleSaveSchedule}
-                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
               >
+                {isSavingSchedule && (
+                  <Loader2 size={13} className="animate-spin" />
+                )}
                 Guardar Horário
               </button>
             </>

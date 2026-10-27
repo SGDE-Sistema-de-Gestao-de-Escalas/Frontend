@@ -1,173 +1,100 @@
-import React, { useState } from "react";
-import { ChevronLeft, ChevronRight, Clock, Coffee, Lock, UserX } from "lucide-react";
-import { PROFILE_MONTHS, TIME_SLOTS } from "../../api/mockData";
-import type { BlockState } from "../../types";
-import { BLOCK_STYLES } from "../dashboard/blockStyles";
+import { useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, UserX } from "lucide-react";
+import type { BlockState, EntityId } from "../../types";
+import {
+  BLOCK_STYLES,
+  groupSlotsFn,
+  TIME_SLOTS,
+} from "../dashboard/blockStyles";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
+import { useSchedulesList } from "../../hooks/api/useSchedules";
+import { useAbsencesList } from "../../hooks/api/useAbsences";
+import {
+  buildDayMatrixFromApi,
+  getDateInfo,
+  getRealMonthsRange,
+} from "../../utils/scheduleMatrixUtils";
 
-function generateWeekSchedule(weekOffset: number): Record<string, BlockState[]> {
-  const days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-  const patterns: Record<string, BlockState[]> = {};
-  days.forEach((day, di) => {
-    const row: BlockState[] = Array(96).fill("off");
-    if (di >= 5) {
-      patterns[day] = row;
-      return;
-    }
-    if (weekOffset === -1 && di === 2) {
-      for (let i = 0; i < 96; i++) row[i] = "absent";
-      patterns[day] = row;
-      return;
-    }
-    const startSlot = 40; // 10:00
-    const endSlot = 68; // 17:00
-    const lunchStart = 52; // 13:00
-    const lunchEnd = 56; // 14:00
-    for (let i = startSlot; i < endSlot; i++) {
-      if (i >= lunchStart && i < lunchEnd) row[i] = "lunch";
-      else row[i] = "work";
-    }
-    patterns[day] = row;
-  });
-  return patterns;
+interface ProfileScheduleHistoryProps {
+  assistantId?: EntityId;
 }
 
-function summariseDay(slots: BlockState[]) {
-  const counts: Record<string, number> = {
-    work: 0,
-    surveillance: 0,
-    lunch: 0,
-    absent: 0,
-    off: 0,
-  };
-  slots.forEach((s) => {
-    if (s in counts) counts[s]++;
-  });
-  return counts;
-}
-
-const WEEK_OFFSETS: Record<number, string> = {
-  0: "Semana atual (27 Jan – 02 Fev)",
-  "-1": "Semana anterior (20 Jan – 26 Jan)",
-  "-2": "Semana de 13 Jan – 19 Jan",
-  "-3": "Semana de 06 Jan – 12 Jan",
-};
-
-export default function ProfileScheduleHistory() {
+export default function ProfileScheduleHistory({
+  assistantId,
+}: ProfileScheduleHistoryProps) {
+  const monthsList = useMemo(() => getRealMonthsRange(3, 2), []);
   const [viewMode, setViewMode] = useState<"week" | "month">("week");
   const [weekOffset, setWeekOffset] = useState(0);
-  const [monthIdx, setMonthIdx] = useState(3); // Jan 2026 = index 3
+  // index 3 = current month when monthsBefore = 3
+  const [monthIdx, setMonthIdx] = useState(3);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
-  const weekData = generateWeekSchedule(weekOffset);
-  const weekDays = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-  const weekDates: Record<string, string> = {
-    Seg:
-      weekOffset === 0
-        ? "27 Jan"
-        : weekOffset === -1
-        ? "20 Jan"
-        : weekOffset === -2
-        ? "13 Jan"
-        : "06 Jan",
-    Ter:
-      weekOffset === 0
-        ? "28 Jan"
-        : weekOffset === -1
-        ? "21 Jan"
-        : weekOffset === -2
-        ? "14 Jan"
-        : "07 Jan",
-    Qua:
-      weekOffset === 0
-        ? "29 Jan"
-        : weekOffset === -1
-        ? "22 Jan"
-        : weekOffset === -2
-        ? "15 Jan"
-        : "08 Jan",
-    Qui:
-      weekOffset === 0
-        ? "30 Jan"
-        : weekOffset === -1
-        ? "23 Jan"
-        : weekOffset === -2
-        ? "16 Jan"
-        : "09 Jan",
-    Sex:
-      weekOffset === 0
-        ? "31 Jan"
-        : weekOffset === -1
-        ? "24 Jan"
-        : weekOffset === -2
-        ? "17 Jan"
-        : "10 Jan",
-    Sáb:
-      weekOffset === 0
-        ? "01 Fev"
-        : weekOffset === -1
-        ? "25 Jan"
-        : weekOffset === -2
-        ? "18 Jan"
-        : "11 Jan",
-    Dom:
-      weekOffset === 0
-        ? "02 Fev"
-        : weekOffset === -1
-        ? "26 Jan"
-        : weekOffset === -2
-        ? "19 Jan"
-        : "12 Jan",
-  };
+  const clampedMonthIdx = Math.max(0, Math.min(monthIdx, monthsList.length - 1));
+  const currentMonth = monthsList[clampedMonthIdx];
 
-  const currentMonth = PROFILE_MONTHS[monthIdx];
+  // Calculate week start offset aligned to Monday of the selected weekOffset
+  const todayInfo = getDateInfo(0);
+  const currentWeekMondayOffset = -todayInfo.dow + weekOffset * 7;
+  const weekOffsets = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => currentWeekMondayOffset + i),
+    [currentWeekMondayOffset]
+  );
 
-  function getDaySlots(dayNum: number): BlockState[] {
-    const dow = (currentMonth.offset + dayNum - 1) % 7;
-    const isWeekend = dow === 0 || dow === 6;
-    const row: BlockState[] = Array(96).fill("off");
-    if (isWeekend) return row;
-    if (currentMonth.sickDay && dayNum === currentMonth.sickDay) {
-      row.fill("absent");
-      return row;
-    }
-    const startSlot = 40;
-    const endSlot = 68;
-    const lunchStart = 52;
-    const lunchEnd = 56;
-    for (let i = startSlot; i < endSlot; i++) {
-      if (i >= lunchStart && i < lunchEnd) row[i] = "lunch";
-      else row[i] = "work";
-    }
-    return row;
-  }
+  const weekStartInfo = getDateInfo(weekOffsets[0]);
+  const weekEndInfo = getDateInfo(weekOffsets[6]);
 
-  const selectedDaySlots = selectedDay ? getDaySlots(selectedDay) : null;
+  const queryStart =
+    viewMode === "week" ? weekStartInfo.isoDate : currentMonth.startIso;
+  const queryEnd =
+    viewMode === "week" ? weekEndInfo.isoDate : currentMonth.endIso;
 
-  function groupSlots(slots: BlockState[]) {
-    const groups: { state: BlockState; start: number; end: number }[] = [];
-    let cur: { state: BlockState; start: number; end: number } | null = null;
-    slots.forEach((s, i) => {
-      if (s === "off") {
-        if (cur) {
-          groups.push(cur);
-          cur = null;
-        }
-        return;
-      }
-      if (cur && cur.state === s) {
-        cur.end = i;
-      } else {
-        if (cur) groups.push(cur);
-        cur = { state: s, start: i, end: i };
-      }
+  const { data: schedules = [] } = useSchedulesList({
+    start_date: queryStart,
+    end_date: queryEnd,
+    assistant_id: assistantId,
+  });
+
+  const { data: absencesRes } = useAbsencesList({
+    start_date: queryStart,
+    end_date: queryEnd,
+    assistant_id: assistantId,
+    per_page: 100,
+  });
+
+  const dummyAssistant = useMemo(
+    () => ({
+      id: assistantId ?? "self",
+      name: "Assistente",
+      initials: "AO",
+    }),
+    [assistantId]
+  );
+
+  function getSlotsForIsoDate(isoDate: string, isWeekend: boolean): BlockState[] {
+    if (!assistantId) return Array(96).fill("off");
+    const { matrix } = buildDayMatrixFromApi({
+      isoDate,
+      isOpen: !isWeekend,
+      assistants: [dummyAssistant],
+      schedules,
+      absences: absencesRes?.data || [],
     });
-    if (cur) groups.push(cur);
-    return groups;
+    return matrix[dummyAssistant.id] || Array(96).fill("off");
   }
 
-  const HOUR_TICKS = [24, 32, 40, 48, 56, 64, 72, 80, 84];
+  const selectedDayIso = useMemo(() => {
+    if (!selectedDay) return null;
+    const mm = String(currentMonth.monthIndex + 1).padStart(2, "0");
+    const dd = String(selectedDay).padStart(2, "0");
+    return `${currentMonth.year}-${mm}-${dd}`;
+  }, [selectedDay, currentMonth]);
+
+  const selectedDaySlots = useMemo(() => {
+    if (!selectedDay || !selectedDayIso) return null;
+    const dow = (currentMonth.firstDow + selectedDay - 1) % 7;
+    return getSlotsForIsoDate(selectedDayIso, dow >= 5);
+  }, [selectedDay, selectedDayIso, currentMonth, schedules, absencesRes]);
 
   return (
     <div className="space-y-4">
@@ -202,18 +129,20 @@ export default function ProfileScheduleHistory() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              disabled={weekOffset <= -3}
+              disabled={weekOffset <= -8}
               onClick={() => setWeekOffset((p) => p - 1)}
               className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30 transition-colors"
             >
               <ChevronLeft size={14} />
             </button>
             <span className="text-xs font-medium text-foreground font-mono">
-              {WEEK_OFFSETS[weekOffset] ?? `Semana ${weekOffset}`}
+              {weekOffset === 0
+                ? `Semana atual (${weekStartInfo.dateStr} – ${weekEndInfo.dateStr})`
+                : `${weekStartInfo.dateStr} – ${weekEndInfo.dateStr}`}
             </span>
             <button
               type="button"
-              disabled={weekOffset >= 0}
+              disabled={weekOffset >= 4}
               onClick={() => setWeekOffset((p) => p + 1)}
               className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30 transition-colors"
             >
@@ -224,9 +153,9 @@ export default function ProfileScheduleHistory() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              disabled={monthIdx <= 0}
+              disabled={clampedMonthIdx <= 0}
               onClick={() => {
-                setMonthIdx((p) => p - 1);
+                setMonthIdx((p) => Math.max(0, p - 1));
                 setSelectedDay(null);
               }}
               className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30 transition-colors"
@@ -238,9 +167,9 @@ export default function ProfileScheduleHistory() {
             </span>
             <button
               type="button"
-              disabled={monthIdx >= PROFILE_MONTHS.length - 1}
+              disabled={clampedMonthIdx >= monthsList.length - 1}
               onClick={() => {
-                setMonthIdx((p) => p + 1);
+                setMonthIdx((p) => Math.min(monthsList.length - 1, p + 1));
                 setSelectedDay(null);
               }}
               className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30 transition-colors"
@@ -255,18 +184,21 @@ export default function ProfileScheduleHistory() {
       {viewMode === "week" && (
         <Card className="p-4 border-border bg-card">
           <div className="space-y-3">
-            {weekDays.map((day) => {
-              const slots = weekData[day];
-              const groups = groupSlots(slots);
-              const isWeekend = day === "Sáb" || day === "Dom";
+            {weekOffsets.map((offset) => {
+              const info = getDateInfo(offset);
+              const isWeekend = info.dow >= 5;
+              const slots = getSlotsForIsoDate(info.isoDate, isWeekend);
+              const groups = groupSlotsFn(slots);
               const isAbsent = slots.some((s) => s === "absent");
 
               return (
-                <div key={day} className="flex items-center gap-4 text-xs">
-                  <div className="w-16 flex-shrink-0">
-                    <span className="font-semibold text-foreground">{day}</span>
+                <div key={offset} className="flex items-center gap-4 text-xs">
+                  <div className="w-20 flex-shrink-0">
+                    <span className="font-semibold text-foreground">
+                      {info.dayShort}
+                    </span>
                     <span className="text-[10px] text-muted-foreground ml-1.5 font-mono">
-                      {weekDates[day]}
+                      {info.dateStr}
                     </span>
                   </div>
 
@@ -278,8 +210,12 @@ export default function ProfileScheduleHistory() {
                     ) : isAbsent ? (
                       <div className="w-full h-full bg-destructive/15 flex items-center px-3 gap-1.5 text-destructive font-semibold text-[10px]">
                         <UserX size={12} />
-                        Ausente — Falta médica
+                        Ausente
                       </div>
+                    ) : groups.length === 0 ? (
+                      <span className="text-[10px] text-muted-foreground/60 px-3">
+                        Sem escala atribuída
+                      </span>
                     ) : (
                       groups.map((g, gi) => {
                         const left = ((g.start - 24) / 60) * 100;
@@ -313,7 +249,7 @@ export default function ProfileScheduleHistory() {
       {viewMode === "month" && (
         <Card className="p-4 border-border bg-card">
           <div className="grid grid-cols-7 gap-1 text-center text-xs">
-            {["D", "S", "T", "Q", "Q", "S", "S"].map((d, i) => (
+            {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((d, i) => (
               <div
                 key={i}
                 className="py-1 font-semibold text-muted-foreground text-[10px]"
@@ -321,14 +257,21 @@ export default function ProfileScheduleHistory() {
                 {d}
               </div>
             ))}
-            {Array.from({ length: currentMonth.offset }, (_, i) => (
+            {Array.from({ length: currentMonth.firstDow }, (_, i) => (
               <div key={`blank-${i}`} className="h-10" />
             ))}
             {Array.from({ length: currentMonth.days }, (_, i) => {
               const dayNum = i + 1;
-              const dow = (currentMonth.offset + i) % 7;
-              const isWeekend = dow === 0 || dow === 6;
-              const isSick = currentMonth.sickDay === dayNum;
+              const dow = (currentMonth.firstDow + i) % 7;
+              const isWeekend = dow >= 5;
+              const mm = String(currentMonth.monthIndex + 1).padStart(2, "0");
+              const dd = String(dayNum).padStart(2, "0");
+              const dayIso = `${currentMonth.year}-${mm}-${dd}`;
+              const daySlots = getSlotsForIsoDate(dayIso, isWeekend);
+              const isSick = daySlots.some((s) => s === "absent");
+              const hasWork = daySlots.some(
+                (s) => s !== "off" && s !== "absent"
+              );
               const isSelected = selectedDay === dayNum;
 
               return (
@@ -347,7 +290,7 @@ export default function ProfileScheduleHistory() {
                   }`}
                 >
                   <span className="text-[11px] font-mono">{dayNum}</span>
-                  {!isWeekend && (
+                  {!isWeekend && (isSick || hasWork) && (
                     <span
                       className={`w-1 h-1 rounded-full mt-0.5 ${
                         isSick ? "bg-destructive" : "bg-[#0E7C59]"
@@ -364,13 +307,19 @@ export default function ProfileScheduleHistory() {
               <p className="text-xs font-semibold text-foreground">
                 Detalhe de {selectedDay} {currentMonth.label}
               </p>
-              <div className="flex gap-2">
-                {groupSlots(selectedDaySlots).map((g, gi) => (
-                  <Badge key={gi} variant="outline" className="text-xs">
-                    {TIME_SLOTS[g.start]}–{TIME_SLOTS[g.end + 1] || "24:00"}:{" "}
-                    {BLOCK_STYLES[g.state].label}
-                  </Badge>
-                ))}
+              <div className="flex gap-2 flex-wrap">
+                {groupSlotsFn(selectedDaySlots).length === 0 ? (
+                  <span className="text-xs text-muted-foreground">
+                    Sem blocos registados neste dia.
+                  </span>
+                ) : (
+                  groupSlotsFn(selectedDaySlots).map((g, gi) => (
+                    <Badge key={gi} variant="outline" className="text-xs">
+                      {TIME_SLOTS[g.start]}–{TIME_SLOTS[g.end + 1] || "24:00"}:{" "}
+                      {BLOCK_STYLES[g.state].label}
+                    </Badge>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -379,4 +328,3 @@ export default function ProfileScheduleHistory() {
     </div>
   );
 }
-

@@ -1,12 +1,13 @@
-import React from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { useSchool } from "../../context/SchoolContext";
 import type { AdminPage, StaffPage } from "../../types";
 import AdminLayout from "./AdminLayout";
 import StaffLayout from "./StaffLayout";
 
 export default function MainLayout() {
   const { role } = useAuth();
+  const { selectedSchoolId } = useSchool();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -47,14 +48,14 @@ export default function MainLayout() {
   if (role === "staff") {
     return (
       <StaffLayout currentPage={staffPage} onNavigate={handleStaffNavigate}>
-        <Outlet />
+        <Outlet key={String(selectedSchoolId ?? "staff-school")} />
       </StaffLayout>
     );
   }
 
   return (
     <AdminLayout currentPage={adminPage} onNavigate={handleAdminNavigate}>
-      <Outlet />
+      <Outlet key={String(selectedSchoolId ?? "admin-school")} />
     </AdminLayout>
   );
 }

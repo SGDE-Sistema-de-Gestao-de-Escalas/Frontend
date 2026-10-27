@@ -1,12 +1,10 @@
-import React, { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
-  Calendar,
   Check,
   ChevronLeft,
   ChevronRight,
   Clock,
   Download,
-  Filter,
   Inbox,
   Loader2,
   Paperclip,
@@ -14,12 +12,12 @@ import {
   Plus,
   RotateCcw,
   Trash2,
-  User,
   X,
   XCircle,
 } from "lucide-react";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
+import { Checkbox } from "../ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -30,7 +28,6 @@ import {
 import DatePicker, { formatToIsoDate } from "../common/DatePicker";
 import TimePicker from "../common/TimePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
-import CustomSelect from "../common/CustomSelect";
 import SearchableSelect from "../common/SearchableSelect";
 import AssistantSelect, { isAssistantActive } from "../common/AssistantSelect";
 import ActionTooltip from "../common/ActionTooltip";
@@ -45,25 +42,49 @@ import {
 } from "../../hooks/api/useAbsences";
 import { useAssistantsList } from "../../hooks/api/useAssistants";
 import { useAbsenceTypesList } from "../../hooks/api/useAbsenceTypes";
+import { useSchool } from "../../context/SchoolContext";
 import absencesService, {
   type BackendAbsenceResource,
 } from "../../api/services/absences.service";
-import type { EntityId, Assistant } from "../../types";
 import { notify } from "../common/FeedbackNotification";
 
 export default function AbsenceManagement() {
+  const { selectedSchoolId } = useSchool();
+
   // Dados remotos via TanStack Query (com status "all" para trazer ativos e inativos)
-  const { data: assistants = [], isLoading: isLoadingAssistants } = useAssistantsList({
+  const { data: assistants = [], isLoading: _isLoadingAssistants } = useAssistantsList({
     status: "all",
     per_page: 200,
   });
-  const { data: absenceTypes = [], isLoading: isLoadingAbsenceTypes } = useAbsenceTypesList();
+  const { data: absenceTypes = [], isLoading: _isLoadingAbsenceTypes } = useAbsenceTypesList();
 
   // Filtros
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "justified" | "unjustified">("all");
   const [assistantFilter, setAssistantFilter] = useState<string>("all");
   const [startDateFilter, setStartDateFilter] = useState<string>("");
   const [endDateFilter, setEndDateFilter] = useState<string>("");
+
+  // Resetar seleções e filtros se o utilizador trocar de escola
+  useEffect(() => {
+    setAssistantFilter("all");
+    setStatusFilter("all");
+    setStartDateFilter("");
+    setEndDateFilter("");
+    setCurrentPage(1);
+    setSelectedId(null);
+    setShowForm(false);
+    setEditingAbsence(null);
+  }, [selectedSchoolId]);
+
+  // Se o assistente selecionado no filtro não existir na lista da escola ativa, repor "all"
+  useEffect(() => {
+    if (assistantFilter !== "all" && assistants.length > 0) {
+      const exists = assistants.some((a) => String(a.id) === String(assistantFilter));
+      if (!exists) {
+        setAssistantFilter("all");
+      }
+    }
+  }, [assistants, assistantFilter]);
 
   // Paginação (padrão de pelo menos 10 registos por página)
   const [currentPage, setCurrentPage] = useState(1);
@@ -138,6 +159,7 @@ export default function AbsenceManagement() {
   const [formAssistantId, setFormAssistantId] = useState<string>("");
   const [formAbsenceTypeId, setFormAbsenceTypeId] = useState<string>("");
   const [formStartDate, setFormStartDate] = useState<string>(todayStr);
+  const [formIsFullDay, setFormIsFullDay] = useState<boolean>(true);
   const [formStartTime, setFormStartTime] = useState<string>("08:00");
   const [formEndDate, setFormEndDate] = useState<string>(todayStr);
   const [formEndTime, setFormEndTime] = useState<string>("17:00");
@@ -239,6 +261,7 @@ export default function AbsenceManagement() {
     setFormAssistantId(String(absence.assistant_id || absence.assistant?.id || ""));
     setFormAbsenceTypeId(String(absence.absence_type_id || absence.absence_type?.id || ""));
     setFormStartDate(formatToIsoDate(absence.valid_from) || todayStr);
+    setFormIsFullDay(!absence.start_time && !absence.end_time);
     setFormStartTime(absence.start_time || "08:00");
     setFormEndDate(formatToIsoDate(absence.valid_until) || todayStr);
     setFormEndTime(absence.end_time || "17:00");
@@ -258,8 +281,8 @@ export default function AbsenceManagement() {
       absence_type_id: formAbsenceTypeId,
       valid_from: formStartDate,
       valid_until: formEndDate,
-      start_time: formStartTime,
-      end_time: formEndTime,
+      start_time: formIsFullDay ? null : formStartTime,
+      end_time: formIsFullDay ? null : formEndTime,
       notes: formNote.trim() || null,
       document_path: formDocumentName.trim() || null,
       document: formDocumentFile,
@@ -528,15 +551,16 @@ export default function AbsenceManagement() {
           {/* Botão Limpar Filtros */}
           {hasActiveFilters && (
             <div className="sm:self-end pt-1 sm:pt-0">
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors w-full sm:w-auto justify-center"
-                title="Limpar todos os filtros"
-              >
-                <RotateCcw size={12} />
-                <span>Limpar</span>
-              </button>
+              <ActionTooltip content="Limpar todos os filtros">
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors w-full sm:w-auto justify-center cursor-pointer"
+                >
+                  <RotateCcw size={12} />
+                  <span>Limpar</span>
+                </button>
+              </ActionTooltip>
             </div>
           )}
         </div>
@@ -745,29 +769,31 @@ export default function AbsenceManagement() {
 
               {totalPages > 1 && (
                 <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={safeCurrentPage <= 1 || isFetchingAbsences}
-                    className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                    title="Página anterior"
-                  >
-                    <ChevronLeft size={13} />
-                  </button>
+                  <ActionTooltip content="Página anterior">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={safeCurrentPage <= 1 || isFetchingAbsences}
+                      className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    >
+                      <ChevronLeft size={13} />
+                    </button>
+                  </ActionTooltip>
 
                   <span className="px-2 font-mono text-[11px]">
                     {safeCurrentPage} / {totalPages}
                   </span>
 
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={safeCurrentPage >= totalPages || isFetchingAbsences}
-                    className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                    title="Página seguinte"
-                  >
-                    <ChevronRight size={13} />
-                  </button>
+                  <ActionTooltip content="Página seguinte">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={safeCurrentPage >= totalPages || isFetchingAbsences}
+                      className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    >
+                      <ChevronRight size={13} />
+                    </button>
+                  </ActionTooltip>
                 </div>
               )}
             </div>
@@ -797,14 +823,15 @@ export default function AbsenceManagement() {
               {/* Header do Detalhe */}
               <div className="p-4 sm:p-5 border-b border-border bg-muted/10 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(null)}
-                    className="lg:hidden p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground"
-                    title="Voltar à lista"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
+                  <ActionTooltip content="Voltar à lista">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(null)}
+                      className="lg:hidden p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground cursor-pointer"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                  </ActionTooltip>
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center font-bold font-mono text-xs flex-shrink-0 ${
                       isAssistantInactive(selectedAbsence)
@@ -1134,75 +1161,96 @@ export default function AbsenceManagement() {
             </div>
 
             {/* Datas e Horas */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                  Data de Início *
+            <div className="space-y-3">
+              {/* Opção Dia Inteiro vs Período com Horas */}
+              <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/20">
+                <label htmlFor="absence-full-day" className="cursor-pointer select-none">
+                  <span className="text-xs font-semibold text-foreground block">Dia Inteiro</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    A ausência cobre a totalidade do horário de trabalho do assistente
+                  </span>
                 </label>
-                <DatePicker
-                  value={formStartDate}
-                  hasError={!!formErrors.startDate}
-                  onChange={(v) => {
-                    setFormStartDate(v);
-                    if (formErrors.startDate) {
-                      setFormErrors((p) => ({ ...p, startDate: undefined }));
-                    }
-                    if (v && formEndDate && formEndDate < v) {
+                <Checkbox
+                  id="absence-full-day"
+                  checked={formIsFullDay}
+                  onCheckedChange={(val) => setFormIsFullDay(Boolean(val))}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                    Data de Início *
+                  </label>
+                  <DatePicker
+                    value={formStartDate}
+                    hasError={!!formErrors.startDate}
+                    onChange={(v) => {
+                      setFormStartDate(v);
+                      if (formErrors.startDate) {
+                        setFormErrors((p) => ({ ...p, startDate: undefined }));
+                      }
+                      if (v && formEndDate && formEndDate < v) {
+                        setFormEndDate(v);
+                      }
+                    }}
+                    className="w-full"
+                  />
+                  {formErrors.startDate && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {formErrors.startDate}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                    Data de Fim *
+                  </label>
+                  <DatePicker
+                    value={formEndDate}
+                    hasError={!!formErrors.endDate}
+                    minDate={formStartDate || undefined}
+                    onChange={(v) => {
                       setFormEndDate(v);
-                    }
-                  }}
-                  className="w-full"
-                />
-                {formErrors.startDate && (
-                  <p className="text-[11px] text-destructive mt-1 font-medium">
-                    {formErrors.startDate}
-                  </p>
+                      if (formErrors.endDate) {
+                        setFormErrors((p) => ({ ...p, endDate: undefined }));
+                      }
+                    }}
+                    className="w-full"
+                  />
+                  {formErrors.endDate && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {formErrors.endDate}
+                    </p>
+                  )}
+                </div>
+
+                {!formIsFullDay && (
+                  <>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                        Hora Inicial
+                      </label>
+                      <TimePicker
+                        value={formStartTime}
+                        onChange={setFormStartTime}
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                        Hora Final
+                      </label>
+                      <TimePicker
+                        value={formEndTime}
+                        onChange={setFormEndTime}
+                        className="w-full"
+                      />
+                    </div>
+                  </>
                 )}
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                  Hora Inicial
-                </label>
-                <TimePicker
-                  value={formStartTime}
-                  onChange={setFormStartTime}
-                  className="w-full"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                  Data de Fim *
-                </label>
-                <DatePicker
-                  value={formEndDate}
-                  hasError={!!formErrors.endDate}
-                  minDate={formStartDate || undefined}
-                  onChange={(v) => {
-                    setFormEndDate(v);
-                    if (formErrors.endDate) {
-                      setFormErrors((p) => ({ ...p, endDate: undefined }));
-                    }
-                  }}
-                  className="w-full"
-                />
-                {formErrors.endDate && (
-                  <p className="text-[11px] text-destructive mt-1 font-medium">
-                    {formErrors.endDate}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                  Hora Final
-                </label>
-                <TimePicker
-                  value={formEndTime}
-                  onChange={setFormEndTime}
-                  className="w-full"
-                />
               </div>
             </div>
 

@@ -52,8 +52,15 @@ export default function CustomSelect({
     }
   };
 
-  // Garante que se o valor for vazio string, o Radix Select trata como undefined para mostrar o placeholder
-  const safeValue = value === "" ? undefined : value;
+  // Garante que se o valor for vazio string ou se pertencer a uma escola anterior (não existente nas opções),
+  // o Radix Select trata como undefined para mostrar o placeholder limpo
+  const isValueInOptions =
+    value === undefined ||
+    value === "" ||
+    options.some((opt) => opt.value === value);
+
+  const safeValue =
+    value === "" || !isValueInOptions ? undefined : value;
 
   return (
     <div className={className}>
@@ -64,7 +71,7 @@ export default function CustomSelect({
         disabled={disabled}
       >
         <SelectTrigger
-          size={size}
+          size={triggerClassName?.includes("h-auto") ? undefined : size}
           className={cn(
             triggerClassName,
             hasError && "!border-destructive focus:!ring-destructive focus:!border-destructive"
@@ -72,7 +79,12 @@ export default function CustomSelect({
         >
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
-        <SelectContent className={contentClassName}>
+        <SelectContent
+          className={cn(
+            "w-[var(--radix-select-trigger-width)] max-w-[var(--radix-select-trigger-width)]",
+            contentClassName
+          )}
+        >
           {options.map((opt) => (
             <SelectItem
               key={opt.value}

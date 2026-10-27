@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   Building2,
   Calendar,
-  CheckCircle,
   ChevronLeft,
   Clock,
   Download,
@@ -11,7 +10,6 @@ import {
   FileCheck,
   FileText,
   HeartHandshake,
-  Info,
   Loader2,
   Mail,
   MapPin,
@@ -52,6 +50,10 @@ import {
   useUpdateAssistantException,
   useDeleteAssistantException,
 } from "../../hooks/api/useAssistantExceptions";
+import { useAssistantSchedules } from "../../hooks/api/useAssistantSchedules";
+import { apiProfileToScheduleItem } from "../../api/services/assistantSchedules.service";
+import type { AssistantScheduleItem } from "./AssistantScheduleManager";
+import { computeActiveRotatingShift } from "../../utils/scheduleMatrixUtils";
 import type { EntityId } from "../../types";
 
 const WEEK_DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
@@ -98,6 +100,14 @@ interface ExceptionRule {
   canDelete?: boolean;
   cannotEditReason?: string | null;
   cannotDeleteReason?: string | null;
+}
+
+interface CurrentShiftDetails {
+  label: string;
+  lunch: string | null;
+  isRotating: boolean;
+  activeLabel?: "A" | "B";
+  cycleEnd?: string;
 }
 
 interface AssistantProfileProps {
@@ -155,7 +165,11 @@ export default function AssistantProfile({
     endDate?: string;
     days?: string;
     time?: string;
+    lunch?: string;
+    general?: string;
   }>({});
+  const isSavingException =
+    createExceptionMutation.isPending || updateExceptionMutation.isPending;
   const [exceptionDays, setExceptionDays] = useState<string[]>([
     "Seg",
     "Ter",
@@ -173,6 +187,61 @@ export default function AssistantProfile({
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showAnonymizeModal, setShowAnonymizeModal] = useState(false);
+
+  const { data: rawAssistantSchedules = [] } = useAssistantSchedules(assistant?.id);
+
+  const assistantSchedules = React.useMemo<AssistantScheduleItem[]>(() => {
+    return rawAssistantSchedules.map(apiProfileToScheduleItem);
+  }, [rawAssistantSchedules]);
+
+  const activeSchedule = React.useMemo(() => {
+    return (
+      assistantSchedules.find((s) => {
+        if (s.to && s.to < TODAY_STR) return false;
+        if (s.from > TODAY_STR) return false;
+        return true;
+      }) || assistantSchedules.find((s) => s.to === null) || assistantSchedules[0]
+    );
+  }, [assistantSchedules]);
+
+  const activeRotatingInfo = React.useMemo(() => {
+    if (!activeSchedule || activeSchedule.type !== "rotating") return null;
+    return computeActiveRotatingShift(
+      activeSchedule.from,
+      activeSchedule.period || "Quinzenal",
+      activeSchedule.startsWith || "A",
+      TODAY_STR
+    );
+  }, [activeSchedule]);
+
+  const currentShiftDetails = React.useMemo<CurrentShiftDetails | null>(() => {
+    if (!activeSchedule) return null;
+    if (activeSchedule.type === "fixed") {
+      return {
+        label: `Turno Fixo: ${activeSchedule.entry}–${activeSchedule.exit}`,
+        lunch: activeSchedule.lunch
+          ? `Almoço: ${activeSchedule.lunch.start}–${activeSchedule.lunch.end} (${activeSchedule.lunch.duration}m)`
+          : null,
+        isRotating: false,
+      };
+    }
+    if (activeRotatingInfo) {
+      const s =
+        activeRotatingInfo.activeLabel === "A"
+          ? activeSchedule.shiftA
+          : activeSchedule.shiftB;
+      return {
+        label: `Turno Rotativo: Atualmente Turno ${activeRotatingInfo.activeLabel} (${s?.entry}–${s?.exit})`,
+        lunch: s?.lunch
+          ? `Almoço: ${s.lunch.start}–${s.lunch.end} (${s.lunch.duration}m)`
+          : null,
+        isRotating: true,
+        activeLabel: activeRotatingInfo.activeLabel,
+        cycleEnd: activeRotatingInfo.cycleEndDate,
+      };
+    }
+    return null;
+  }, [activeSchedule, activeRotatingInfo]);
 
   function toggleExceptionDay(day: string) {
     if (exceptionDays.includes(day)) {
@@ -314,13 +383,15 @@ export default function AssistantProfile({
     setShowAddException(true);
   }
 
-  function handleSaveException() {
+  async function handleSaveException() {
     const errors: {
       type?: string;
       startDate?: string;
       endDate?: string;
       days?: string;
       time?: string;
+      lunch?: string;
+      general?: string;
     } = {};
 
     if (!exceptionType.trim()) {
@@ -343,6 +414,17 @@ export default function AssistantProfile({
       errors.time = "A hora de saída tem de ser posterior à hora de entrada.";
     }
 
+    if (exceptionLunchEnabled) {
+      if (
+        exceptionLunchStart &&
+        exceptionLunchEnd &&
+        exceptionLunchEnd <= exceptionLunchStart
+      ) {
+        errors.lunch =
+          "A hora de fim de almoço tem de ser posterior à hora de início.";
+      }
+    }
+
     if (Object.keys(errors).length > 0) {
       setExceptionErrors(errors);
       return;
@@ -356,15 +438,6 @@ export default function AssistantProfile({
       ? `Horário diferido ${exceptionEntry}–${exceptionExit}`
       : "Horário especial";
 
-    const lunchData = exceptionLunchEnabled
-      ? {
-          ativo: true,
-          inicio: exceptionLunchStart,
-          fim: exceptionLunchEnd,
-          duracao: parseInt(exceptionLunchDuration, 10) || 30,
-        }
-      : undefined;
-
     const commonPayload = {
       type: exceptionType.trim(),
       description: computedDetail,
@@ -376,67 +449,76 @@ export default function AssistantProfile({
       lunch_enabled: exceptionLunchEnabled,
       lunch_start: exceptionLunchEnabled ? exceptionLunchStart : null,
       lunch_end: exceptionLunchEnabled ? exceptionLunchEnd : null,
-      lunch_duration_minutes: exceptionLunchEnabled ? parseInt(exceptionLunchDuration, 10) || 30 : null,
+      lunch_duration_minutes: exceptionLunchEnabled
+        ? parseInt(exceptionLunchDuration, 10) || 30
+        : null,
     };
 
-    if (editingExceptionId) {
-      setExceptions((prev) =>
-        prev.map((e) =>
-          e.id === editingExceptionId
-            ? {
-                ...e,
-                tipo: exceptionType.trim(),
-                detalhe: computedDetail,
-                entrada: exceptionEntry,
-                saida: exceptionExit,
-                dias: exceptionDays,
-                pausaAlmoco: lunchData,
-                inicio: exceptionStartDate,
-                fim: exceptionEndDate || undefined,
-              }
-            : e
-        )
-      );
-      if (assistant?.id) {
-        updateExceptionMutation.mutate({
-          id: editingExceptionId,
-          assistantId: String(assistant.id),
-          data: commonPayload,
-        });
+    try {
+      if (editingExceptionId) {
+        if (assistant?.id) {
+          await updateExceptionMutation.mutateAsync({
+            id: editingExceptionId,
+            assistantId: String(assistant.id),
+            data: commonPayload,
+          });
+        }
+      } else {
+        if (assistant?.id) {
+          await createExceptionMutation.mutateAsync({
+            assistant_id: String(assistant.id),
+            ...commonPayload,
+          });
+        }
       }
-    } else {
-      const newRule: ExceptionRule = {
-        id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-        tipo: exceptionType.trim(),
-        detalhe: computedDetail,
-        entrada: exceptionEntry,
-        saida: exceptionExit,
-        dias: exceptionDays,
-        pausaAlmoco: lunchData,
-        inicio: exceptionStartDate,
-        fim: exceptionEndDate || undefined,
-      };
-      setExceptions((prev) => [newRule, ...prev]);
-      if (assistant?.id) {
-        createExceptionMutation.mutate({
-          assistant_id: String(assistant.id),
-          ...commonPayload,
-        });
+
+      // Sucesso confirmado pelo servidor: fechar modal e limpar estado de edição
+      setShowAddException(false);
+      setEditingExceptionId(null);
+    } catch (err: any) {
+      // Em caso de erro: modal permanece aberta com os dados preenchidos para o utilizador corrigir
+      const beErrors = err?.response?.data?.errors;
+      const beMsg =
+        err?.response?.data?.message ||
+        "Não foi possível registar a regra de exceção.";
+
+      const mappedErrors: typeof exceptionErrors = {};
+      if (beErrors) {
+        if (beErrors.type) mappedErrors.type = beErrors.type[0];
+        if (beErrors.valid_from) mappedErrors.startDate = beErrors.valid_from[0];
+        if (beErrors.valid_until) mappedErrors.endDate = beErrors.valid_until[0];
+        if (beErrors.days) mappedErrors.days = beErrors.days[0];
+        if (beErrors.start_time) mappedErrors.time = beErrors.start_time[0];
+        if (beErrors.end_time) mappedErrors.time = beErrors.end_time[0];
+        if (
+          beErrors.lunch_start ||
+          beErrors.lunch_end ||
+          beErrors.lunch_duration_minutes
+        ) {
+          mappedErrors.lunch =
+            beErrors.lunch_start?.[0] ||
+            beErrors.lunch_end?.[0] ||
+            beErrors.lunch_duration_minutes?.[0];
+        }
       }
+      mappedErrors.general = beMsg;
+      setExceptionErrors(mappedErrors);
     }
-    setShowAddException(false);
   }
 
-  function confirmDeleteException() {
+  async function confirmDeleteException() {
     if (deleteExceptionTarget) {
-      setExceptions((prev) => prev.filter((e) => e.id !== deleteExceptionTarget.id));
-      if (assistant?.id) {
-        deleteExceptionMutation.mutate({
-          id: deleteExceptionTarget.id,
-          assistantId: String(assistant.id),
-        });
+      try {
+        if (assistant?.id) {
+          await deleteExceptionMutation.mutateAsync({
+            id: deleteExceptionTarget.id,
+            assistantId: String(assistant.id),
+          });
+        }
+        setDeleteExceptionTarget(null);
+      } catch {
+        // Erro já tratado e notificado pelo hook
       }
-      setDeleteExceptionTarget(null);
     }
   }
 
@@ -598,6 +680,24 @@ export default function AssistantProfile({
                   {assistant.exception}
                 </Badge>
               )}
+              {currentShiftDetails && (
+                <Badge
+                  variant="outline"
+                  className={
+                    currentShiftDetails.isRotating
+                      ? "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30 flex items-center gap-1.5 font-medium text-xs py-0.5 px-2.5"
+                      : "bg-primary/10 text-primary border-primary/30 flex items-center gap-1.5 font-medium text-xs py-0.5 px-2.5"
+                  }
+                >
+                  <Clock size={12} className="shrink-0" />
+                  <span>{currentShiftDetails.label}</span>
+                  {currentShiftDetails.lunch && (
+                    <span className="opacity-80 font-normal">
+                      · {currentShiftDetails.lunch}
+                    </span>
+                  )}
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -605,19 +705,7 @@ export default function AssistantProfile({
         <div className="flex items-center gap-2 flex-wrap">
           {!isDeletedOrAnonymized && (
             <>
-              <button
-                type="button"
-                onClick={() => setShowStatusModal(true)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                  currentIsActive
-                    ? "border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
-                    : "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
-                }`}
-                title={currentIsActive ? "Inativar Assistente" : "Reativar Assistente"}
-              >
-                {currentIsActive ? <UserX size={14} /> : <UserCheck size={14} />}
-                {currentIsActive ? "Inativar" : "Reativar"}
-              </button>
+              <ActionTooltip content={currentIsActive ? "Inativar Assistente" : "Reativar Assistente"}><button type="button" onClick={() => setShowStatusModal(true)} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors cursor-pointer ${currentIsActive ? "border-amber-500/30 text-amber-600 hover:bg-amber-500/10" : "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"}`}>{currentIsActive ? <UserX size={14} /> : <UserCheck size={14} />}{currentIsActive ? "Inativar" : "Reativar"}</button></ActionTooltip>
 
               <button
                 type="button"
@@ -968,20 +1056,14 @@ export default function AssistantProfile({
                         {assistant.criminal_record_name || "Certificado_Registo_Criminal.pdf"}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleDownloadCriminalRecord}
-                      disabled={isDownloadingCriminalRecord}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-background hover:bg-muted text-foreground border border-border text-xs font-medium transition-colors shrink-0 disabled:opacity-50"
-                      title="Descarregar ficheiro"
-                    >
+                    <ActionTooltip content="Descarregar registo criminal"><button type="button" onClick={handleDownloadCriminalRecord} disabled={isDownloadingCriminalRecord} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-background hover:bg-muted text-foreground border border-border text-xs font-medium transition-colors shrink-0 disabled:opacity-50 cursor-pointer">
                       {isDownloadingCriminalRecord ? (
                         <Loader2 size={12} className="animate-spin" />
                       ) : (
                         <Download size={12} />
                       )}
                       <span>Ver</span>
-                    </button>
+                    </button></ActionTooltip>
                   </div>
                 ) : (
                   <span className="text-xs text-muted-foreground italic">
@@ -1027,15 +1109,39 @@ export default function AssistantProfile({
 
       {/* ── Horários & Exceções tab (Lado a Lado) ── */}
       {activeTab === "schedule" && (
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-          {/* Lado Esquerdo: Horário Padrão & Vigências */}
-          <div className="xl:col-span-7 space-y-4">
-            <AssistantScheduleManager assistantId={assistant?.id} />
-          </div>
+        <div className="space-y-4">
+          {currentShiftDetails?.isRotating && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-xs shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                  {currentShiftDetails.activeLabel}
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground text-sm">
+                    Escala Ativa Esta Semana: Turno {currentShiftDetails.activeLabel} em Vigor
+                  </p>
+                  <p className="text-muted-foreground mt-0.5">
+                    O assistente está atualmente no ciclo do <strong>Turno {currentShiftDetails.activeLabel}</strong> (até {formatDateDisplay(currentShiftDetails.cycleEnd)}).
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 text-xs bg-background/80 px-3.5 py-2 rounded-lg border border-purple-500/20">
+                <span className="font-medium text-foreground">
+                  Pausa de Almoço: <strong className="text-purple-700 dark:text-purple-300">{currentShiftDetails.lunch?.replace("Almoço: ", "") || "Sem pausa"}</strong>
+                </span>
+              </div>
+            </div>
+          )}
 
-          {/* Lado Direito: Regras de Exceção */}
-          <div className="xl:col-span-5 space-y-4">
-            <Card className="p-5 w-full">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+            {/* Lado Esquerdo: Horário Padrão & Vigências */}
+            <div className="xl:col-span-7 space-y-4">
+              <AssistantScheduleManager assistantId={assistant?.id} />
+            </div>
+
+            {/* Lado Direito: Regras de Exceção */}
+            <div className="xl:col-span-5 space-y-4">
+              <Card className="p-5 w-full">
               <div className="flex items-center justify-between pb-3 mb-3 border-b border-border/50 flex-wrap gap-2">
                 <div className="flex items-center gap-2.5">
                   <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600">
@@ -1199,27 +1305,48 @@ export default function AssistantProfile({
                     ? "Atualizar detalhe e vigência da exceção"
                     : "Horário especial com data de vigência"
                 }
-                onClose={() => setShowAddException(false)}
+                onClose={() => {
+                  if (!isSavingException) {
+                    setShowAddException(false);
+                    setExceptionErrors({});
+                  }
+                }}
                 footer={
                   <>
                     <button
                       type="button"
-                      onClick={() => setShowAddException(false)}
-                      className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      disabled={isSavingException}
+                      onClick={() => {
+                        setShowAddException(false);
+                        setExceptionErrors({});
+                      }}
+                      className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors cursor-pointer"
                     >
                       Cancelar
                     </button>
                     <button
                       type="button"
+                      disabled={isSavingException}
                       onClick={handleSaveException}
-                      className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors shadow-xs"
+                      className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
                     >
+                      {isSavingException && (
+                        <Loader2 size={13} className="animate-spin" />
+                      )}
                       {editingExceptionId ? "Guardar Alterações" : "Criar Exceção"}
                     </button>
                   </>
                 }
               >
                 <div className="space-y-4">
+                  {exceptionErrors.general && (
+                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/25 text-destructive text-xs flex items-start gap-2">
+                      <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+                      <div className="flex-1 leading-relaxed font-medium">
+                        {exceptionErrors.general}
+                      </div>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
                       <label className="text-xs font-medium text-muted-foreground block mb-1">
@@ -1388,6 +1515,11 @@ export default function AssistantProfile({
                           </div>
                         </div>
                       )}
+                      {exceptionErrors.lunch && (
+                        <p className="text-[11px] text-destructive mt-1.5 font-medium">
+                          {exceptionErrors.lunch}
+                        </p>
+                      )}
                     </div>
 
                     {/* Vigência */}
@@ -1456,6 +1588,7 @@ export default function AssistantProfile({
             )}
           </div>
         </div>
+      </div>
       )}
 
       {/* ── Horários & Escalas tab ── */}
@@ -1485,7 +1618,7 @@ export default function AssistantProfile({
             </button>
           </div>
 
-          <ProfileScheduleHistory />
+          <ProfileScheduleHistory assistantId={assistantId} />
         </div>
       )}
 

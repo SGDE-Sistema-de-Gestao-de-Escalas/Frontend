@@ -32,14 +32,16 @@ export function useActivityTypesList() {
  * Hook para obter o detalhe de um tipo de atividade por ID.
  */
 export function useActivityType(id?: string) {
+  const { selectedSchoolId } = useSchool();
+
   return useQuery({
-    queryKey: [...ACTIVITY_TYPES_QUERY_KEY, "detail", id],
+    queryKey: schoolScopedKey("activity-types", selectedSchoolId, "detail", id),
     queryFn: async (): Promise<BackendActivityTypeResource | null> => {
-      if (!id) return null;
+      if (!id || !selectedSchoolId) return null;
       const result = await activityTypesService.getById(id);
       return (result as any)?.data ?? (result as any) ?? null;
     },
-    enabled: !!id,
+    enabled: !!id && !!selectedSchoolId,
     retry: false,
   });
 }
@@ -54,6 +56,7 @@ export function useCreateActivityType() {
     mutationFn: (data: ActivityTypePayload) => activityTypesService.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ACTIVITY_TYPES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("O tipo de atividade foi criado com sucesso.", "Tipo de Atividade Criado");
     },
     onError: (error: any) => {
@@ -77,6 +80,7 @@ export function useUpdateActivityType() {
       activityTypesService.update(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ACTIVITY_TYPES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({
         queryKey: [...ACTIVITY_TYPES_QUERY_KEY, "detail", variables.id],
       });
@@ -105,6 +109,7 @@ export function useDeleteActivityType() {
     mutationFn: (id: string) => activityTypesService.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ACTIVITY_TYPES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success(
         "O tipo de atividade foi eliminado com sucesso.",
         "Tipo de Atividade Eliminado"

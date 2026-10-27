@@ -6,14 +6,14 @@ import Sidebar from "./Sidebar";
 import SidebarContent from "./SidebarContent";
 import TopHeader from "./TopHeader";
 import StaffScheduleSection from "../staff/StaffScheduleSection";
-import RegisterAbsence from "../staff/RegisterAbsence";
 import StaffAbsenceDetail from "../staff/StaffAbsenceDetail";
 import AccountProfilePage from "../settings/AccountProfilePage";
 
 export const STAFF_PAGE_LABELS: Record<string, string> = {
   schedule: "O Meu Horário",
-  "register-absence": "Justificar Falta",
-  "absence-detail": "As Minhas Faltas",
+  absences: "Ausências",
+  "register-absence": "Ausências",
+  "absence-detail": "Ausências",
   account: "A Minha Conta",
 };
 
@@ -58,7 +58,6 @@ export default function StaffLayout({
       <Sidebar
         currentPage={activePage}
         onNavigate={handleNavigate}
-        onSwitchRole={onSwitchRole}
         onLogout={onLogout}
       />
 
@@ -72,8 +71,7 @@ export default function StaffLayout({
             currentPage={activePage}
             onNavigate={handleNavigate}
             onCloseMobile={() => setMobileMenuOpen(false)}
-            onSwitchRole={onSwitchRole}
-            onLogout={onLogout}
+                        onLogout={onLogout}
           />
         </SheetContent>
       </Sheet>
@@ -84,7 +82,6 @@ export default function StaffLayout({
           currentPageTitle={currentTitle}
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
           onAccount={() => handleNavigate("account")}
-          onSwitchRole={onSwitchRole}
           onLogout={onLogout}
         />
 
@@ -95,8 +92,10 @@ export default function StaffLayout({
           ) : (
             <>
               {activePage === "schedule" && <StaffScheduleSection />}
-              {activePage === "register-absence" && <RegisterAbsence />}
-              {activePage === "absence-detail" && <StaffAbsenceDetail />}
+              {(activePage === "absences" ||
+                activePage === "register-absence" ||
+                activePage === "absence-detail") && <StaffAbsenceDetail />}
+
               {activePage === "account" && <AccountProfilePage role="staff" />}
             </>
           )}

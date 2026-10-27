@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Search, Check, ChevronDown, X, Users, UserCheck, UserX } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "../ui/utils";
@@ -209,8 +209,8 @@ export default function AssistantSelect({
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                title="Limpar pesquisa"
+                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                aria-label="Limpar pesquisa"
               >
                 <X className="size-3" />
               </button>

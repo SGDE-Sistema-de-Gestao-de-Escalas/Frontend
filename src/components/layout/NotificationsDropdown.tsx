@@ -6,9 +6,9 @@ import {
   Clock,
   FileText,
 } from "lucide-react";
-import { INITIAL_NOTIFICATIONS } from "../../api/mockData";
 import type { Notification, NotifType, EntityId } from "../../types";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import ActionTooltip from "../common/ActionTooltip";
 
 const NOTIF_STYLES: Record<
   NotifType,
@@ -42,8 +42,7 @@ const NOTIF_STYLES: Record<
 
 export default function NotificationsDropdown() {
   const [open, setOpen] = useState(false);
-  const [notifications, setNotifications] =
-    useState<Notification[]>(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<NotifType | "all">("all");
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -65,21 +64,22 @@ export default function NotificationsDropdown() {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          title="Notificações"
-          aria-label="Notificações"
-          className="relative w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors focus:outline-none"
-        >
-          <Bell size={16} />
-          {unreadCount > 0 && (
-            <span className="absolute top-1 right-1 min-w-[15px] h-[15px] rounded-full bg-destructive text-destructive-foreground text-[8px] font-mono flex items-center justify-center px-0.5 ring-2 ring-card font-semibold animate-in zoom-in-50">
-              {unreadCount}
-            </span>
-          )}
-        </button>
-      </PopoverTrigger>
+      <ActionTooltip content="Notificações">
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label="Notificações"
+            className="relative w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors focus:outline-none cursor-pointer"
+          >
+            <Bell size={16} />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 min-w-[15px] h-[15px] rounded-full bg-destructive text-destructive-foreground text-[8px] font-mono flex items-center justify-center px-0.5 ring-2 ring-card font-semibold animate-in zoom-in-50">
+                {unreadCount}
+              </span>
+            )}
+          </button>
+        </PopoverTrigger>
+      </ActionTooltip>
 
       <PopoverContent
         align="end"
@@ -201,4 +201,3 @@ export default function NotificationsDropdown() {
     </Popover>
   );
 }
-

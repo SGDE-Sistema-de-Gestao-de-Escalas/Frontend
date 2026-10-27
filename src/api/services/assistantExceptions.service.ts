@@ -11,17 +11,20 @@ export const assistantExceptionsService = {
    * Listar exceções de um assistente
    * GET /api/assistant-exceptions?assistant_id={assistantId}
    */
-  async getAll(assistantId: string | number): Promise<AssistantExceptionApi[]> {
-    const aid = String(assistantId);
+  async getAll(assistantId?: string | number): Promise<AssistantExceptionApi[]> {
+    const aid = assistantId !== undefined && assistantId !== null && assistantId !== "" ? String(assistantId) : undefined;
     try {
       const response = await apiClient.get<any>("/assistant-exceptions", {
-        params: { assistant_id: aid },
+        params: aid ? { assistant_id: aid } : {},
       });
       const data = Array.isArray(response.data?.data)
         ? response.data.data
         : Array.isArray(response.data)
         ? response.data
         : [];
+      if (!aid) {
+        return data;
+      }
       return data.filter(
         (e: any) => !e.assistant_id || String(e.assistant_id) === aid
       );

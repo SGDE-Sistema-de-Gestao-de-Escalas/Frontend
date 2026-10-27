@@ -6,16 +6,29 @@ import {
   UpdateAssistantScheduleProfilePayload,
 } from "../../types/assistantSchedule.types";
 import { EntityId } from "../../types";
+import { useSchool } from "../../context/SchoolContext";
+import { schoolScopedKey } from "../../lib/queryClient";
 
 export const ASSISTANT_SCHEDULES_KEY = ["assistant-schedules"];
 
 export function useAssistantSchedules(assistantId?: EntityId) {
+  const { selectedSchoolId } = useSchool();
   const aid = assistantId ? String(assistantId) : "";
 
   return useQuery({
-    queryKey: [...ASSISTANT_SCHEDULES_KEY, aid],
+    queryKey: schoolScopedKey("assistant-schedules", selectedSchoolId, aid),
     queryFn: () => assistantSchedulesService.getAll(aid),
-    enabled: !!aid,
+    enabled: !!selectedSchoolId && !!aid,
+  });
+}
+
+export function useAllAssistantSchedules() {
+  const { selectedSchoolId } = useSchool();
+
+  return useQuery({
+    queryKey: schoolScopedKey("assistant-schedules", selectedSchoolId, "all"),
+    queryFn: () => assistantSchedulesService.getAll(),
+    enabled: !!selectedSchoolId,
   });
 }
 
@@ -25,10 +38,10 @@ export function useCreateAssistantSchedule() {
   return useMutation({
     mutationFn: (payload: CreateAssistantScheduleProfilePayload) =>
       assistantSchedulesService.create(payload),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: [...ASSISTANT_SCHEDULES_KEY, String(variables.assistant_id)],
-      });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ASSISTANT_SCHEDULES_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("Horário padrão configurado com sucesso.", "Horário Guardado");
     },
     onError: (error: any) => {
@@ -51,10 +64,10 @@ export function useUpdateAssistantSchedule() {
       data: UpdateAssistantScheduleProfilePayload;
       assistantId: string;
     }) => assistantSchedulesService.update(id, data),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: [...ASSISTANT_SCHEDULES_KEY, String(variables.assistantId)],
-      });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ASSISTANT_SCHEDULES_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("Vigência do horário atualizada com sucesso.", "Horário Atualizado");
     },
     onError: (error: any) => {
@@ -75,10 +88,10 @@ export function useDeleteAssistantSchedule() {
       id: string | number;
       assistantId: string;
     }) => assistantSchedulesService.delete(id),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: [...ASSISTANT_SCHEDULES_KEY, String(variables.assistantId)],
-      });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ASSISTANT_SCHEDULES_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("Horário eliminado com sucesso.", "Horário Eliminado");
     },
     onError: (error: any) => {

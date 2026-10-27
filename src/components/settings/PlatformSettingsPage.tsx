@@ -1,23 +1,20 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   AlertTriangle,
   Building2,
   CheckCircle,
   FileText,
-  Globe,
   Loader2,
   Mail,
   MapPin,
   Paperclip,
   Pencil,
-  Phone,
   Plus,
   SearchX,
   Settings,
   Shield,
   ShieldCheck,
   Trash2,
-  User,
   UserCheck,
   UserPlus,
   UserX,
@@ -36,11 +33,7 @@ import ConfirmationModal from "../common/ConfirmationModal";
 import { ActionTooltip } from "../common/ActionTooltip";
 import ListToolbar from "../common/ListToolbar";
 import ListPagination from "../common/ListPagination";
-import FeedbackNotification, {
-  notify,
-  getBackendErrorMessage,
-  getBackendSuccessMessage,
-} from "../common/FeedbackNotification";
+import { notify } from "../common/FeedbackNotification";
 import { useSchool } from "../../context/SchoolContext";
 import { useAuth } from "../../context/AuthContext";
 import HolidaysPage from "./HolidaysPage";
@@ -138,9 +131,7 @@ export default function PlatformSettingsPage() {
       errors.name = "O nome da escola é obrigatório.";
     }
 
-    if (!sAcronym) {
-      errors.acronym = "A sigla ou código é obrigatória.";
-    } else if (sAcronym.length > 20) {
+    if (sAcronym && sAcronym.length > 20) {
       errors.acronym = "A sigla não pode ter mais de 20 caracteres.";
     }
 
@@ -162,7 +153,7 @@ export default function PlatformSettingsPage() {
       if (isEditing) {
         const res = await schoolsService.update(schoolEditId, {
           name: sName,
-          acronym: sAcronym,
+          acronym: sAcronym || null,
           address: schoolAddress.trim() || null,
           phone: schoolPhone.trim() || null,
           email: sEmail || null,
@@ -171,7 +162,7 @@ export default function PlatformSettingsPage() {
       } else {
         const res = await schoolsService.create({
           name: sName,
-          acronym: sAcronym,
+          acronym: sAcronym || null,
           address: schoolAddress.trim() || null,
           phone: schoolPhone.trim() || null,
           email: sEmail || null,
@@ -208,7 +199,7 @@ export default function PlatformSettingsPage() {
                 ? {
                     ...s,
                     name: sName,
-                    acronym: sAcronym,
+                    acronym: sAcronym || undefined,
                     address: schoolAddress.trim(),
                     phone: schoolPhone.trim(),
                     email: sEmail || undefined,
@@ -222,7 +213,7 @@ export default function PlatformSettingsPage() {
             {
               id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
               name: sName,
-              acronym: sAcronym,
+              acronym: sAcronym || undefined,
               address: schoolAddress.trim(),
               phone: schoolPhone.trim(),
               email: sEmail || undefined,
@@ -1100,7 +1091,7 @@ export default function PlatformSettingsPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-medium text-foreground block mb-1.5">
-                      Sigla / Código <span className="text-destructive">*</span>
+                      Sigla / Código
                     </label>
                     <input
                       type="text"

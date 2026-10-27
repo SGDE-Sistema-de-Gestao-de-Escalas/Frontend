@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Edit2, Info, Plus, Trash2, Loader2, Power, AlertCircle, Layers, Sparkles, Lock } from "lucide-react";
 import { PRESET_COLORS } from "../dashboard/blockStyles";
 import { Card } from "../ui/card";

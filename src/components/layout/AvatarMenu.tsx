@@ -1,4 +1,3 @@
-import React from "react";
 import { ChevronDown, LogOut, Settings, User } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -12,14 +11,12 @@ import {
 interface AvatarMenuProps {
   onAccount?: () => void;
   onPlatformSettings?: () => void;
-  onSwitchRole?: () => void;
   onLogout?: () => void;
 }
 
 export default function AvatarMenu({
   onAccount,
   onPlatformSettings,
-  onSwitchRole,
   onLogout,
 }: AvatarMenuProps) {
   const { user, logout } = useAuth();
@@ -99,4 +96,3 @@ export default function AvatarMenu({
     </DropdownMenu>
   );
 }
-

@@ -1,4 +1,3 @@
-import React from "react";
 import SidebarContent from "./SidebarContent";
 
 interface SidebarProps {

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -17,25 +17,34 @@ import {
 } from "recharts";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { assistants as ASSISTANTS } from "../../api/mockData";
+import { useAssistantsList } from "../../hooks/api/useAssistants";
+import type { EntityId } from "../../types";
 import DatePicker from "../common/DatePicker";
 import CustomSelect from "../common/CustomSelect";
 
 export default function SimulatorPage() {
-  const [selectedAssistant, setSelectedAssistant] = useState<number | null>(
+  const { data: assistantsData = [] } = useAssistantsList();
+  const [selectedAssistant, setSelectedAssistant] = useState<EntityId | null>(
     null
   );
-  const [startDate, setStartDate] = useState("2026-02-03");
-  const [endDate, setEndDate] = useState("2026-02-05");
+  const [startDate, setStartDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+  const [endDate, setEndDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
   const [simulated, setSimulated] = useState(false);
 
-  const assistant = ASSISTANTS.find((a) => a.id === selectedAssistant);
+  const assistant = assistantsData.find(
+    (a) => String(a.id) === String(selectedAssistant)
+  );
 
-  const impactDays = [
-    { day: "Ter 03 Fev", before: 10, after: 9, alert: false },
-    { day: "Qua 04 Fev", before: 11, after: 10, alert: false },
-    { day: "Qui 05 Fev", before: 8, after: 7, alert: true },
-  ];
+  const impactDays: {
+    day: string;
+    before: number;
+    after: number;
+    alert: boolean;
+  }[] = [];
 
   return (
     <div>
@@ -63,10 +72,10 @@ export default function SimulatorPage() {
                 placeholder="Selecionar assistente..."
                 value={selectedAssistant ? String(selectedAssistant) : ""}
                 onValueChange={(val) => {
-                  setSelectedAssistant(val ? Number(val) : null);
+                  setSelectedAssistant(val || null);
                   setSimulated(false);
                 }}
-                options={ASSISTANTS.map((a) => ({
+                options={assistantsData.map((a) => ({
                   value: String(a.id),
                   label: a.name,
                 }))}
@@ -280,4 +289,3 @@ export default function SimulatorPage() {
     </div>
   );
 }
-

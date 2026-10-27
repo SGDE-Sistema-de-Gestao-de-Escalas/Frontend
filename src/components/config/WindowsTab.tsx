@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
   Clock,
   Calendar as CalendarIcon,
@@ -10,8 +10,6 @@ import {
   ChevronUp,
   History,
   Copy,
-  Layers,
-  Sparkles,
 } from "lucide-react";
 import { Card } from "../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -37,7 +35,6 @@ import {
   OperatingRuleDay,
   DayOfWeekNumber,
   OperatingException,
-  CreateOperatingRulePayload,
   CreateOperatingExceptionPayload,
 } from "../../types/operatingHours.types";
 
@@ -56,7 +53,7 @@ const ALL_DAYS: DayOfWeekNumber[] = [0, 1, 2, 3, 4, 5, 6];
 export default function WindowsTab() {
   const { role } = useAuth();
   const isAdmin = role === "admin";
-  const { selectedSchool } = useSchool();
+  useSchool();
 
   // Consultas React Query
   const { data: rawRules, isLoading: isLoadingRules } = useOperatingRules();
@@ -684,7 +681,7 @@ export default function WindowsTab() {
         )}
       </section>
 
-      {/* ── SECÇÃO 2: EXCEÇÕES E PAUSAS LETIVAS ──────────────────────────────────── */}
+      {/* ── SECÇÃO 2: EXCEÇÕES E PAUSAS LETIVAS ─────────────────────────────────── */}
       <section className="space-y-3 pt-2">
         <div className="flex items-center justify-between">
           <div>
@@ -751,7 +748,7 @@ export default function WindowsTab() {
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
                           <CalendarIcon size={12} />
                           <span>{exc.valid_from}</span>
-                          <span>→</span>
+                          <span>—</span>
                           <span>{exc.valid_until}</span>
                         </div>
                       </div>
@@ -842,7 +839,7 @@ export default function WindowsTab() {
       </section>
 
       {/* ========================================================================= */}
-      {/* MODAL: NOVA / EDITAR VERSÃO DE HORÁRIO FIXO */}
+      {/* MODAL: NOVA / EDITAR VERSÒO DE HORÁRIO FIXO */}
       {/* ========================================================================= */}
       <Dialog open={ruleModalOpen} onOpenChange={setRuleModalOpen}>
         <DialogContent className="w-[95vw] max-w-4xl sm:max-w-4xl p-0 overflow-visible rounded-xl border border-border bg-card shadow-2xl">
@@ -873,15 +870,7 @@ export default function WindowsTab() {
                   Dias desativados serão considerados dias em que a escola não funciona.
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={handleCopyMondayToWeekdays}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shadow-2xs"
-                title="Copia os horários de Segunda-feira para Terça, Quarta, Quinta e Sexta"
-              >
-                <Copy size={13} />
-                Copiar 2ª para Dias Úteis
-              </button>
+              <ActionTooltip content="Copia os horários de Segunda-feira para Terça, Quarta, Quinta e Sexta"><button type="button" onClick={handleCopyMondayToWeekdays} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shadow-2xs cursor-pointer"><Copy size={13} />Copiar 2.ª para Dias Úteis</button></ActionTooltip>
             </div>
 
             {ruleFormErrors.days && (
@@ -1330,3 +1319,4 @@ export default function WindowsTab() {
     </div>
   );
 }
+

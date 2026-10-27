@@ -1,32 +1,29 @@
 import React from "react";
-import {
-  Clock,
-  Coffee,
-  Eye,
-  ShoppingBag,
-  Sparkles,
-  Truck,
-  UserX,
-} from "lucide-react";
 import type { BlockState } from "../../types";
 
 export interface BlockStyleConfig {
   bg: string;
   label: string;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   locked?: boolean;
 }
 
 export const BLOCK_STYLES: Record<BlockState, BlockStyleConfig> = {
-  work: { bg: "bg-[#6366F1]", label: "Trabalho", icon: <Clock size={11} /> },
-  surveillance: { bg: "bg-[#A855F7]", label: "Vigilância", icon: <Eye size={11} /> },
-  lunch: { bg: "bg-[#F59E0B]", label: "Pausa Almoço", icon: <Coffee size={11} /> },
-  absent: { bg: "bg-[#EF4444]", label: "Ausente", icon: <UserX size={11} /> },
-  off: { bg: "bg-transparent border border-border/40", label: "Inativo", icon: null },
-  cleaning: { bg: "bg-[#06B6D4]", label: "Limpeza", icon: <Sparkles size={11} /> },
-  collection: { bg: "bg-[#EC4899]", label: "Recolha", icon: <Truck size={11} />, locked: true },
-  delivery: { bg: "bg-[#10B981]", label: "Entrega", icon: <ShoppingBag size={11} />, locked: true },
+  work: { bg: "bg-[#3B82F6]", label: "Apoio Turmas/escola" },
+  collection: { bg: "bg-[#F59E0B]", label: "Acolhimento" },
+  surveillance: { bg: "bg-[#A855F7]", label: "Vigilância almoço" },
+  lunch: { bg: "bg-[#F97316]", label: "Pausa Almoço" },
+  cleaning: { bg: "bg-[#8B5CF6]", label: "Limpeza" },
+  delivery: { bg: "bg-[#14B8A6]", label: "Entrega de alunos" },
+  absent: { bg: "bg-[#EF4444]", label: "Falta / Ausência" },
+  off: { bg: "bg-transparent border border-border/40", label: "Inativo / Folga" },
 };
+
+export const TIME_SLOTS = Array.from({ length: 96 }, (_, index) => {
+  const hour = Math.floor(index / 4).toString().padStart(2, "0");
+  const minute = ((index % 4) * 15).toString().padStart(2, "0");
+  return `${hour}:${minute}`;
+});
 
 export const HOUR_LABELS = Array.from(
   { length: 25 },
@@ -37,16 +34,6 @@ export const VIEW_START = 24; // slot 24 = 06:00
 export const VIEW_END = 84; // slot 84 = 21:00 (exclusive)
 export const VIEW_SLOTS = VIEW_END - VIEW_START; // 60 slots = 15 hours
 
-export const EDIT_TYPES: BlockState[] = [
-  "work",
-  "surveillance",
-  "cleaning",
-  "collection",
-  "delivery",
-  "lunch",
-  "absent",
-  "off",
-];
 
 export const PRESET_COLORS = [
   "#6366F1", "#A855F7", "#EC4899", "#EF4444", "#F59E0B", "#10B981",
@@ -54,24 +41,202 @@ export const PRESET_COLORS = [
   "#E11D48", "#7C3AED", "#0EA5E9", "#64748B", "#84CC16", "#1A56DB",
 ];
 
+export interface MergedScheduleBlockMeta {
+  entryId?: string;
+  activityTypeId?: string | null;
+  activityName?: string;
+  activityColor?: string | null;
+  isFallback?: boolean;
+  isLocked?: boolean;
+  ruleId?: string | null;
+  replacedAssistantId?: string | null;
+  replacementReason?: string | null;
+}
+
 export interface MergedScheduleBlock {
   state: BlockState;
   start: number;
   count: number;
   hasPrevAdjacent: boolean;
   hasNextAdjacent: boolean;
+  activityName?: string;
+  activityColor?: string | null;
+  entryId?: string;
+  isFallback?: boolean;
+  isLocked?: boolean;
+  meta?: MergedScheduleBlockMeta;
 }
 
-export function slotsToBlocks(slots: BlockState[]): MergedScheduleBlock[] {
-  const raw: { state: BlockState; start: number; count: number }[] = [];
-  let cur: { state: BlockState; start: number; count: number } | null = null;
+export function mapActivityToBlockState(
+  activityName?: string | null,
+  isFallback?: boolean
+): BlockState {
+  if (isFallback) return "work";
+  const norm = (activityName || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  // 1. TAREFAS DE VIGILÂNCIA
+  if (
+    norm.includes("vigilancia") ||
+    norm.includes("portaria") ||
+    norm.includes("recreio") ||
+    norm.includes("intervalo") ||
+    norm.includes("fecho") ||
+    norm.includes("refeitorio") ||
+    norm.includes("cantina")
+  ) {
+    return "surveillance";
+  }
+
+  // 2. ACOLHIMENTO E RECEÇÃO
+  if (
+    norm.includes("acolhimento") ||
+    norm.includes("recolha") ||
+    norm.includes("rececao") ||
+    norm.includes("entrada")
+  ) {
+    return "collection";
+  }
+
+  // 3. ENTREGA DE ALUNOS E SAÍDA
+  if (norm.includes("entrega") || norm.includes("saida")) {
+    return "delivery";
+  }
+
+  // 4. LIMPEZA E HIGIENIZAÇÃO
+  if (
+    norm.includes("limpeza") ||
+    norm.includes("pavilhao") ||
+    norm.includes("higien")
+  ) {
+    return "cleaning";
+  }
+
+  // 5. APOIO A TURMAS / ESCOLA
+  if (
+    norm.includes("apoio") ||
+    norm.includes("turma") ||
+    norm.includes("sala") ||
+    norm.includes("aula")
+  ) {
+    return "work";
+  }
+
+  // 6. PAUSA DE ALMOÇO DO FUNCIONÁRIO
+  if (norm.includes("almoco") || norm.includes("refeicao")) {
+    return "lunch";
+  }
+
+  // 7. AUSÊNCIA / FALTA
+  if (norm.includes("falta") || norm.includes("ausencia")) {
+    return "absent";
+  }
+
+  return "work";
+}
+
+function normalizeActivityName(name?: string | null): string {
+  if (!name) return "";
+  const norm = name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+  if (norm.includes("apoio")) return "apoio";
+  if (norm.includes("limpeza")) return "limpeza";
+  if (norm.includes("vigilancia") && norm.includes("almoco")) return "vigilancia_almoco";
+  if (norm.includes("intervalo")) return "intervalo";
+  if (norm.includes("acolhimento")) return "acolhimento";
+  if (norm.includes("entrega")) return "entrega";
+
+  return norm;
+}
+
+export function areAdjacentSlotsCompatible(
+  prevState: BlockState,
+  prevMeta: MergedScheduleBlockMeta | undefined,
+  nextState: BlockState,
+  nextMeta: MergedScheduleBlockMeta | undefined
+): boolean {
+  // 1. O estado base do bloco tem de ser estritamente igual
+  if (prevState !== nextState) return false;
+
+  // 1.1 Se o estado de bloqueio (cadeado) for diferente, não fundem
+  if (Boolean(prevMeta?.isLocked) !== Boolean(nextMeta?.isLocked)) {
+    return false;
+  }
+
+  // 2. Estados de sistema sem regras específicas fundem sempre
+  if (prevState === "off" || prevState === "lunch" || prevState === "absent") {
+    return true;
+  }
+
+  // 3. Se algum dos slots estiver associado a uma ScheduleRule específica, só fundem se for a mesma regra
+  const prevRule = prevMeta?.ruleId;
+  const nextRule = nextMeta?.ruleId;
+  if (prevRule || nextRule) {
+    return String(prevRule || "") === String(nextRule || "");
+  }
+
+  // 4. Se ambos forem trabalho base ("work"), fundem sempre (ex: Apoio Escola e Apoio Turmas/escola)
+  if (prevState === "work") {
+    return true;
+  }
+
+  // 5. Para outras atividades com nomes customizados, compara os nomes normalizados
+  const prevName = normalizeActivityName(prevMeta?.activityName);
+  const nextName = normalizeActivityName(nextMeta?.activityName);
+
+  if (!prevName || !nextName) return true;
+  return prevName === nextName;
+}
+
+export function slotsToBlocks(
+  slots: BlockState[],
+  meta?: Record<number, MergedScheduleBlockMeta>
+): MergedScheduleBlock[] {
+  const raw: {
+    state: BlockState;
+    start: number;
+    count: number;
+    meta?: MergedScheduleBlockMeta;
+  }[] = [];
+  let cur: {
+    state: BlockState;
+    start: number;
+    count: number;
+    meta?: MergedScheduleBlockMeta;
+  } | null = null;
+
   for (let i = 0; i < slots.length; i++) {
     const s = slots[i];
-    if (cur && cur.state === s) {
+    let m = meta?.[i];
+
+    // Se os metadados pertencerem a uma atividade cujo estado não coincide com o estado atual do slot
+    // (ex: slot era Apoio Escola mas foi pintado para Limpeza), descartar metadados obsoletos
+    if (m?.activityName) {
+      const metaState = mapActivityToBlockState(m.activityName, m.isFallback);
+      if (metaState !== s && s !== "off") {
+        m = undefined;
+      }
+    }
+
+    const sameState = cur !== null && cur.state === s;
+    const isCompatible =
+      sameState && areAdjacentSlotsCompatible(cur.state, cur.meta, s, m);
+
+    if (cur && sameState && (!meta || isCompatible)) {
       cur.count++;
+      // Preservar metadados mais ricos se o bloco inicial não os tinha
+      if (m && (!cur.meta || (!cur.meta.activityTypeId && m.activityTypeId))) {
+        cur.meta = { ...cur.meta, ...m };
+      }
     } else {
       if (cur) raw.push(cur);
-      cur = { state: s, start: i, count: 1 };
+      cur = { state: s, start: i, count: 1, meta: m };
     }
   }
   if (cur) raw.push(cur);
@@ -91,9 +256,17 @@ export function slotsToBlocks(slots: BlockState[]): MergedScheduleBlock[] {
       b.start + b.count === next.start;
 
     return {
-      ...b,
+      state: b.state,
+      start: b.start,
+      count: b.count,
       hasPrevAdjacent,
       hasNextAdjacent,
+      activityName: b.meta?.activityName,
+      activityColor: b.meta?.activityColor,
+      entryId: b.meta?.entryId,
+      isFallback: b.meta?.isFallback,
+      isLocked: b.meta?.isLocked,
+      meta: b.meta,
     };
   });
 }

@@ -1,7 +1,20 @@
-import React, { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { DASHBOARD_MONTHS, getDayCoverage } from "../../api/mockData";
 import { Card } from "../ui/card";
+import { useAssistantsList } from "../../hooks/api/useAssistants";
+import { useSchedulesList } from "../../hooks/api/useSchedules";
+import {
+  useOperatingCalendar,
+  useOperatingExceptions,
+  useOperatingRules,
+} from "../../hooks/api/useOperatingHours";
+import { useHolidaysList } from "../../hooks/api/useHolidays";
+import {
+  getDateInfo,
+  getRealMonthsRange,
+  hasGeneratedScheduleForDate,
+  resolveSchoolDayStatusByIsoDate,
+} from "../../utils/scheduleMatrixUtils";
 
 interface MonthDashboardViewProps {
   monthOffset: number;
@@ -14,28 +27,101 @@ export default function MonthDashboardView({
   onSelectDay,
   onChangeMonth,
 }: MonthDashboardViewProps) {
-  const [hoveredDay, setHoveredDay] = useState<number | null>(null);
-  const month =
-    DASHBOARD_MONTHS[
-      Math.max(0, Math.min(monthOffset, DASHBOARD_MONTHS.length - 1))
-    ];
+  const [, setHoveredDay] = useState<number | null>(null);
+  const monthsList = useMemo(() => getRealMonthsRange(3, 6), []);
+  const clampedIdx = Math.max(0, Math.min(monthOffset, monthsList.length - 1));
+  const month = monthsList[clampedIdx];
 
-  const coverageByDay = Array.from({ length: month.days }, (_, i) => {
-    const offset = month.firstOffset + i;
-    return getDayCoverage(offset);
+  const { data: assistants = [] } = useAssistantsList();
+  const { data: schedules = [] } = useSchedulesList({
+    start_date: month.startIso,
+    end_date: month.endIso,
   });
+  const { data: calendarDays = [] } = useOperatingCalendar(
+    month.startIso,
+    month.endIso
+  );
+  const { data: operatingRules = [] } = useOperatingRules();
+  const { data: operatingExceptions = [] } = useOperatingExceptions();
+  const { data: holidays = [] } = useHolidaysList();
 
-  function coverageColor(active: number, isWeekend: boolean) {
-    if (isWeekend) return "bg-muted/20";
-    if (active >= 10) return "bg-[#0E7C59]/15";
-    if (active >= 8) return "bg-[#D97706]/15";
+  const operatingSources = useMemo(
+    () => ({
+      calendarDays,
+      operatingRules,
+      operatingExceptions,
+      holidays,
+    }),
+    [calendarDays, operatingRules, operatingExceptions, holidays]
+  );
+
+  const totalAssistants = useMemo(
+    () =>
+      Math.max(
+        1,
+        assistants.filter(
+          (a) => !a.deleted_at && (a.active ?? a.is_active ?? true)
+        ).length
+      ),
+    [assistants]
+  );
+
+  const coverageByDay = useMemo(() => {
+    return Array.from({ length: month.days }, (_, i) => {
+      const offset = month.firstOffset + i;
+      const info = getDateInfo(offset);
+      const status = resolveSchoolDayStatusByIsoDate(
+        info.isoDate,
+        operatingSources
+      );
+      if (!status.isOpen) {
+        return {
+          active: 0,
+          isClosed: true,
+          hasGenerated: false,
+          status,
+        };
+      }
+
+      const hasGenerated = hasGeneratedScheduleForDate(info.isoDate, schedules);
+      const activeAssistantIds = new Set<string>();
+      schedules.forEach((sc) => {
+        const hasEntriesOnDate = (sc.entries || []).some(
+          (e) => e.date?.slice(0, 10) === info.isoDate
+        );
+        if (hasEntriesOnDate) {
+          activeAssistantIds.add(String(sc.assistant_id));
+        }
+      });
+
+      return {
+        active: activeAssistantIds.size,
+        isClosed: false,
+        hasGenerated,
+      };
+    });
+  }, [month, operatingSources, schedules]);
+
+  function coverageColor(
+    active: number,
+    isClosed: boolean,
+    hasGenerated: boolean
+  ) {
+    if (isClosed) return "bg-muted/20";
+    if (!hasGenerated) return "bg-card hover:bg-muted/30";
+    if (active >= Math.ceil(totalAssistants * 0.8)) return "bg-[#0E7C59]/15";
+    if (active >= Math.ceil(totalAssistants * 0.5)) return "bg-[#D97706]/15";
     return "bg-destructive/15";
   }
 
-  function coverageDot(active: number, isWeekend: boolean) {
-    if (isWeekend) return "";
-    if (active >= 10) return "bg-[#0E7C59]";
-    if (active >= 8) return "bg-[#D97706]";
+  function coverageDot(
+    active: number,
+    isClosed: boolean,
+    hasGenerated: boolean
+  ) {
+    if (isClosed || !hasGenerated) return "bg-muted-foreground/40";
+    if (active >= Math.ceil(totalAssistants * 0.8)) return "bg-[#0E7C59]";
+    if (active >= Math.ceil(totalAssistants * 0.5)) return "bg-[#D97706]";
     return "bg-destructive";
   }
 
@@ -47,9 +133,10 @@ export default function MonthDashboardView({
           Cobertura:
         </span>
         {[
-          { dot: "bg-[#0E7C59]", label: "≥ 10 assistentes" },
-          { dot: "bg-[#D97706]", label: "8 – 9 assistentes" },
-          { dot: "bg-destructive", label: "< 8 assistentes" },
+          { dot: "bg-[#0E7C59]", label: "Cobertura normal (≥ 80%)" },
+          { dot: "bg-[#D97706]", label: "Cobertura parcial (50% – 79%)" },
+          { dot: "bg-destructive", label: "Abaixo de 50%" },
+          { dot: "bg-muted-foreground/40", label: "Escala ainda não gerada" },
         ].map((l) => (
           <div key={l.label} className="flex items-center gap-1.5">
             <div className={`w-2 h-2 rounded-full ${l.dot}`} />
@@ -67,7 +154,7 @@ export default function MonthDashboardView({
           <button
             type="button"
             onClick={() => onChangeMonth(-1)}
-            disabled={monthOffset === 0}
+            disabled={clampedIdx === 0}
             className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30 transition-colors"
           >
             <ChevronLeft size={14} />
@@ -78,7 +165,7 @@ export default function MonthDashboardView({
           <button
             type="button"
             onClick={() => onChangeMonth(1)}
-            disabled={monthOffset >= DASHBOARD_MONTHS.length - 1}
+            disabled={clampedIdx >= monthsList.length - 1}
             className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30 transition-colors"
           >
             <ChevronRight size={14} />
@@ -115,15 +202,16 @@ export default function MonthDashboardView({
               <button
                 key={dayNum}
                 type="button"
-                onClick={() => !cov.isWeekend && onSelectDay(offset)}
+                onClick={() => onSelectDay(offset)}
                 onMouseEnter={() => setHoveredDay(dayNum)}
                 onMouseLeave={() => setHoveredDay(null)}
-                className={`h-20 p-2 text-left border-r border-b border-border/30 transition-colors flex flex-col ${
-                  cov.isWeekend
-                    ? "cursor-default bg-muted/10"
-                    : `cursor-pointer ${coverageColor(
+                className={`h-20 p-2 text-left border-r border-b border-border/30 transition-colors flex flex-col cursor-pointer ${
+                  cov.isClosed
+                    ? "bg-muted/10 hover:bg-muted/20"
+                    : `${coverageColor(
                         cov.active,
-                        false
+                        false,
+                        cov.hasGenerated
                       )} hover:brightness-95`
                 } ${isToday ? "ring-2 ring-inset ring-primary" : ""} ${
                   isSunCol ? "border-r-0" : ""
@@ -133,41 +221,67 @@ export default function MonthDashboardView({
                   className={`text-xs font-mono mb-1.5 w-6 h-6 flex items-center justify-center rounded-full ${
                     isToday
                       ? "bg-primary text-primary-foreground font-bold"
-                      : cov.isWeekend
-                      ? "text-muted-foreground/40"
+                      : cov.isClosed
+                      ? "text-muted-foreground/60"
                       : "text-foreground font-medium"
                   }`}
                 >
                   {dayNum}
                 </div>
-                {!cov.isWeekend && (
-                  <>
-                    <div className="flex items-center gap-1">
-                      <div
-                        className={`w-1.5 h-1.5 rounded-full ${coverageDot(
-                          cov.active,
-                          false
-                        )}`}
-                      />
-                      <span className="text-[10px] font-mono text-muted-foreground">
-                        {cov.active}/12
-                      </span>
-                    </div>
-                    {/* Mini coverage bar */}
-                    <div className="mt-1 h-1 bg-muted/50 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${
-                          cov.active >= 10
-                            ? "bg-[#0E7C59]"
-                            : cov.active >= 8
-                            ? "bg-[#D97706]"
-                            : "bg-destructive"
-                        }`}
-                        style={{ width: `${(cov.active / 12) * 100}%` }}
-                      />
-                    </div>
-                  </>
+                {cov.isClosed && cov.status && (
+                  <div className="mt-auto">
+                    <span
+                      className={`block text-[9px] font-semibold truncate px-1 py-0.5 rounded leading-tight ${
+                        cov.status.reasonType === "exception"
+                          ? "text-destructive bg-destructive/10 border border-destructive/20"
+                          : cov.status.reasonType === "holiday"
+                          ? "text-[#D97706] bg-[#D97706]/10 border border-[#D97706]/20"
+                          : "text-muted-foreground/60"
+                      }`}
+                      title={cov.status.title}
+                    >
+                      {cov.status.closedLabel || (cov.status.reasonType === "exception" ? "Exceção" : "Encerrado")}
+                    </span>
+                  </div>
                 )}
+                {!cov.isClosed &&
+                  (cov.hasGenerated ? (
+                    <>
+                      <div className="flex items-center gap-1">
+                        <div
+                          className={`w-1.5 h-1.5 rounded-full ${coverageDot(
+                            cov.active,
+                            false,
+                            true
+                          )}`}
+                        />
+                        <span className="text-[10px] font-mono text-muted-foreground">
+                          {cov.active}/{totalAssistants}
+                        </span>
+                      </div>
+                      <div className="mt-1 h-1 bg-muted/50 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${
+                            cov.active >= Math.ceil(totalAssistants * 0.8)
+                              ? "bg-[#0E7C59]"
+                              : cov.active >= Math.ceil(totalAssistants * 0.5)
+                              ? "bg-[#D97706]"
+                              : "bg-destructive"
+                          }`}
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              (cov.active / totalAssistants) * 100
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-[10px] font-medium text-muted-foreground/70 mt-auto">
+                      Escala não gerada
+                    </span>
+                  ))}
               </button>
             );
           })}
@@ -187,4 +301,3 @@ export default function MonthDashboardView({
     </div>
   );
 }
-

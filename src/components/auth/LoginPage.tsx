@@ -12,7 +12,6 @@ import {
   Shield,
   Users,
   Loader2,
-  X,
 } from "lucide-react";
 import type { Role } from "../../types";
 import { useAuth } from "../../context/AuthContext";

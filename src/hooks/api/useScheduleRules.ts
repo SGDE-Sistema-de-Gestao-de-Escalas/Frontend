@@ -35,6 +35,8 @@ export function useCreateScheduleRule() {
     mutationFn: (data: CreateScheduleRulePayload) => scheduleRulesService.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: SCHEDULE_RULES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("A regra de horário foi criada com sucesso.", "Regra Criada");
     },
     onError: (error: any) => {
@@ -63,6 +65,8 @@ export function useUpdateScheduleRule() {
       scheduleRulesService.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: SCHEDULE_RULES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("A regra de horário foi atualizada com sucesso.", "Regra Atualizada");
     },
     onError: (error: any) => {
@@ -90,6 +94,8 @@ export function useDeleteScheduleRule() {
     mutationFn: (id: string) => scheduleRulesService.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: SCHEDULE_RULES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("A regra de horário foi removida com sucesso.", "Regra Removida");
     },
     onError: (error: any) => {

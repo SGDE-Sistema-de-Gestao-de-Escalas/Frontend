@@ -15,7 +15,6 @@ import PlatformSettings from "../pages/PlatformSettings";
 import Account from "../pages/Account";
 import StaffSchedule from "../pages/StaffSchedule";
 import StaffAbsences from "../pages/StaffAbsences";
-import StaffRegisterAbsence from "../pages/StaffRegisterAbsence";
 import LegacyApp from "../pages/LegacyApp";
 
 import TitleUpdater from "./TitleUpdater";
@@ -109,7 +108,7 @@ export default function AppRouter() {
         <Route path="/staff/absence" element={<StaffRoute><StaffAbsences /></StaffRoute>} />
         <Route
           path="/staff/register-absence"
-          element={<StaffRoute><StaffRegisterAbsence /></StaffRoute>}
+          element={<Navigate to="/staff/absences" replace />}
         />
         <Route path="/staff/account" element={<StaffRoute><Account /></StaffRoute>} />
       </Route>

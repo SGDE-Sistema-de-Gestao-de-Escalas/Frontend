@@ -50,8 +50,9 @@ export function useCreateHoliday() {
     mutationFn: (data: HolidayPayload) => holidaysService.create(data),
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: HOLIDAYS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       const msg = res?.message || "O feriado foi registado com sucesso no calendário.";
-      notify.success(msg, undefined, "Feriado Criado");
+      notify.success(msg, "Feriado Criado");
     },
     onError: (error: any) => {
       const message =
@@ -75,11 +76,12 @@ export function useUpdateHoliday() {
       holidaysService.update(id, data),
     onSuccess: (res: any, variables) => {
       queryClient.invalidateQueries({ queryKey: HOLIDAYS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({
         queryKey: [...HOLIDAYS_QUERY_KEY, "detail", variables.id],
       });
       const msg = res?.message || "Os dados do feriado foram atualizados com sucesso.";
-      notify.success(msg, undefined, "Feriado Atualizado");
+      notify.success(msg, "Feriado Atualizado");
     },
     onError: (error: any) => {
       const message =
@@ -102,8 +104,9 @@ export function useDeleteHoliday() {
     mutationFn: (id: EntityId) => holidaysService.delete(id),
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: HOLIDAYS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       const msg = res?.message || "O feriado foi removido do calendário.";
-      notify.success(msg, undefined, "Feriado Removido");
+      notify.success(msg, "Feriado Removido");
     },
     onError: (error: any) => {
       const message =

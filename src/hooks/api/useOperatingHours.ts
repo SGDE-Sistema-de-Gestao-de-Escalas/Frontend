@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notify } from "../../components/common/FeedbackNotification";
 import operatingHoursService from "../../api/services/operatingHours.service";
 import { useSchool } from "../../context/SchoolContext";
@@ -21,15 +21,31 @@ export const OPERATING_CALENDAR_QUERY_KEY = ["operating-calendar"];
 /**
  * Hook para listar regras de funcionamento (horário fixo) da escola atual
  */
-export function useOperatingRules(statusFilter?: OperatingRuleStatus) {
+export type OperatingRuleFilter =
+  | OperatingRuleStatus
+  | "all"
+  | { status?: OperatingRuleStatus | "all" | string };
+
+export function useOperatingRules(statusFilter?: OperatingRuleFilter) {
   const { selectedSchoolId } = useSchool();
   const schoolId = selectedSchoolId ? String(selectedSchoolId) : undefined;
+  const rawStatus =
+    typeof statusFilter === "object" && statusFilter !== null
+      ? statusFilter.status
+      : statusFilter;
+  const normalizedStatus =
+    rawStatus && rawStatus !== "all"
+      ? (rawStatus as OperatingRuleStatus)
+      : undefined;
 
   return useQuery({
-    queryKey: [...OPERATING_RULES_QUERY_KEY, "list", schoolId, statusFilter ?? "all"],
+    queryKey: [...OPERATING_RULES_QUERY_KEY, "list", schoolId, rawStatus ?? "all"],
     queryFn: async (): Promise<OperatingRule[]> => {
       if (!schoolId) return [];
-      const res = await operatingHoursService.getRules({ status: statusFilter }, schoolId);
+      const res = await operatingHoursService.getRules(
+        normalizedStatus ? { status: normalizedStatus } : undefined,
+        schoolId
+      );
       if (Array.isArray(res)) return res;
       if (Array.isArray((res as any)?.data)) return (res as any).data;
       return [];
@@ -71,8 +87,10 @@ export function useCreateOperatingRule() {
     },
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: OPERATING_RULES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({ queryKey: OPERATING_CALENDAR_QUERY_KEY });
       notify.success(res?.message || "Nova versão de horário criada com sucesso.", undefined, "Horário Fixo");
+
     },
     onError: (error: any) => {
       const msg =
@@ -99,8 +117,10 @@ export function useUpdateOperatingRule() {
     },
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: OPERATING_RULES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({ queryKey: OPERATING_CALENDAR_QUERY_KEY });
       notify.success(res?.message || "Versão de horário atualizada com sucesso.", undefined, "Horário Fixo");
+
     },
     onError: (error: any) => {
       const msg =
@@ -127,8 +147,10 @@ export function useDeleteOperatingRule() {
     },
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: OPERATING_RULES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({ queryKey: OPERATING_CALENDAR_QUERY_KEY });
       notify.success(res?.message || "Versão eliminada com sucesso.", undefined, "Horário Fixo");
+
     },
     onError: (error: any) => {
       const msg =
@@ -143,15 +165,36 @@ export function useDeleteOperatingRule() {
 /**
  * Hook para listar exceções de funcionamento da escola atual
  */
-export function useOperatingExceptions(statusFilter?: OperatingExceptionStatus) {
+export type OperatingExceptionFilter =
+  | OperatingExceptionStatus
+  | "all"
+  | { status?: OperatingExceptionStatus | "all" | string };
+
+export function useOperatingExceptions(statusFilter?: OperatingExceptionFilter) {
   const { selectedSchoolId } = useSchool();
   const schoolId = selectedSchoolId ? String(selectedSchoolId) : undefined;
+  const rawStatus =
+    typeof statusFilter === "object" && statusFilter !== null
+      ? statusFilter.status
+      : statusFilter;
+  const normalizedStatus =
+    rawStatus && rawStatus !== "all"
+      ? (rawStatus as OperatingExceptionStatus)
+      : undefined;
 
   return useQuery({
-    queryKey: [...OPERATING_EXCEPTIONS_QUERY_KEY, "list", schoolId, statusFilter ?? "all"],
+    queryKey: [
+      ...OPERATING_EXCEPTIONS_QUERY_KEY,
+      "list",
+      schoolId,
+      rawStatus ?? "all",
+    ],
     queryFn: async (): Promise<OperatingException[]> => {
       if (!schoolId) return [];
-      const res = await operatingHoursService.getExceptions({ status: statusFilter }, schoolId);
+      const res = await operatingHoursService.getExceptions(
+        normalizedStatus ? { status: normalizedStatus } : undefined,
+        schoolId
+      );
       if (Array.isArray(res)) return res;
       if (Array.isArray((res as any)?.data)) return (res as any).data;
       return [];
@@ -193,8 +236,10 @@ export function useCreateOperatingException() {
     },
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: OPERATING_EXCEPTIONS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({ queryKey: OPERATING_CALENDAR_QUERY_KEY });
       notify.success(res?.message || "Exceção criada com sucesso.", undefined, "Exceção de Horário");
+
     },
     onError: (error: any) => {
       const msg =
@@ -221,8 +266,10 @@ export function useUpdateOperatingException() {
     },
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: OPERATING_EXCEPTIONS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({ queryKey: OPERATING_CALENDAR_QUERY_KEY });
       notify.success(res?.message || "Exceção atualizada com sucesso.", undefined, "Exceção de Horário");
+
     },
     onError: (error: any) => {
       const msg =
@@ -249,8 +296,10 @@ export function useDeleteOperatingException() {
     },
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: OPERATING_EXCEPTIONS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({ queryKey: OPERATING_CALENDAR_QUERY_KEY });
       notify.success(res?.message || "Exceção eliminada com sucesso.", undefined, "Exceção Removida");
+
     },
     onError: (error: any) => {
       const msg =
@@ -265,9 +314,27 @@ export function useDeleteOperatingException() {
 /**
  * Hook para consultar o calendário resolvido
  */
-export function useOperatingCalendar(from?: string, to?: string) {
+export type OperatingCalendarParams =
+  | { from?: string; to?: string; start_date?: string; end_date?: string }
+  | string;
+
+export function useOperatingCalendar(
+  fromOrParams?: OperatingCalendarParams,
+  toParam?: string
+) {
   const { selectedSchoolId } = useSchool();
   const schoolId = selectedSchoolId ? String(selectedSchoolId) : undefined;
+
+  let from: string | undefined;
+  let to: string | undefined;
+
+  if (typeof fromOrParams === "object" && fromOrParams !== null) {
+    from = fromOrParams.from || fromOrParams.start_date;
+    to = fromOrParams.to || fromOrParams.end_date;
+  } else {
+    from = typeof fromOrParams === "string" ? fromOrParams : undefined;
+    to = toParam;
+  }
 
   return useQuery({
     queryKey: [...OPERATING_CALENDAR_QUERY_KEY, "range", schoolId, from, to],
@@ -278,6 +345,7 @@ export function useOperatingCalendar(from?: string, to?: string) {
       if (Array.isArray((res as any)?.data)) return (res as any).data;
       return [];
     },
+    placeholderData: keepPreviousData,
     enabled: !!schoolId && !!from && !!to,
   });
 }

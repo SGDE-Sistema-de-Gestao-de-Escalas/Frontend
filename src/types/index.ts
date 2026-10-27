@@ -13,6 +13,7 @@ export type AdminPage =
 
 export type StaffPage =
   | "schedule"
+  | "absences"
   | "register-absence"
   | "account"
   | "absence-detail";
@@ -72,6 +73,7 @@ export interface Assistant {
   last_name?: string;
   name: string;
   initials: string;
+  role?: string;
   is_active?: boolean;
   active?: boolean;
   internal_number?: string;
@@ -96,6 +98,11 @@ export interface Assistant {
   emergency_contact_kinship?: string;
   available_for_transfer?: boolean;
   availableForTransfer?: boolean;
+  is_temporary_transfer?: boolean;
+  origin_school_id?: EntityId | null;
+  origin_school_name?: string | null;
+  destination_school_id?: EntityId | null;
+  destination_school_name?: string | null;
   exception?: string | null;
   school?: AssistantSchool;
   created_at?: string;

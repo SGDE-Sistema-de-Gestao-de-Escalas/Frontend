@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { AdminPage } from "../../types";
+import type { AdminPage, EntityId } from "../../types";
 import { Sheet, SheetContent } from "../ui/sheet";
 import MobileBottomNav from "./MobileBottomNav";
 import Sidebar from "./Sidebar";
@@ -51,13 +51,19 @@ export default function AdminLayout({
     currentPage || initialPage
   );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [selectedAssistantId, setSelectedAssistantId] = useState<number | null>(
+  const [selectedAssistantId, setSelectedAssistantId] = useState<EntityId | null>(
     null
   );
   const [absenceFor, setAbsenceFor] = useState<string | null>(null);
 
   const { currentSchoolId, selectedSchool } = useSchool();
   const activePage = currentPage || internalPage;
+
+  // Fechar qualquer modal ativo ao trocar de escola para não reter assistentes da escola anterior
+  React.useEffect(() => {
+    setSelectedAssistantId(null);
+    setAbsenceFor(null);
+  }, [currentSchoolId]);
 
   function handleNavigate(pageId: string) {
     const p = pageId as AdminPage;
@@ -76,7 +82,6 @@ export default function AdminLayout({
       <Sidebar
         currentPage={activePage}
         onNavigate={handleNavigate}
-        onSwitchRole={onSwitchRole}
         onLogout={onLogout}
       />
 
@@ -90,8 +95,7 @@ export default function AdminLayout({
             currentPage={activePage}
             onNavigate={handleNavigate}
             onCloseMobile={() => setMobileMenuOpen(false)}
-            onSwitchRole={onSwitchRole}
-            onLogout={onLogout}
+                        onLogout={onLogout}
           />
         </SheetContent>
       </Sheet>
@@ -103,12 +107,14 @@ export default function AdminLayout({
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
           onPlatformSettings={() => handleNavigate("platform-settings")}
           onAccount={() => handleNavigate("account")}
-          onSwitchRole={onSwitchRole}
           onLogout={onLogout}
         />
 
-        {/* Scrollable page content */}
-        <div className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6">
+        {/* Scrollable page content com key vinculada à escola ativa para reset total de formulários/selects */}
+        <div
+          key={String(currentSchoolId ?? selectedSchool?.id ?? "school")}
+          className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6"
+        >
           {children ? (
             children
           ) : (
@@ -209,4 +215,3 @@ export default function AdminLayout({
     </div>
   );
 }
-

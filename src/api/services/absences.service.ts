@@ -1,6 +1,4 @@
 import apiClient from "../client";
-import type { ApiResponse } from "../types/api.types";
-import { absences as initialMockAbsences } from "../mockData";
 
 export interface AbsenceAssistantInfo {
   id: string | number;
@@ -8,6 +6,14 @@ export interface AbsenceAssistantInfo {
   initials?: string;
   is_active?: boolean;
   active?: boolean;
+}
+
+export interface ScheduleImpact {
+  has_impact: boolean;
+  requires_recalculation: boolean;
+  affected_dates: string[];
+  conflicts?: Record<string, any[]> | any[];
+  message: string;
 }
 
 export interface BackendAbsenceResource {
@@ -22,8 +28,8 @@ export interface BackendAbsenceResource {
   valid_until: string;
   start_date?: string;
   end_date?: string;
-  start_time?: string;
-  end_time?: string;
+  start_time?: string | null;
+  end_time?: string | null;
   total_days: number;
   justification?: string | null;
   document_name?: string | null;
@@ -43,6 +49,7 @@ export interface BackendAbsenceResource {
   cannot_delete_reason?: string | null;
   created_at?: string;
   updated_at?: string;
+  impact?: ScheduleImpact;
 }
 
 export interface CreateAbsencePayload {
@@ -52,8 +59,8 @@ export interface CreateAbsencePayload {
   valid_until: string;
   start_date?: string;
   end_date?: string;
-  start_time?: string;
-  end_time?: string;
+  start_time?: string | null;
+  end_time?: string | null;
   justification?: string | null;
   notes?: string | null;
   document_path?: string | null;
@@ -68,8 +75,8 @@ export interface UpdateAbsencePayload {
   valid_until?: string;
   start_date?: string;
   end_date?: string;
-  start_time?: string;
-  end_time?: string;
+  start_time?: string | null;
+  end_time?: string | null;
   justification?: string | null;
   notes?: string | null;
   document_path?: string | null;
@@ -155,8 +162,8 @@ export function normalizeAbsenceResource(item: any): BackendAbsenceResource {
     valid_until: validUntil,
     start_date: validFrom,
     end_date: validUntil,
-    start_time: item.start_time || item.startTime || "08:00",
-    end_time: item.end_time || item.endTime || "17:00",
+    start_time: item.start_time ?? item.startTime ?? null,
+    end_time: item.end_time ?? item.endTime ?? null,
     total_days: days || 1,
     justification: item.justification || item.absence_type?.name || item.absence_type_name || null,
     document_name: item.document_name || item.documentName || (item.document_path ? String(item.document_path).split("/").pop() : null),
@@ -199,36 +206,8 @@ export function normalizeAbsenceResource(item: any): BackendAbsenceResource {
   };
 }
 
-// Armazenamento em memória para suporte fallback caso o endpoint ainda esteja a ser iniciado
-let localAbsencesMock: BackendAbsenceResource[] = initialMockAbsences.map((a) => ({
-  id: String(a.id),
-  assistant_id: String(a.id),
-  absence_type_id: "1",
-  assistant_name: a.assistant,
-  assistant: {
-    id: a.id,
-    name: a.assistant,
-    initials: a.initials,
-    active: true,
-  },
-  absence_type_name: a.reason,
-  absence_type: {
-    id: "1",
-    name: a.reason,
-  },
-  valid_from: a.start.includes("-") ? a.start : "2026-01-27",
-  valid_until: a.end.includes("-") ? a.end : "2026-01-31",
-  start_date: a.start.includes("-") ? a.start : "2026-01-27",
-  end_date: a.end.includes("-") ? a.end : "2026-01-31",
-  start_time: a.startTime || "08:00",
-  end_time: a.endTime || "17:00",
-  total_days: a.days || 1,
-  justification: a.reason,
-  document_path: a.documentPath || null,
-  status: (a.status as any) || "pending",
-  notes: a.note || null,
-  created_at: a.submitted || "2026-01-27",
-}));
+// Cache em memória vazia apenas para fallback caso o servidor devolva 404
+let localAbsencesMock: BackendAbsenceResource[] = [];
 
 export const absencesService = {
   /**
@@ -484,7 +463,11 @@ export const absencesService = {
     try {
       const response = await apiClient.get<any>(`/absences/${id}`);
       const raw = response.data?.data ?? response.data;
-      return normalizeAbsenceResource(raw);
+      const normalized = normalizeAbsenceResource(raw);
+      if (response.data?.impact) {
+        normalized.impact = response.data.impact;
+      }
+      return normalized;
     } catch (err: any) {
       if (err?.response && err.response.status !== 404) {
         throw err;
@@ -519,6 +502,8 @@ export const absencesService = {
     } else {
       body = {
         ...payload,
+        start_time: payload.start_time || null,
+        end_time: payload.end_time || null,
         start_date: payload.valid_from,
         end_date: payload.valid_until,
       };
@@ -527,7 +512,11 @@ export const absencesService = {
     try {
       const response = await apiClient.post<any>("/absences", body);
       const raw = response.data?.data ?? response.data;
-      return normalizeAbsenceResource(raw);
+      const normalized = normalizeAbsenceResource(raw);
+      if (response.data?.impact) {
+        normalized.impact = response.data.impact;
+      }
+      return normalized;
     } catch (error: any) {
       // Se o backend respondeu com erro 422 (validação), 400 ou 403, propaga o erro para o utilizador
       if (error?.response && error.response.status !== 404) {
@@ -572,8 +561,8 @@ export const absencesService = {
         if (payload.absence_type_id) formData.append("absence_type_id", String(payload.absence_type_id));
         if (payload.valid_from) formData.append("valid_from", payload.valid_from);
         if (payload.valid_until !== undefined) formData.append("valid_until", payload.valid_until || payload.valid_from || "");
-        if (payload.start_time) formData.append("start_time", payload.start_time);
-        if (payload.end_time) formData.append("end_time", payload.end_time);
+        if (payload.start_time !== undefined) formData.append("start_time", payload.start_time || "");
+        if (payload.end_time !== undefined) formData.append("end_time", payload.end_time || "");
         if (payload.justification !== undefined) formData.append("justification", payload.justification || "");
         if (payload.notes !== undefined) formData.append("notes", payload.notes || "");
         if (payload.status) formData.append("status", payload.status);
@@ -584,6 +573,8 @@ export const absencesService = {
       } else {
         const formattedPayload = {
           ...payload,
+          start_time: payload.start_time ?? null,
+          end_time: payload.end_time ?? null,
           start_date: payload.valid_from,
           end_date: payload.valid_until,
         };
@@ -591,7 +582,11 @@ export const absencesService = {
       }
 
       const raw = response.data?.data ?? response.data;
-      return normalizeAbsenceResource(raw);
+      const normalized = normalizeAbsenceResource(raw);
+      if (response.data?.impact) {
+        normalized.impact = response.data.impact;
+      }
+      return normalized;
     } catch (error: any) {
       if (error?.response && error.response.status !== 404) {
         throw error;
@@ -616,33 +611,31 @@ export const absencesService = {
 
   /**
    * Alterar estado da ausência (Justificar / Injustificar)
-   * Tenta primeiro PATCH /api/absences/{id}/status e depois PUT /api/absences/{id}
+   * PATCH /api/absences/{id}/status (ou PUT /api/absences/{id})
    */
   async updateStatus(
     id: string | number,
     status: "justified" | "unjustified" | "pending" | "justificada" | "injustificada",
     notes?: string
   ): Promise<BackendAbsenceResource> {
+    const canonicalStatus =
+      status === "justificada"
+        ? "justified"
+        : status === "injustificada"
+        ? "unjustified"
+        : status;
+
+    const payload: Record<string, any> = {
+      status: canonicalStatus,
+    };
+    if (notes !== undefined && notes !== null) {
+      payload.notes = notes;
+    }
+
     try {
-      try {
-        const response = await apiClient.patch<any>(`/absences/${id}/status`, {
-          status,
-          notes,
-        });
-        const raw = response.data?.data ?? response.data;
-        return normalizeAbsenceResource(raw);
-      } catch (patchErr: any) {
-        // Se a rota PATCH não estiver disponível (404/405), tenta PUT padrão REST
-        if (patchErr?.response?.status === 404 || patchErr?.response?.status === 405) {
-          const putResponse = await apiClient.put<any>(`/absences/${id}`, {
-            status,
-            ...(notes !== undefined ? { notes } : {}),
-          });
-          const raw = putResponse.data?.data ?? putResponse.data;
-          return normalizeAbsenceResource(raw);
-        }
-        throw patchErr;
-      }
+      const response = await apiClient.patch<any>(`/absences/${id}/status`, payload);
+      const raw = response.data?.data ?? response.data;
+      return normalizeAbsenceResource(raw);
     } catch (err: any) {
       if (err?.response && err.response.status !== 404) {
         throw err;
@@ -651,7 +644,7 @@ export const absencesService = {
         if (String(a.id) === String(id)) {
           return {
             ...a,
-            status: status as any,
+            status: canonicalStatus as any,
             notes: notes !== undefined ? notes : a.notes,
           };
         }
@@ -705,7 +698,11 @@ export const absencesService = {
     try {
       const response = await apiClient.post<any>(`/absences/${id}/document`, formData);
       const raw = response.data?.data ?? response.data;
-      return normalizeAbsenceResource(raw);
+      const normalized = normalizeAbsenceResource(raw);
+      if (response.data?.impact) {
+        normalized.impact = response.data.impact;
+      }
+      return normalized;
     } catch (err: any) {
       if (err?.response && err.response.status !== 404) {
         throw err;
