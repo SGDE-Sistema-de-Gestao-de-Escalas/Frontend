@@ -180,7 +180,10 @@ export default function AssistantScheduleManager({
     : null;
 
   const isEditingActiveSchedule =
-    editingSchedule ? getScheduleTypeStatus(editingSchedule, schedules) === "active" : false;
+    editingSchedule
+      ? getScheduleTypeStatus(editingSchedule, schedules) === "active" &&
+        editingSchedule.can_edit === false
+      : false;
 
   function toggleDay(
     day: string,
@@ -491,11 +494,10 @@ export default function AssistantScheduleManager({
   async function handleConfirmDeleteSchedule() {
     if (!scheduleToDelete) return;
 
-    const isActiveSchedule =
-      getScheduleTypeStatus(scheduleToDelete, schedules) === "active";
-    if (isActiveSchedule) {
+    if (scheduleToDelete.can_delete === false) {
       notify.error(
-        "Não é possível eliminar o horário em vigor. O assistente tem de ter sempre um horário ativo."
+        scheduleToDelete.cannot_delete_reason ||
+          "Não é possível eliminar o horário em vigor. O assistente tem de ter sempre um horário ativo."
       );
       setScheduleToDelete(null);
       return;
@@ -662,7 +664,7 @@ export default function AssistantScheduleManager({
                   <ActionTooltip
                     content={
                       h.cannot_delete_reason ||
-                      (isActiveSchedule
+                      (h.can_delete === false
                         ? "Não é possível eliminar o horário em vigor."
                         : schedules.length <= 1
                         ? "O assistente tem de ter pelo menos um horário."
@@ -679,21 +681,15 @@ export default function AssistantScheduleManager({
                           );
                           return;
                         }
-                        if (isActiveSchedule) {
-                          notify.error(
-                            "Não é possível eliminar o horário em vigor. O assistente tem de ter sempre um horário ativo."
-                          );
-                          return;
-                        }
                         if (schedules.length <= 1) {
                           notify.error("O assistente tem de ter pelo menos um horário.");
                           return;
                         }
                         setScheduleToDelete(h);
                       }}
-                      disabled={h.can_delete === false || isActiveSchedule || schedules.length <= 1}
+                      disabled={h.can_delete === false || schedules.length <= 1}
                       className={`p-1.5 rounded-md transition-colors ${
-                        h.can_delete === false || isActiveSchedule || schedules.length <= 1
+                        h.can_delete === false || schedules.length <= 1
                           ? "opacity-30 cursor-not-allowed text-muted-foreground"
                           : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive cursor-pointer"
                       }`}
@@ -1535,9 +1531,10 @@ export default function AssistantScheduleManager({
                 {formatDatePT(scheduleToDelete.from)}
                 {scheduleToDelete.to ? ` → ${formatDatePT(scheduleToDelete.to)}` : " → Em vigor"}
               </p>
-              {getScheduleTypeStatus(scheduleToDelete, schedules) === "future" && (
+              {(getScheduleTypeStatus(scheduleToDelete, schedules) === "future" ||
+                (getScheduleTypeStatus(scheduleToDelete, schedules) === "active" && schedules.length > 1)) && (
                 <p className="text-amber-600 dark:text-amber-400 font-medium text-xs mt-2">
-                  Nota: Ao eliminar este horário futuro, a vigência do horário atual voltará a ficar em aberto (sem data de fim).
+                  Nota: Ao eliminar este horário, a vigência do horário anterior voltará a ficar em aberto (sem data de fim).
                 </p>
               )}
             </div>

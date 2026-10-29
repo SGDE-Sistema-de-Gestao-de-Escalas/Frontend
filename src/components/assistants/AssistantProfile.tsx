@@ -11,6 +11,7 @@ import {
   FileText,
   HeartHandshake,
   Loader2,
+  Lock,
   Mail,
   MapPin,
   Pencil,
@@ -100,6 +101,9 @@ interface ExceptionRule {
   canDelete?: boolean;
   cannotEditReason?: string | null;
   cannotDeleteReason?: string | null;
+  hasPastSchedules?: boolean;
+  hasFutureSchedules?: boolean;
+  deleteWarning?: string | null;
 }
 
 interface CurrentShiftDetails {
@@ -287,10 +291,22 @@ export default function AssistantProfile({
           canDelete: e.can_delete,
           cannotEditReason: e.cannot_edit_reason,
           cannotDeleteReason: e.cannot_delete_reason,
+          hasPastSchedules: e.has_past_schedules,
+          hasFutureSchedules: e.has_future_schedules,
+          deleteWarning: e.delete_warning,
         }))
       );
     }
   }, [apiExceptions]);
+
+  const editingException = editingExceptionId
+    ? exceptions.find((e) => e.id === editingExceptionId) || null
+    : null;
+  const isEditingStartDateLocked = !!(
+    editingException &&
+    editingException.hasPastSchedules &&
+    editingException.inicio < TODAY_STR
+  );
 
   useDocumentTitle(`${resolvedName} - Perfil`);
 
@@ -1201,11 +1217,12 @@ export default function AssistantProfile({
                             <div className="flex items-center gap-1 shrink-0">
                               <ActionTooltip
                                 content={
-                                  row.canEdit === false && row.canChangeEndDate
+                                  row.cannotEditReason ||
+                                  (row.canEdit === false && row.canChangeEndDate
                                     ? "Apenas a data de fim pode ser ajustada para esta exceção em vigor."
                                     : row.canEdit === false
                                     ? "Não é possível editar esta exceção."
-                                    : "Editar exceção"
+                                    : "Editar exceção")
                                 }
                               >
                                 <button
@@ -1529,24 +1546,31 @@ export default function AssistantProfile({
                       </p>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                            Data de Início *
+                          <label className="text-xs text-muted-foreground block mb-1.5 font-medium flex items-center justify-between">
+                            <span>Data de Início *</span>
+                            {isEditingStartDateLocked && (
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-normal">
+                                <Lock size={10} /> Bloqueado (escalas passadas)
+                              </span>
+                            )}
                           </label>
-                          <DatePicker
-                            value={exceptionStartDate}
-                            hasError={!!exceptionErrors.startDate}
-                            minDate={editingExceptionId ? undefined : TODAY_STR}
-                            onChange={(v) => {
-                              setExceptionStartDate(v);
-                              if (exceptionErrors.startDate) {
-                                setExceptionErrors((prev) => ({ ...prev, startDate: undefined }));
-                              }
-                              if (v && exceptionEndDate && exceptionEndDate < v) {
-                                setExceptionEndDate(v);
-                              }
-                            }}
-                            className="w-full"
-                          />
+                          <div className={isEditingStartDateLocked ? "opacity-60 pointer-events-none" : ""}>
+                            <DatePicker
+                              value={exceptionStartDate}
+                              hasError={!!exceptionErrors.startDate}
+                              minDate={editingExceptionId ? undefined : TODAY_STR}
+                              onChange={(v) => {
+                                setExceptionStartDate(v);
+                                if (exceptionErrors.startDate) {
+                                  setExceptionErrors((prev) => ({ ...prev, startDate: undefined }));
+                                }
+                                if (v && exceptionEndDate && exceptionEndDate < v) {
+                                  setExceptionEndDate(v);
+                                }
+                              }}
+                              className="w-full"
+                            />
+                          </div>
                           {exceptionErrors.startDate && (
                             <p className="text-[11px] text-destructive mt-1 font-medium">
                               {exceptionErrors.startDate}
@@ -1692,11 +1716,19 @@ export default function AssistantProfile({
         title="Eliminar Regra de Exceção"
         description={
           deleteExceptionTarget ? (
-            <>
-              Tem a certeza que pretende eliminar permanentemente a regra de exceção{" "}
-              <strong className="text-foreground">{deleteExceptionTarget.tipo}</strong> ({deleteExceptionTarget.detalhe})?
-              Esta ação removerá o registo de horário especial desta vigência.
-            </>
+            <div className="space-y-2">
+              <p>
+                Tem a certeza que pretende eliminar permanentemente a regra de exceção{" "}
+                <strong className="text-foreground">{deleteExceptionTarget.tipo}</strong> ({deleteExceptionTarget.detalhe})?
+                Esta ação removerá o registo de horário especial desta vigência.
+              </p>
+              {deleteExceptionTarget.deleteWarning && (
+                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-300 text-xs mt-2">
+                  <AlertTriangle size={14} className="shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                  <span>{deleteExceptionTarget.deleteWarning}</span>
+                </div>
+              )}
+            </div>
           ) : ""
         }
         confirmLabel="Eliminar Exceção"
@@ -1739,4 +1771,3 @@ export default function AssistantProfile({
     </div>
   );
 }
-

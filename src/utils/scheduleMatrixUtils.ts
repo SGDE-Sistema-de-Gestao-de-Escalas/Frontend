@@ -986,7 +986,8 @@ export function resolveAssistantShiftBounds(params: {
       if (ex.valid_from && ex.valid_from.slice(0, 10) > isoDate) return false;
       if (ex.valid_until && ex.valid_until.slice(0, 10) < isoDate) return false;
       if (ex.days && ex.days.length > 0) {
-        const matches = ex.days.includes(dow) || ex.days.includes(dow + 1);
+        const numericDays = ex.days.map(Number);
+        const matches = numericDays.includes(dow);
         if (!matches) return false;
       }
       return Boolean(ex.start_time && ex.end_time);
@@ -1030,7 +1031,7 @@ export function resolveAssistantShiftBounds(params: {
         const shift =
           currentProfile.shifts?.find((s) => {
             if (!s.days || s.days.length === 0) return true;
-            return s.days.includes(dow) || s.days.includes(dow + 1);
+            return s.days.map(Number).includes(dow);
           }) || currentProfile.shifts?.[0];
 
         if (shift && shift.entry_time && shift.exit_time) {
@@ -1406,13 +1407,35 @@ export function buildDayMatrixFromApi(params: {
       lunchBlocksForDate,
       absences,
     });
-    if (lunchS === null && bounds.lunchStartSlot !== null && bounds.lunchEndSlot !== null) {
-      lunchS = bounds.lunchStartSlot;
-      lunchE = bounds.lunchEndSlot;
+    if (
+      lunchS === null &&
+      bounds.lunchStartSlot !== null &&
+      bounds.lunchEndSlot !== null &&
+      bounds.lunchStartSlot !== undefined &&
+      bounds.lunchEndSlot !== undefined
+    ) {
+      if (entriesForDay.length === 0) {
+        lunchS = bounds.lunchStartSlot;
+        lunchE = bounds.lunchEndSlot;
+      } else {
+        // Quando existem blocos gerados no dia, só usa a janela [lunchStartSlot, lunchEndSlot]
+        // se existir efetivamente um intervalo livre ("off") dentro dessa janela
+        let hasFreeSlotInLunchWindow = false;
+        for (let i = bounds.lunchStartSlot; i < bounds.lunchEndSlot && i < 96; i++) {
+          if (row[i] === "off") {
+            hasFreeSlotInLunchWindow = true;
+            break;
+          }
+        }
+        if (hasFreeSlotInLunchWindow) {
+          lunchS = bounds.lunchStartSlot;
+          lunchE = bounds.lunchEndSlot;
+        }
+      }
     }
 
     // Fonte C: Heurística entre tarefas/ausências
-    // Se não há perfil ou lunchBlock, inferir a partir do intervalo livre entre entradas e ausências dentro do turno
+    // Se não há perfil/exceção com vaga na janela padrão ou lunchBlock, inferir a partir do intervalo livre entre entradas e ausências dentro do turno
     if (lunchS === null && entriesForDay.length >= 1) {
       const absInfo = checkAssistantAbsenceOnDate(assistant, isoDate, absences);
       const absStart = absInfo.absent && absInfo.startSlot !== undefined ? absInfo.startSlot : -1;
@@ -1427,14 +1450,16 @@ export function buildDayMatrixFromApi(params: {
       }
       busyIntervals.sort((a, b) => a.start - b.start);
 
-      const minLunchSlot = bounds.lunchStartSlot ?? bounds.startSlot;
-      const maxLunchSlot = bounds.lunchEndSlot ?? bounds.endSlot;
+      const firstBusy = busyIntervals[0]?.start ?? bounds.startSlot;
+      const lastBusy = busyIntervals[busyIntervals.length - 1]?.end ?? bounds.endSlot;
+      const minLunchSlot = Math.min(bounds.startSlot, firstBusy);
+      const maxLunchSlot = Math.max(bounds.endSlot, lastBusy);
 
       for (let idx = 0; idx < busyIntervals.length - 1; idx++) {
         const gapStart = busyIntervals[idx].end;
         const gapEnd = busyIntervals[idx + 1].start;
         const gapSlots = gapEnd - gapStart;
-        if (gapSlots >= 2 && gapSlots <= 6 && gapStart >= minLunchSlot && gapEnd <= maxLunchSlot) {
+        if (gapSlots >= 1 && gapSlots <= 8 && gapStart >= minLunchSlot && gapEnd <= maxLunchSlot) {
           lunchS = gapStart;
           lunchE = gapEnd;
           break;

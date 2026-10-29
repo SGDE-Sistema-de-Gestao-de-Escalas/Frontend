@@ -1,7 +1,7 @@
 import apiClient from "../client";
-import { ApiResponse } from "../types/api.types";
 import {
   AssistantExceptionApi,
+  AssistantExceptionMutationResponse,
   CreateAssistantExceptionPayload,
   UpdateAssistantExceptionPayload,
 } from "../../types/assistantSchedule.types";
@@ -42,8 +42,8 @@ export const assistantExceptionsService = {
    */
   async create(
     payload: CreateAssistantExceptionPayload
-  ): Promise<ApiResponse<AssistantExceptionApi>> {
-    const response = await apiClient.post<ApiResponse<AssistantExceptionApi>>(
+  ): Promise<AssistantExceptionMutationResponse> {
+    const response = await apiClient.post<AssistantExceptionMutationResponse>(
       "/assistant-exceptions",
       payload
     );
@@ -57,8 +57,8 @@ export const assistantExceptionsService = {
   async update(
     id: string | number,
     payload: UpdateAssistantExceptionPayload
-  ): Promise<ApiResponse<AssistantExceptionApi>> {
-    const response = await apiClient.put<ApiResponse<AssistantExceptionApi>>(
+  ): Promise<AssistantExceptionMutationResponse> {
+    const response = await apiClient.put<AssistantExceptionMutationResponse>(
       `/assistant-exceptions/${id}`,
       payload
     );
@@ -71,8 +71,8 @@ export const assistantExceptionsService = {
    */
   async delete(
     id: string | number
-  ): Promise<{ message: string }> {
-    const response = await apiClient.delete<{ message: string }>(
+  ): Promise<AssistantExceptionMutationResponse> {
+    const response = await apiClient.delete<AssistantExceptionMutationResponse>(
       `/assistant-exceptions/${id}`
     );
     return response.data;
