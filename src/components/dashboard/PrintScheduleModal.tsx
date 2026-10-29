@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { Printer } from "lucide-react";
+import { Loader2, Printer } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,6 @@ import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import DatePicker from "../common/DatePicker";
 import AssistantSelect from "../common/AssistantSelect";
 import { notify } from "../common/FeedbackNotification";
-import { cn } from "../ui/utils";
 import type { Assistant } from "../../types";
 import { TIME_SLOTS, MergedScheduleBlock, slotsToBlocks } from "./blockStyles";
 import {
@@ -28,7 +27,10 @@ import type {
   AssistantScheduleProfileApi,
   AssistantExceptionApi,
 } from "../../types/assistantSchedule.types";
-import type { LunchBlockApi } from "../../api/services/schedules.service";
+import schedulesService, {
+  type LunchBlockApi,
+} from "../../api/services/schedules.service";
+import logoHorizontalUrl from "../../assets/logo-horizontal.svg";
 
 export interface PrintableAssistantSchedule {
   assistant: Assistant;
@@ -58,7 +60,7 @@ export interface DailyExportDayData {
 interface PrintScheduleModalProps {
   open: boolean;
   onClose: () => void;
-  initialDocModel?: "wall" | "individual";
+  initialDocModel?: "wall" | "individual" | "monthly";
   schoolName: string;
   agrupamentoName?: string;
   dateInfo: {
@@ -78,14 +80,91 @@ interface PrintScheduleModalProps {
   lunchBlocksByDate?: Record<string, Record<string, LunchBlockApi>>;
 }
 
+const DEFAULT_ACTIVITY_COLORS: Record<string, string> = {
+  "apoio escola": "#6366F1",
+  acolhimento: "#F59E0B",
+  "apoio turmas/escola": "#3B82F6",
+  "apoio turmas": "#3B82F6",
+  intervalo: "#10B981",
+  "vigilância almoço": "#A855F7",
+  "vigilancia almoco": "#A855F7",
+  limpeza: "#8B5CF6",
+  "entrega de alunos": "#14B8A6",
+  "apoio nee": "#06B6D4",
+};
+
+function resolveActivityHex(name?: string | null, explicitHex?: string | null): string {
+  if (explicitHex && /^#[0-9A-Fa-f]{6}$/.test(explicitHex)) {
+    return explicitHex;
+  }
+  const key = (name || "").trim().toLowerCase();
+  return DEFAULT_ACTIVITY_COLORS[key] || "#6366F1";
+}
+
+function tintHex(hex: string, ratio = 0.85): string {
+  const clean = hex.replace("#", "");
+  if (clean.length !== 6) return "#f8fafc";
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  const nr = Math.round(r + (255 - r) * ratio);
+  const ng = Math.round(g + (255 - g) * ratio);
+  const nb = Math.round(b + (255 - b) * ratio);
+  return `#${nr.toString(16).padStart(2, "0")}${ng.toString(16).padStart(2, "0")}${nb
+    .toString(16)
+    .padStart(2, "0")}`;
+}
+
+function darkenHex(hex: string, ratio = 0.45): string {
+  const clean = hex.replace("#", "");
+  if (clean.length !== 6) return "#1e293b";
+  const r = Math.round(parseInt(clean.slice(0, 2), 16) * (1 - ratio));
+  const g = Math.round(parseInt(clean.slice(2, 4), 16) * (1 - ratio));
+  const b = Math.round(parseInt(clean.slice(4, 6), 16) * (1 - ratio));
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b
+    .toString(16)
+    .padStart(2, "0")}`;
+}
+
+function shortActivityLabel(name: string, durMin: number): string {
+  if (durMin <= 15) {
+    const map15: Record<string, string> = {
+      Acolhimento: "Acol.",
+      "Apoio Escola": "Apoio",
+      "Apoio Turmas/escola": "Turmas",
+      "Entrega de alunos": "Entr.",
+      Intervalo: "Interv.",
+      Limpeza: "Limp.",
+      "Vigilância almoço": "Vigil.",
+      "Apoio NEE": "NEE",
+    };
+    return map15[name] || `${name.slice(0, 5)}.`;
+  }
+  if (durMin <= 30) {
+    const map30: Record<string, string> = {
+      Acolhimento: "Acolhim.",
+      "Apoio Escola": "Apoio",
+      "Apoio Turmas/escola": "Turmas",
+      "Entrega de alunos": "Entrega",
+      Intervalo: "Intervalo",
+      Limpeza: "Limpeza",
+      "Vigilância almoço": "Vigilância",
+      "Apoio NEE": "Apoio NEE",
+    };
+    return map30[name] || name.slice(0, 8);
+  }
+  return name;
+}
+
+function timeToMin(t: string): number {
+  const [h, m] = t.slice(0, 5).split(":").map((v) => parseInt(v, 10) || 0);
+  return h * 60 + m;
+}
+
 /**
- * Função utilitária para imprimir documento HTML via iframe oculto limpo.
+ * Imprime o documento HTML com o layout V4 (A4 Horizontal com Timeline Fixa).
  */
-function printHtmlDocument(
-  htmlBody: string,
-  title: string,
-  orientation: "portrait" | "landscape" = "portrait"
-) {
+function printV4HtmlDocument(htmlBody: string, title: string) {
   const iframe = document.createElement("iframe");
   iframe.style.position = "fixed";
   iframe.style.right = "0";
@@ -111,164 +190,366 @@ function printHtmlDocument(
       <title>${title}</title>
       <style>
         @page {
-          size: A4 ${orientation};
-          margin: 10mm;
+          size: A4 landscape;
+          margin: 9mm 10mm 10mm 10mm;
         }
         * {
-          box-sizing: border-box;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
         body {
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+          font-size: 7.5pt;
           color: #0f172a;
           background: #ffffff;
           margin: 0;
           padding: 0;
-          font-size: 11px;
-          line-height: 1.4;
-        }
-        .header {
-          border-bottom: 2px solid #0f172a;
-          padding-bottom: 8px;
-          margin-bottom: 12px;
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-end;
-        }
-        .header h1 {
-          font-size: 16px;
-          margin: 0 0 4px 0;
-          font-weight: 700;
-          color: #0f172a;
-          text-transform: uppercase;
-        }
-        .header p {
-          margin: 0;
-          font-size: 11px;
-          color: #475569;
-        }
-        .header .meta {
-          text-align: right;
-          font-size: 11px;
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-bottom: 14px;
-        }
-        th, td {
-          border: 1px solid #cbd5e1;
-          padding: 6px 8px;
-          text-align: left;
-          vertical-align: middle;
-        }
-        th {
-          background-color: #f1f5f9;
-          font-weight: 600;
-          color: #1e293b;
-          font-size: 10px;
-          text-transform: uppercase;
-          letter-spacing: 0.03em;
-        }
-        tr:nth-child(even) td {
-          background-color: #f8fafc;
-        }
-        .tag {
-          display: inline-block;
-          font-size: 9px;
-          font-weight: 600;
-          padding: 2px 5px;
-          border-radius: 3px;
-          margin-right: 4px;
-          margin-bottom: 2px;
-          white-space: nowrap;
-        }
-        .task-tag {
-          background-color: #e2e8f0;
-          color: #334155;
-          border: 1px solid #cbd5e1;
-        }
-        .lunch-tag {
-          background-color: #ffedd5;
-          color: #c2410c;
-          border: 1px solid #fed7aa;
-        }
-        .footer-signatures {
-          margin-top: 24px;
-          display: flex;
-          justify-content: space-between;
-          padding-top: 16px;
-        }
-        .signature-box {
-          width: 45%;
-          border-top: 1px solid #94a3b8;
-          text-align: center;
-          font-size: 10px;
-          color: #475569;
-          padding-top: 4px;
-        }
-        .slips-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
-        }
-        .slip-card {
-          border: 1px dashed #64748b;
-          border-radius: 6px;
-          padding: 10px 12px;
-          background: #ffffff;
-          page-break-inside: avoid;
-          margin-bottom: 8px;
-        }
-        .slip-header {
-          border-bottom: 1px solid #e2e8f0;
-          padding-bottom: 6px;
-          margin-bottom: 8px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        .slip-name {
-          font-weight: 700;
-          font-size: 12px;
-          color: #0f172a;
-        }
-        .slip-role {
-          font-size: 9px;
-          color: #64748b;
-        }
-        .slip-shift {
-          background-color: #f1f5f9;
-          padding: 4px 6px;
-          border-radius: 4px;
-          font-size: 10px;
-          margin-bottom: 6px;
-          display: flex;
-          justify-content: space-between;
-        }
-        .slip-tasks {
-          margin-top: 6px;
-          font-size: 10px;
-        }
-        .slip-ack {
-          margin-top: 12px;
-          border-top: 1px dotted #cbd5e1;
-          padding-top: 6px;
-          font-size: 9px;
-          color: #64748b;
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-end;
-        }
-        .slip-sign-line {
-          width: 55%;
-          border-bottom: 1px solid #64748b;
-          height: 12px;
         }
         .page-break {
           page-break-after: always;
           break-after: page;
+        }
+        .header-table {
+          width: 100%;
+          border-collapse: collapse;
+          border-bottom: 1.2pt solid #0f172a;
+          margin-bottom: 6pt;
+        }
+        .header-table td {
+          vertical-align: bottom;
+          padding: 0 0 5pt 0;
+        }
+        .school-title {
+          font-size: 10pt;
+          font-weight: 700;
+          color: #0f172a;
+          letter-spacing: 0.1pt;
+          margin: 0;
+        }
+        .school-subtitle {
+          font-size: 6.4pt;
+          color: #64748b;
+          margin: 1.5pt 0 0 0;
+        }
+        .date-title {
+          font-size: 8.5pt;
+          font-weight: 700;
+          color: #0f172a;
+          text-align: right;
+          margin: 0;
+          white-space: nowrap;
+        }
+        .hours-subtitle {
+          font-size: 6.4pt;
+          color: #64748b;
+          text-align: right;
+          margin: 1.5pt 0 0 0;
+          white-space: nowrap;
+        }
+        .legend-bar {
+          margin-bottom: 6pt;
+          padding: 3.5pt 6pt;
+          background-color: #f8fafc;
+          border: 0.5pt solid #cbd5e1;
+          border-radius: 2pt;
+          font-size: 5.8pt;
+          color: #334155;
+        }
+        .legend-label {
+          font-weight: 700;
+          text-transform: uppercase;
+          color: #475569;
+          margin-right: 6pt;
+          letter-spacing: 0.3pt;
+        }
+        .legend-item {
+          display: inline-block;
+          margin-right: 9pt;
+          color: #1e293b;
+        }
+        .legend-swatch {
+          display: inline-block;
+          width: 7pt;
+          height: 5.5pt;
+          border-radius: 1pt;
+          margin-right: 3pt;
+          vertical-align: middle;
+        }
+        .schedule-table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        .schedule-table thead th {
+          border-top: 0.8pt solid #0f172a;
+          border-bottom: 0.8pt solid #0f172a;
+          background-color: #f8fafc;
+          font-size: 5.8pt;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.3pt;
+          color: #334155;
+          padding: 0;
+          vertical-align: middle;
+        }
+        .schedule-table tbody td {
+          border-bottom: 0.5pt solid #cbd5e1;
+          padding: 0;
+          vertical-align: middle;
+        }
+        .col-assistant {
+          width: 11.5%;
+          border-right: 0.5pt solid #cbd5e1;
+          padding: 0 5pt !important;
+          text-align: left;
+        }
+        .col-shift {
+          width: 9.5%;
+          border-right: 0.5pt solid #cbd5e1;
+          padding: 0 5pt !important;
+          text-align: left;
+        }
+        .col-timeline {
+          width: 79%;
+          padding: 0 !important;
+        }
+        .assistant-name {
+          font-size: 6.6pt;
+          font-weight: 700;
+          color: #0f172a;
+          display: block;
+        }
+        .assistant-code {
+          font-size: 5.3pt;
+          color: #64748b;
+          margin-top: 1pt;
+          display: block;
+        }
+        .shift-main {
+          font-size: 6.2pt;
+          font-weight: 700;
+          color: #0f172a;
+          display: block;
+        }
+        .shift-lunch {
+          font-size: 5pt;
+          color: #64748b;
+          margin-top: 1.5pt;
+          display: block;
+        }
+        .tl-header-wrap {
+          position: relative;
+          width: 100%;
+          height: 17pt;
+        }
+        .tl-hour-header {
+          position: absolute;
+          top: 0;
+          height: 17pt;
+          border-left: 0.5pt solid #cbd5e1;
+        }
+        .tl-hour-text {
+          padding-top: 4.5pt;
+          padding-left: 2.5pt;
+          font-size: 5.5pt;
+          font-weight: 700;
+          color: #334155;
+          line-height: 8pt;
+        }
+        .tl-row-wrap {
+          position: relative;
+          width: 100%;
+          height: 32pt;
+          background-color: #ffffff;
+        }
+        .tl-tick-line {
+          position: absolute;
+          top: 0;
+          height: 32pt;
+          width: 0;
+        }
+        .tl-tick-hour {
+          border-left: 0.5pt solid #e2e8f0;
+        }
+        .tl-tick-half {
+          border-left: 0.5pt dashed #e2e8f0;
+        }
+        .tl-tick-quarter {
+          border-left: 0.4pt dotted #f1f5f9;
+        }
+        .tl-block {
+          position: absolute;
+          top: 3pt;
+          height: 26pt;
+          box-sizing: border-box;
+          padding: 0;
+          margin: 0;
+          border-radius: 1.5pt;
+          border-top-width: 2.2pt;
+          border-top-style: solid;
+          border-bottom-width: 0.5pt;
+          border-bottom-style: solid;
+          border-left-width: 0.4pt;
+          border-left-style: solid;
+          border-right-width: 0.4pt;
+          border-right-style: solid;
+          overflow: hidden;
+        }
+        .tl-inner-normal {
+          padding: 2.2pt 1.5pt 0 2pt;
+        }
+        .tl-inner-30 {
+          padding: 2.2pt 1pt 0 1.2pt;
+        }
+        .tl-inner-15 {
+          padding: 1.2pt 0.4pt 0 0.4pt;
+          text-align: center;
+        }
+        .tl-inner-lunch {
+          padding: 2.2pt 1.5pt 0 1.5pt;
+          text-align: center;
+        }
+        .tl-inner-absent {
+          padding-top: 7pt;
+          text-align: center;
+          font-size: 5.6pt;
+          font-weight: 700;
+          color: #64748b;
+          letter-spacing: 0.8pt;
+          line-height: 8pt;
+        }
+        .tl-block-time {
+          font-size: 4.3pt;
+          color: #475569;
+          display: block;
+          line-height: 5.2pt;
+          white-space: nowrap;
+        }
+        .tl-block-title {
+          font-size: 5pt;
+          font-weight: 700;
+          display: block;
+          line-height: 6.2pt;
+          margin-top: 1.2pt;
+          white-space: nowrap;
+        }
+        .tl-inner-30 .tl-block-time {
+          font-size: 3.85pt;
+          line-height: 4.8pt;
+        }
+        .tl-inner-30 .tl-block-title {
+          font-size: 4.55pt;
+          line-height: 5.8pt;
+          margin-top: 1.2pt;
+        }
+        .tl-inner-15 .tl-block-time {
+          font-size: 3.8pt;
+          line-height: 4.3pt;
+        }
+        .tl-inner-15 .tl-block-title {
+          font-size: 4pt;
+          line-height: 4.6pt;
+          margin-top: 0.6pt;
+        }
+        .tl-block-lunch {
+          background-color: #f8fafc;
+          border-top-color: #94a3b8;
+          border-bottom-color: #cbd5e1;
+          border-left-color: #cbd5e1;
+          border-right-color: #cbd5e1;
+          border-bottom-style: dashed;
+          border-left-style: dashed;
+          border-right-style: dashed;
+        }
+        .tl-block-lunch .tl-block-time {
+          color: #64748b;
+        }
+        .tl-block-lunch .tl-block-title {
+          color: #475569;
+          font-weight: 400;
+        }
+        .tl-block-absent {
+          background-color: #f8fafc;
+          border-top-color: #94a3b8;
+          border-bottom-color: #cbd5e1;
+          border-left-color: #cbd5e1;
+          border-right-color: #cbd5e1;
+        }
+        .tl-block-dayoff {
+          background-color: #f8fafc;
+          border-top-color: #cbd5e1;
+          border-bottom-color: #e2e8f0;
+          border-left-color: #e2e8f0;
+          border-right-color: #e2e8f0;
+          border-bottom-style: dashed;
+          border-left-style: dashed;
+          border-right-style: dashed;
+        }
+        .assistant-badge {
+          display: inline-block;
+          background-color: #f1f5f9;
+          border: 0.5pt solid #cbd5e1;
+          color: #0f172a;
+          font-weight: 700;
+          font-size: 6.5pt;
+          padding: 1pt 4.5pt;
+          border-radius: 2pt;
+          margin-right: 4pt;
+        }
+        .row-day-off td {
+          background-color: #f8fafc;
+        }
+        .col-day {
+          width: 11.5%;
+          border-right: 0.5pt solid #cbd5e1;
+          padding: 0 5pt !important;
+          text-align: left;
+        }
+        .day-name {
+          font-size: 7pt;
+          font-weight: 700;
+          color: #0f172a;
+          display: block;
+        }
+        .day-date {
+          font-size: 5.6pt;
+          color: #64748b;
+          margin-top: 2pt;
+          display: block;
+        }
+        .shift-off {
+          font-size: 6.2pt;
+          font-weight: 700;
+          color: #64748b;
+          display: block;
+        }
+        .shift-off-sub {
+          font-size: 5.1pt;
+          color: #94a3b8;
+          margin-top: 2pt;
+          display: block;
+        }
+        .closed-box {
+          border: 0.5pt solid #cbd5e1;
+          background-color: #f8fafc;
+          border-radius: 3pt;
+          padding: 18pt;
+          text-align: center;
+          color: #64748b;
+          font-size: 8pt;
+          font-weight: 700;
+          margin-top: 12pt;
+        }
+        .footer {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          border-top: 0.4pt solid #cbd5e1;
+          padding-top: 2.5pt;
+          font-size: 5.5pt;
+          color: #64748b;
+          display: flex;
+          justify-content: space-between;
         }
       </style>
     </head>
@@ -319,6 +600,7 @@ export function exportDailyScheduleToCsv(params: {
 
 /**
  * Função utilitária para exportar escalas de múltiplos dias em CSV com UTF-8 BOM para Excel.
+ * Cumpre RGPD: nunca expõe o motivo de ausência.
  */
 export function exportSchedulesToCsv(params: {
   schoolName: string;
@@ -334,13 +616,11 @@ export function exportSchedulesToCsv(params: {
       "Escola",
       "Data",
       "Dia da Semana",
+      "Nº Mecanográfico",
       "Assistente",
-      "Cargo",
-      "Turno Início",
-      "Turno Fim",
-      "Almoço Início",
-      "Almoço Fim",
-      "Atividades e Tarefas",
+      "Turno",
+      "Almoço",
+      "Atividades Atribuídas",
       "Estado",
     ],
   ];
@@ -349,10 +629,8 @@ export function exportSchedulesToCsv(params: {
     if (!day.isOpen) {
       rows.push([
         schoolName,
-        day.dateStr,
+        day.isoDate,
         day.dayName,
-        "--",
-        "--",
         "--",
         "--",
         "--",
@@ -380,12 +658,10 @@ export function exportSchedulesToCsv(params: {
     filteredWorking.forEach(({ assistant, shiftBounds, blocks }) => {
       const shiftStart = TIME_SLOTS[shiftBounds.startSlot] || "--:--";
       const shiftEnd = TIME_SLOTS[shiftBounds.endSlot] || "--:--";
-      const lunchStart = shiftBounds.lunchStartSlot
-        ? TIME_SLOTS[shiftBounds.lunchStartSlot]
-        : "--:--";
-      const lunchEnd = shiftBounds.lunchEndSlot
-        ? TIME_SLOTS[shiftBounds.lunchEndSlot]
-        : "--:--";
+      const lunchStr =
+        shiftBounds.lunchStartSlot && shiftBounds.lunchEndSlot
+          ? `${TIME_SLOTS[shiftBounds.lunchStartSlot]} – ${TIME_SLOTS[shiftBounds.lunchEndSlot]}`
+          : "Sem pausa almoço";
 
       const taskStrings = blocks
         .filter(
@@ -400,40 +676,32 @@ export function exportSchedulesToCsv(params: {
 
       rows.push([
         schoolName,
-        day.dateStr,
+        day.isoDate,
         day.dayName,
+        (assistant as any).internal_number || "--",
         assistant.name,
-        assistant.role || "Assistente Operacional",
-        shiftStart,
-        shiftEnd,
-        lunchStart,
-        lunchEnd,
-        taskStrings || "Apoio Geral à Escola",
+        `${shiftStart} – ${shiftEnd}`,
+        lunchStr,
+        taskStrings || "Apoio Geral",
         "Em Serviço",
       ]);
     });
 
-    filteredAbsent.forEach(
-      ({ assistant, reason, isTransfer, transferDestName, shiftBounds }) => {
-        const shiftStart = TIME_SLOTS[shiftBounds.startSlot] || "--:--";
-        const shiftEnd = TIME_SLOTS[shiftBounds.endSlot] || "--:--";
-        rows.push([
-          schoolName,
-          day.dateStr,
-          day.dayName,
-          assistant.name,
-          assistant.role || "Assistente Operacional",
-          shiftStart,
-          shiftEnd,
-          "--:--",
-          "--:--",
-          isTransfer
-            ? `Cedência temporária para ${transferDestName || "outra escola"}`
-            : reason,
-          isTransfer ? "Cedência Temporária" : "Ausente / Falta",
-        ]);
-      }
-    );
+    filteredAbsent.forEach(({ assistant, shiftBounds }) => {
+      const shiftStart = TIME_SLOTS[shiftBounds.startSlot] || "--:--";
+      const shiftEnd = TIME_SLOTS[shiftBounds.endSlot] || "--:--";
+      rows.push([
+        schoolName,
+        day.isoDate,
+        day.dayName,
+        (assistant as any).internal_number || "--",
+        assistant.name,
+        `${shiftStart} – ${shiftEnd}`,
+        "--",
+        "--",
+        "Ausente",
+      ]);
+    });
   });
 
   const csvContent =
@@ -449,11 +717,10 @@ export function exportSchedulesToCsv(params: {
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  const schoolSlug = schoolName.toLowerCase().replace(/[^a-z0-9]+/g, "_");
   const dateSuffix =
     startDate === endDate ? startDate : `${startDate}_a_${endDate}`;
   a.href = url;
-  a.download = `escala_${schoolSlug}_${dateSuffix}.csv`;
+  a.download = `escala_servico_${dateSuffix}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -467,7 +734,7 @@ export default function PrintScheduleModal({
   schoolName,
   agrupamentoName = "Agrupamento de Escolas",
   dateInfo,
-  operatingWindowStr = "08:00–18:00",
+  operatingWindowStr = "07:30–18:00",
   workingAssistants,
   absentAssistants,
   activeAssistants = [],
@@ -480,17 +747,39 @@ export default function PrintScheduleModal({
 }: PrintScheduleModalProps) {
   const [startDate, setStartDate] = useState<string>(dateInfo.isoDate);
   const [endDate, setEndDate] = useState<string>(dateInfo.isoDate);
-  const [docModel, setDocModel] = useState<"wall" | "individual">(initialDocModel);
+  const [docModel, setDocModel] = useState<"wall" | "individual" | "monthly">(
+    initialDocModel
+  );
   const [selectedAssistantFilter, setSelectedAssistantFilter] =
     useState<string>("all");
   const [outputFormat, setOutputFormat] = useState<"pdf" | "csv">("pdf");
   const [dateError, setDateError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+
+  // Utilitário para calcular o 1º e último dia do mês de uma data ISO YYYY-MM-DD
+  function getMonthBoundsIso(iso: string): { first: string; last: string } {
+    const d = iso ? new Date(iso + "T12:00:00") : new Date();
+    const year = d.getFullYear();
+    const month = d.getMonth();
+    const firstDay = new Date(year, month, 1, 12, 0, 0);
+    const lastDay = new Date(year, month + 1, 0, 12, 0, 0);
+    return {
+      first: firstDay.toISOString().split("T")[0],
+      last: lastDay.toISOString().split("T")[0],
+    };
+  }
 
   // Resetar datas para a data atual do dashboard ao abrir o modal
   useEffect(() => {
     if (open) {
-      setStartDate(dateInfo.isoDate);
-      setEndDate(dateInfo.isoDate);
+      if (initialDocModel === "monthly") {
+        const bounds = getMonthBoundsIso(dateInfo.isoDate);
+        setStartDate(bounds.first);
+        setEndDate(bounds.last);
+      } else {
+        setStartDate(dateInfo.isoDate);
+        setEndDate(dateInfo.isoDate);
+      }
       setDocModel(initialDocModel);
       setSelectedAssistantFilter("all");
       setDateError(null);
@@ -517,36 +806,76 @@ export default function PrintScheduleModal({
     return list;
   }, [activeAssistants, workingAssistants, absentAssistants]);
 
+  // Utilitário para somar dias a uma data ISO YYYY-MM-DD
+  function addDaysIso(iso: string, daysToAdd: number): string {
+    if (!iso) return "";
+    const d = new Date(iso + "T12:00:00");
+    if (isNaN(d.getTime())) return "";
+    d.setDate(d.getDate() + daysToAdd);
+    return d.toISOString().split("T")[0];
+  }
+
+  // Data máxima permitida (máximo de 7 dias para diária/semanal; mês completo para mensal)
+  const maxEndDateIso = useMemo(() => {
+    if (!startDate) return undefined;
+    if (docModel === "monthly") {
+      return addDaysIso(startDate, 44);
+    }
+    return addDaysIso(startDate, 6);
+  }, [startDate, docModel]);
+
   // Aplicar preenchimentos rápidos de data
   function applyDatePreset(
-    preset: "today" | "this-week" | "next-week" | "this-month"
+    preset:
+      | "today"
+      | "this-week"
+      | "next-week"
+      | "full-week"
+      | "this-month"
+      | "next-month"
   ) {
-    const now = new Date();
+    const baseDate = dateInfo.isoDate
+      ? new Date(dateInfo.isoDate + "T12:00:00")
+      : new Date();
     if (preset === "today") {
-      const todayIso = now.toISOString().split("T")[0];
+      const todayIso = new Date().toISOString().split("T")[0];
       setStartDate(todayIso);
       setEndDate(todayIso);
     } else if (preset === "this-week") {
-      const currentDow = now.getDay();
+      const currentDow = baseDate.getDay();
       const diffToMon = currentDow === 0 ? -6 : 1 - currentDow;
-      const mon = new Date(now);
-      mon.setDate(now.getDate() + diffToMon);
+      const mon = new Date(baseDate);
+      mon.setDate(baseDate.getDate() + diffToMon);
       const fri = new Date(mon);
       fri.setDate(mon.getDate() + 4);
       setStartDate(mon.toISOString().split("T")[0]);
       setEndDate(fri.toISOString().split("T")[0]);
     } else if (preset === "next-week") {
-      const currentDow = now.getDay();
+      const currentDow = baseDate.getDay();
       const diffToNextMon = currentDow === 0 ? 1 : 8 - currentDow;
-      const nextMon = new Date(now);
-      nextMon.setDate(now.getDate() + diffToNextMon);
+      const nextMon = new Date(baseDate);
+      nextMon.setDate(baseDate.getDate() + diffToNextMon);
       const nextFri = new Date(nextMon);
       nextFri.setDate(nextMon.getDate() + 4);
       setStartDate(nextMon.toISOString().split("T")[0]);
       setEndDate(nextFri.toISOString().split("T")[0]);
+    } else if (preset === "full-week") {
+      const currentDow = baseDate.getDay();
+      const diffToMon = currentDow === 0 ? -6 : 1 - currentDow;
+      const mon = new Date(baseDate);
+      mon.setDate(baseDate.getDate() + diffToMon);
+      const sun = new Date(mon);
+      sun.setDate(mon.getDate() + 6);
+      setStartDate(mon.toISOString().split("T")[0]);
+      setEndDate(sun.toISOString().split("T")[0]);
     } else if (preset === "this-month") {
-      const first = new Date(now.getFullYear(), now.getMonth(), 1);
-      const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const first = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1, 12, 0, 0);
+      const last = new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 0, 12, 0, 0);
+      setStartDate(first.toISOString().split("T")[0]);
+      setEndDate(last.toISOString().split("T")[0]);
+    } else if (preset === "next-month") {
+      const first = new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 1, 12, 0, 0);
+      const last = new Date(baseDate.getFullYear(), baseDate.getMonth() + 2, 0, 12, 0, 0);
       setStartDate(first.toISOString().split("T")[0]);
       setEndDate(last.toISOString().split("T")[0]);
     }
@@ -570,7 +899,6 @@ export default function PrintScheduleModal({
   // Resolução dos dados de cada dia no intervalo
   const daysData: DailyExportDayData[] = useMemo(() => {
     return datesInRange.map((isoDate) => {
-      // Se coincidir com o dia atual visualizado no Dashboard, usamos os dados em memória/rascunho
       if (
         isoDate === dateInfo.isoDate &&
         workingAssistants &&
@@ -587,14 +915,13 @@ export default function PrintScheduleModal({
         };
       }
 
-      // Caso contrário, calcula dinamicamente
       const dayStatus = operatingSources
         ? resolveSchoolDayStatusByIsoDate(isoDate, operatingSources)
         : {
             isOpen: true,
             schoolHours: undefined,
-            viewStartSlot: 32,
-            viewEndSlot: 76,
+            viewStartSlot: 30,
+            viewEndSlot: 72,
             closedLabel: undefined,
             title: undefined,
           };
@@ -606,12 +933,12 @@ export default function PrintScheduleModal({
       const dayName = rawDayName.charAt(0).toUpperCase() + rawDayName.slice(1);
       const dateStr = parsedDate.toLocaleDateString("pt-PT", {
         day: "2-digit",
-        month: "short",
+        month: "long",
         year: "numeric",
       });
       const dayWindowStr = `${
-        TIME_SLOTS[dayStatus.viewStartSlot ?? 32] ?? "08:00"
-      }–${TIME_SLOTS[dayStatus.viewEndSlot ?? 76] ?? "19:00"}`;
+        TIME_SLOTS[dayStatus.viewStartSlot ?? 30] ?? "07:30"
+      }–${TIME_SLOTS[dayStatus.viewEndSlot ?? 72] ?? "18:00"}`;
 
       if (!dayStatus.isOpen) {
         return {
@@ -645,8 +972,8 @@ export default function PrintScheduleModal({
 
       activeAssistants.forEach((assistant) => {
         const absence = (absences || []).find((ab: any) => {
-          const aStart = (ab.start_date || "").slice(0, 10);
-          const aEnd = (ab.end_date || ab.start_date || "").slice(0, 10);
+          const aStart = (ab.valid_from || ab.start_date || "").slice(0, 10);
+          const aEnd = (ab.valid_until || ab.end_date || aStart || "").slice(0, 10);
           return (
             String(ab.assistant_id) === String(assistant.id) &&
             isoDate >= aStart &&
@@ -658,16 +985,16 @@ export default function PrintScheduleModal({
           assistantId: assistant.id,
           isoDate,
           dow: parsedDate.getDay() === 0 ? 7 : parsedDate.getDay(),
-          viewStartSlot: dayStatus.viewStartSlot ?? 32,
-          viewEndSlot: dayStatus.viewEndSlot ?? 76,
+          viewStartSlot: dayStatus.viewStartSlot ?? 30,
+          viewEndSlot: dayStatus.viewEndSlot ?? 72,
           profiles: profilesByAssistant[String(assistant.id)],
           exceptions: exceptionsByAssistant[String(assistant.id)],
           schedulesList,
           lunchBlocksForDate: lunchBlocksByDate[isoDate],
           absences,
         }) || {
-          startSlot: 34,
-          endSlot: 66,
+          startSlot: 31,
+          endSlot: 62,
         };
 
         const rowSlots = dayMatrixData.matrix[assistant.id] || [];
@@ -682,10 +1009,7 @@ export default function PrintScheduleModal({
         if (absence) {
           dayAbsent.push({
             assistant,
-            reason:
-              absence.reason_label ||
-              absence.reason ||
-              "Ausência registada",
+            reason: "Ausente",
             shiftBounds,
           });
         } else if (hasWork) {
@@ -722,268 +1046,760 @@ export default function PrintScheduleModal({
     exceptionsByAssistant,
   ]);
 
-  // Gerar o HTML para a Escala de Afixação
-  function generateWallPrintHtml() {
+  /**
+   * Constrói o HTML V4 (A4 Horizontal com Timeline Fixa, Legenda Superior, Top Borders e Privacidade RGPD)
+   * para impressão local caso necessário.
+   */
+  function generateV4TimelineHtml(assistantFilterId?: string) {
+    const now = new Date();
+    const printedAt = `${now.toLocaleDateString("pt-PT")} ${now.toLocaleTimeString(
+      "pt-PT",
+      { hour: "2-digit", minute: "2-digit" }
+    )}`;
+    const docTitle =
+      docModel === "individual"
+        ? "Horário Individual de Serviço"
+        : "Escala Diária de Serviço";
+
+    if (docModel === "individual") {
+      const targetAssistants =
+        assistantFilterId && assistantFilterId !== "all"
+          ? allAssistantsList.filter((a) => String(a.id) === assistantFilterId)
+          : allAssistantsList;
+
+      const rowsCount = Math.max(1, daysData.length);
+      const rowHeightPt = Math.min(76, Math.max(54, Math.floor(420 / rowsCount)));
+      const blockHeightPt = Number((rowHeightPt - 13.2).toFixed(1));
+      const padTopNormal = Math.max(3, Math.floor((blockHeightPt - 18) / 2));
+      const padTop15 = Math.max(2, Math.floor((blockHeightPt - 22) / 2));
+      const padTopSpecial = Math.max(4, Math.floor((blockHeightPt - 12) / 2));
+
+      const [firstOpen = "07:30", firstClose = "18:00"] = (
+        daysData[0]?.operatingWindowStr ||
+        operatingWindowStr ||
+        "07:30–18:00"
+      )
+        .split(/[–-]/)
+        .map((s) => s.trim());
+
+      const winStartMin = timeToMin(firstOpen);
+      const winEndMin = timeToMin(firstClose);
+      const winTotalMin = Math.max(60, winEndMin - winStartMin);
+
+      const timeHeaders: { label: string; left: number; width: number }[] = [];
+      for (let m = winStartMin; m < winEndMin; m += 30) {
+        const hh = String(Math.floor(m / 60)).padStart(2, "0");
+        const mm = String(m % 60).padStart(2, "0");
+        timeHeaders.push({
+          label: `${hh}:${mm}`,
+          left: Number((((m - winStartMin) / winTotalMin) * 100).toFixed(3)),
+          width: Number(((30 / winTotalMin) * 100).toFixed(3)),
+        });
+      }
+
+      const quarterTicks: {
+        left: number;
+        isHour: boolean;
+        isHalf: boolean;
+      }[] = [];
+      for (let m = winStartMin; m <= winEndMin; m += 15) {
+        quarterTicks.push({
+          left: Number((((m - winStartMin) / winTotalMin) * 100).toFixed(3)),
+          isHour: m % 60 === 0,
+          isHalf: m % 30 === 0,
+        });
+      }
+
+      const timeHeadersHtml = timeHeaders
+        .map(
+          (th, thIdx) => `
+            <div class="tl-hour-header" style="left: ${th.left}%; width: ${
+            th.width
+          }%; ${thIdx === 0 ? "border-left:none;" : ""}">
+              <div class="tl-hour-text">${th.label}</div>
+            </div>
+          `
+        )
+        .join("");
+
+      const ticksHtml = quarterTicks
+        .map((qt, tIdx) => {
+          if (tIdx === 0 || tIdx === quarterTicks.length - 1) return "";
+          const cls = qt.isHour
+            ? "tl-tick-hour"
+            : qt.isHalf
+            ? "tl-tick-half"
+            : "tl-tick-quarter";
+          return `<div class="tl-tick-line ${cls}" style="left: ${qt.left}%; height: ${rowHeightPt}pt;"></div>`;
+        })
+        .join("");
+
+      const periodLabel =
+        startDate === endDate
+          ? daysData[0]
+            ? `${daysData[0].dayName}, ${daysData[0].dateStr}`
+            : startDate
+          : `${daysData[0]?.dateStr || startDate} a ${
+              daysData[daysData.length - 1]?.dateStr || endDate
+            }`;
+
+      const indivPagesHtml = targetAssistants
+        .map((assistant, sIdx) => {
+          const code = (assistant as any).internal_number || "AO";
+          const legendMap = new Map<
+            string,
+            { name: string; color: string; bg: string; border: string }
+          >();
+
+          const dayRowsHtml = daysData
+            .map((day) => {
+              const dObj = new Date(day.isoDate + "T12:00:00");
+              const dateDisplay = dObj.toLocaleDateString("pt-PT", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+              });
+
+              const workingEntry = day.workingAssistants.find(
+                (w) => String(w.assistant.id) === String(assistant.id)
+              );
+              const absentEntry = day.absentAssistants.find(
+                (a) => String(a.assistant.id) === String(assistant.id)
+              );
+
+              if (!day.isOpen || (!workingEntry && !absentEntry)) {
+                const subLabel = !day.isOpen
+                  ? day.closedReason || "Estabelecimento encerrado"
+                  : "Descanso semanal";
+                const blockTitle = !day.isOpen
+                  ? (day.closedReason || "FOLGA / DESCANSO SEMANAL").toUpperCase()
+                  : "FOLGA / DESCANSO SEMANAL";
+                return `
+                  <tr class="row-day-off">
+                    <td class="col-day">
+                      <span class="day-name">${day.dayName}</span>
+                      <span class="day-date">${dateDisplay}</span>
+                    </td>
+                    <td class="col-shift">
+                      <span class="shift-off">Folga Semanal</span>
+                      <span class="shift-off-sub">${subLabel}</span>
+                    </td>
+                    <td class="col-timeline">
+                      <div class="tl-row-wrap" style="height: ${rowHeightPt}pt;">
+                        ${ticksHtml}
+                        <div class="tl-block tl-block-dayoff" style="left: 0.2%; width: 99.6%; top: 5pt; height: ${blockHeightPt}pt; border-top-width: 2.6pt; border-bottom-width: 0.6pt;">
+                          <div style="padding-top: ${padTopSpecial}pt; text-align: center; font-size: 6pt; font-weight: 700; color: #64748b; letter-spacing: 0.8pt; line-height: 10pt;">${blockTitle}</div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                `;
+              }
+
+              if (absentEntry) {
+                const shiftStart =
+                  TIME_SLOTS[absentEntry.shiftBounds.startSlot] || "08:30";
+                const shiftEnd =
+                  TIME_SLOTS[absentEntry.shiftBounds.endSlot] || "16:30";
+                const sMin = Math.max(winStartMin, timeToMin(shiftStart));
+                const eMin = Math.min(winEndMin, timeToMin(shiftEnd));
+                const left = Number(
+                  (((sMin - winStartMin) / winTotalMin) * 100).toFixed(3)
+                );
+                const width = Number(
+                  ((Math.max(30, eMin - sMin) / winTotalMin) * 100).toFixed(3)
+                );
+
+                return `
+                  <tr>
+                    <td class="col-day">
+                      <span class="day-name">${day.dayName}</span>
+                      <span class="day-date">${dateDisplay}</span>
+                    </td>
+                    <td class="col-shift">
+                      <span class="shift-main">${shiftStart} – ${shiftEnd}</span>
+                      <span class="shift-lunch">Ausência registada</span>
+                    </td>
+                    <td class="col-timeline">
+                      <div class="tl-row-wrap" style="height: ${rowHeightPt}pt;">
+                        ${ticksHtml}
+                        <div class="tl-block tl-block-absent" style="left: ${left}%; width: ${width}%; top: 5pt; height: ${blockHeightPt}pt; border-top-width: 2.6pt; border-bottom-width: 0.6pt;">
+                          <div style="padding-top: ${padTopSpecial}pt; text-align: center; font-size: 6pt; font-weight: 700; color: #64748b; letter-spacing: 0.8pt; line-height: 10pt;">AUSENTE</div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                `;
+              }
+
+              const { shiftBounds, blocks } = workingEntry!;
+              const shiftStart = TIME_SLOTS[shiftBounds.startSlot] || "--:--";
+              const shiftEnd = TIME_SLOTS[shiftBounds.endSlot] || "--:--";
+              const lunchStr =
+                shiftBounds.lunchStartSlot && shiftBounds.lunchEndSlot
+                  ? `${TIME_SLOTS[shiftBounds.lunchStartSlot]} – ${
+                      TIME_SLOTS[shiftBounds.lunchEndSlot]
+                    }`
+                  : null;
+
+              const blocksHtml = blocks
+                .filter((b) => b.state !== "off")
+                .map((b) => {
+                  const st = TIME_SLOTS[b.start] || "08:00";
+                  const et =
+                    TIME_SLOTS[Math.min(b.start + b.count, 95)] || "18:00";
+                  const durMin = b.count * 15;
+                  const left = Math.max(
+                    0,
+                    Number(
+                      (
+                        ((timeToMin(st) - winStartMin) / winTotalMin) *
+                        100
+                      ).toFixed(3)
+                    )
+                  );
+                  const width = Number(
+                    ((durMin / winTotalMin) * 100).toFixed(3)
+                  );
+
+                  if (b.state === "absent") {
+                    return `
+                      <div class="tl-block tl-block-absent" style="left: ${left}%; width: ${width}%; top: 5pt; height: ${blockHeightPt}pt; border-top-width: 2.6pt; border-bottom-width: 0.6pt;">
+                        <div style="padding-top: ${padTopSpecial}pt; text-align: center; font-size: 6pt; font-weight: 700; color: #64748b; letter-spacing: 0.8pt; line-height: 10pt;">AUSENTE</div>
+                      </div>
+                    `;
+                  }
+
+                  if (b.state === "lunch") {
+                    return `
+                      <div class="tl-block tl-block-lunch" style="left: ${left}%; width: ${width}%; top: 5pt; height: ${blockHeightPt}pt; border-top-width: 2.6pt; border-bottom-width: 0.6pt;">
+                        <div style="padding: ${padTopNormal}pt 1.5pt 0 1.5pt; text-align: center;">
+                          <span class="tl-block-time" style="font-size: 4.8pt; line-height: 6pt;">${st}-${et}</span>
+                          <span class="tl-block-title" style="font-size: 5.5pt; line-height: 7pt; margin-top: 2pt;">Almoço</span>
+                        </div>
+                      </div>
+                    `;
+                  }
+
+                  const actName = b.activityName || "Apoio Escola";
+                  const color = resolveActivityHex(actName, b.activityColor);
+                  const bg = tintHex(color, 0.85);
+                  const border = tintHex(color, 0.55);
+                  const text = darkenHex(color, 0.45);
+                  const label = shortActivityLabel(actName, durMin);
+
+                  if (!legendMap.has(actName)) {
+                    legendMap.set(actName, { name: actName, color, bg, border });
+                  }
+
+                  if (durMin <= 15) {
+                    return `
+                      <div class="tl-block" style="left: ${left}%; width: ${width}%; top: 5pt; height: ${blockHeightPt}pt; border-top-width: 2.6pt; border-bottom-width: 0.6pt; background-color: ${bg}; border-bottom-color: ${border}; border-left-color: ${border}; border-right-color: ${border}; border-top-color: ${color};">
+                        <div style="padding: ${padTop15}pt 0.4pt 0 0.4pt; text-align: center;">
+                          <span class="tl-block-time" style="font-size: 4.1pt; line-height: 4.8pt;">${st}<br/>${et}</span>
+                          <span class="tl-block-title" style="color: ${text}; font-size: 4.4pt; line-height: 5.2pt; margin-top: 1pt;">${label}</span>
+                        </div>
+                      </div>
+                    `;
+                  }
+
+                  return `
+                    <div class="tl-block" style="left: ${left}%; width: ${width}%; top: 5pt; height: ${blockHeightPt}pt; border-top-width: 2.6pt; border-bottom-width: 0.6pt; background-color: ${bg}; border-bottom-color: ${border}; border-left-color: ${border}; border-right-color: ${border}; border-top-color: ${color};">
+                      <div style="padding: ${padTopNormal}pt 1.5pt 0 2pt;">
+                        <span class="tl-block-time" style="font-size: 4.8pt; line-height: 6pt;">${st}-${et}</span>
+                        <span class="tl-block-title" style="color: ${text}; font-size: 5.5pt; line-height: 7pt; margin-top: 2pt;">${label}</span>
+                      </div>
+                    </div>
+                  `;
+                })
+                .join("");
+
+              return `
+                <tr>
+                  <td class="col-day">
+                    <span class="day-name">${day.dayName}</span>
+                    <span class="day-date">${dateDisplay}</span>
+                  </td>
+                  <td class="col-shift">
+                    <span class="shift-main">${shiftStart} – ${shiftEnd}</span>
+                    <span class="shift-lunch">${
+                      lunchStr ? `Almoço: ${lunchStr}` : "Sem pausa almoço"
+                    }</span>
+                  </td>
+                  <td class="col-timeline">
+                    <div class="tl-row-wrap" style="height: ${rowHeightPt}pt;">
+                      ${ticksHtml}
+                      ${blocksHtml}
+                    </div>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("");
+
+          const legendItemsHtml = Array.from(legendMap.values())
+            .map(
+              (act) => `
+                <span class="legend-item">
+                  <span class="legend-swatch" style="background-color: ${act.bg}; border: 0.4pt solid ${act.border}; border-top: 1.8pt solid ${act.color};"></span>${act.name}
+                </span>
+              `
+            )
+            .join("");
+
+          return `
+            <table class="header-table">
+              <tr>
+                <td style="width: 88pt;">
+                  <img src="${logoHorizontalUrl}" style="height: 20pt; width: auto;" alt="SGDE" />
+                </td>
+                <td>
+                  <div class="school-title">${schoolName} — Horário Individual de Serviço</div>
+                  <div class="school-subtitle">
+                    <span class="assistant-badge">${assistant.name} (${code})</span>
+                    · Assistente Operacional · ${agrupamentoName}
+                  </div>
+                </td>
+                <td style="width: 225pt;">
+                  <div class="date-title">${periodLabel}</div>
+                  <div class="hours-subtitle">Funcionamento: ${firstOpen} – ${firstClose}</div>
+                </td>
+              </tr>
+            </table>
+
+            <div class="legend-bar">
+              <span class="legend-label">Legenda:</span>
+              ${legendItemsHtml}
+              <span class="legend-item">
+                <span class="legend-swatch" style="background-color: #f8fafc; border: 0.4pt dashed #94a3b8; border-top: 1.8pt solid #94a3b8;"></span>Almoço
+              </span>
+              <span class="legend-item">
+                <span class="legend-swatch" style="background-color: #f8fafc; border: 0.4pt dashed #cbd5e1; border-top: 1.8pt solid #cbd5e1;"></span>Folga / Encerrado
+              </span>
+              <span class="legend-item">
+                <span class="legend-swatch" style="background-color: #f8fafc; border: 0.4pt solid #cbd5e1; border-top: 1.8pt solid #94a3b8;"></span>Ausente
+              </span>
+            </div>
+
+            <table class="schedule-table">
+              <thead>
+                <tr>
+                  <th class="col-day" style="padding: 4pt 5pt !important;">Dia / Data</th>
+                  <th class="col-shift" style="padding: 4pt 5pt !important;">Turno / Almoço</th>
+                  <th class="col-timeline">
+                    <div class="tl-header-wrap">
+                      ${timeHeadersHtml}
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                ${dayRowsHtml}
+              </tbody>
+            </table>
+            ${
+              sIdx < targetAssistants.length - 1
+                ? '<div class="page-break"></div>'
+                : ""
+            }
+          `;
+        })
+        .join("");
+
+      return `
+        <div class="footer">
+          <span>Impresso em ${printedAt}</span>
+          <span>SGDE v1.0</span>
+        </div>
+        ${indivPagesHtml}
+      `;
+    }
+
     const pagesHtml = daysData
       .map((day, idx) => {
+        const [rawOpen = "07:30", rawClose = "18:00"] = (
+          day.operatingWindowStr || "07:30–18:00"
+        )
+          .split(/[–-]/)
+          .map((s) => s.trim());
+
+        const headerHtml = `
+          <table class="header-table">
+            <tr>
+              <td style="width: 88pt;">
+                <img src="${logoHorizontalUrl}" style="height: 20pt; width: auto;" alt="SGDE" />
+              </td>
+              <td>
+                <div class="school-title">${schoolName} — ${docTitle}</div>
+                <div class="school-subtitle">Assistentes Operacionais · ${agrupamentoName}</div>
+              </td>
+              <td style="width: 190pt;">
+                <div class="date-title">${day.dayName}, ${day.dateStr}</div>
+                <div class="hours-subtitle">${
+                  day.isOpen
+                    ? `Funcionamento: ${rawOpen} – ${rawClose}`
+                    : "Estabelecimento Encerrado"
+                }</div>
+              </td>
+            </tr>
+          </table>
+        `;
+
         if (!day.isOpen) {
           return `
-            <div class="header">
-              <div>
-                <h1>${agrupamentoName} — ${schoolName}</h1>
-                <p><strong>Escala Diária de Serviço dos Assistentes Operacionais</strong></p>
-                <p>${day.dayName}, ${day.dateStr}</p>
-              </div>
-            </div>
-            <div style="padding: 24px; text-align: center; border: 1px dashed #cbd5e1; border-radius: 6px; background: #f8fafc; margin-top: 20px;">
-              <strong style="color: #64748b; font-size: 13px;">${day.closedReason || "Estabelecimento Encerrado"}</strong>
+            ${headerHtml}
+            <div class="closed-box">
+              ${day.closedReason || "Estabelecimento Encerrado"}
             </div>
             ${idx < daysData.length - 1 ? '<div class="page-break"></div>' : ""}
           `;
         }
 
-        const rowsHtml = day.workingAssistants
+        const winStartMin = timeToMin(rawOpen);
+        const winEndMin = timeToMin(rawClose);
+        const winTotalMin = Math.max(60, winEndMin - winStartMin);
+
+        const timeHeaders: { label: string; left: number; width: number }[] = [];
+        for (let m = winStartMin; m < winEndMin; m += 30) {
+          const hh = String(Math.floor(m / 60)).padStart(2, "0");
+          const mm = String(m % 60).padStart(2, "0");
+          timeHeaders.push({
+            label: `${hh}:${mm}`,
+            left: Number((((m - winStartMin) / winTotalMin) * 100).toFixed(3)),
+            width: Number(((30 / winTotalMin) * 100).toFixed(3)),
+          });
+        }
+
+        const quarterTicks: {
+          left: number;
+          isHour: boolean;
+          isHalf: boolean;
+        }[] = [];
+        for (let m = winStartMin; m <= winEndMin; m += 15) {
+          quarterTicks.push({
+            left: Number((((m - winStartMin) / winTotalMin) * 100).toFixed(3)),
+            isHour: m % 60 === 0,
+            isHalf: m % 30 === 0,
+          });
+        }
+
+        const filteredWorking =
+          assistantFilterId && assistantFilterId !== "all"
+            ? day.workingAssistants.filter(
+                (w) => String(w.assistant.id) === assistantFilterId
+              )
+            : day.workingAssistants;
+
+        const filteredAbsent =
+          assistantFilterId && assistantFilterId !== "all"
+            ? day.absentAssistants.filter(
+                (a) => String(a.assistant.id) === assistantFilterId
+              )
+            : day.absentAssistants;
+
+        const legendMap = new Map<
+          string,
+          { name: string; color: string; bg: string; border: string }
+        >();
+
+        const workingRowsHtml = filteredWorking
           .map(({ assistant, shiftBounds, blocks }) => {
             const shiftStart = TIME_SLOTS[shiftBounds.startSlot] || "--:--";
             const shiftEnd = TIME_SLOTS[shiftBounds.endSlot] || "--:--";
-            const lunchStart = shiftBounds.lunchStartSlot
-              ? TIME_SLOTS[shiftBounds.lunchStartSlot]
-              : "--:--";
-            const lunchEnd = shiftBounds.lunchEndSlot
-              ? TIME_SLOTS[shiftBounds.lunchEndSlot]
-              : "--:--";
+            const lunchStr =
+              shiftBounds.lunchStartSlot && shiftBounds.lunchEndSlot
+                ? `${TIME_SLOTS[shiftBounds.lunchStartSlot]} – ${TIME_SLOTS[shiftBounds.lunchEndSlot]}`
+                : null;
+            const code = (assistant as any).internal_number || "";
 
-            const tasksHtml = blocks
-              .filter(
-                (b) =>
-                  b.state !== "off" && b.state !== "lunch" && b.state !== "absent"
-              )
+            const blocksHtml = blocks
+              .filter((b) => b.state !== "off")
               .map((b) => {
-                const s = TIME_SLOTS[b.start] || "";
-                const e =
-                  TIME_SLOTS[Math.min(b.start + b.count, 95)] || "24:00";
-                return `<span class="tag task-tag">${s}–${e}: ${b.activityName || "Atividade"}</span>`;
+                const st = TIME_SLOTS[b.start] || "08:00";
+                const et =
+                  TIME_SLOTS[Math.min(b.start + b.count, 95)] || "18:00";
+                const durMin = b.count * 15;
+                const left = Math.max(
+                  0,
+                  Number(
+                    (((timeToMin(st) - winStartMin) / winTotalMin) * 100).toFixed(3)
+                  )
+                );
+                const width = Number(((durMin / winTotalMin) * 100).toFixed(3));
+
+                if (b.state === "absent") {
+                  return `
+                    <div class="tl-block tl-block-absent" style="left: ${left}%; width: ${width}%;">
+                      <div class="tl-inner-absent">AUSENTE</div>
+                    </div>
+                  `;
+                }
+
+                if (b.state === "lunch") {
+                  return `
+                    <div class="tl-block tl-block-lunch" style="left: ${left}%; width: ${width}%;">
+                      <div class="tl-inner-lunch">
+                        <span class="tl-block-time">${st}-${et}</span>
+                        <span class="tl-block-title">Almoço</span>
+                      </div>
+                    </div>
+                  `;
+                }
+
+                const actName = b.activityName || "Apoio Escola";
+                const color = resolveActivityHex(actName, b.activityColor);
+                const bg = tintHex(color, 0.85);
+                const border = tintHex(color, 0.55);
+                const text = darkenHex(color, 0.45);
+                const label = shortActivityLabel(actName, durMin);
+
+                if (!legendMap.has(actName)) {
+                  legendMap.set(actName, { name: actName, color, bg, border });
+                }
+
+                if (durMin <= 15) {
+                  return `
+                    <div class="tl-block" style="left: ${left}%; width: ${width}%; background-color: ${bg}; border-bottom-color: ${border}; border-left-color: ${border}; border-right-color: ${border}; border-top-color: ${color};">
+                      <div class="tl-inner-15">
+                        <span class="tl-block-time">${st}<br/>${et}</span>
+                        <span class="tl-block-title" style="color: ${text};">${label}</span>
+                      </div>
+                    </div>
+                  `;
+                }
+
+                const innerClass = durMin <= 30 ? "tl-inner-30" : "tl-inner-normal";
+                return `
+                  <div class="tl-block" style="left: ${left}%; width: ${width}%; background-color: ${bg}; border-bottom-color: ${border}; border-left-color: ${border}; border-right-color: ${border}; border-top-color: ${color};">
+                    <div class="${innerClass}">
+                      <span class="tl-block-time">${st}-${et}</span>
+                      <span class="tl-block-title" style="color: ${text};">${label}</span>
+                    </div>
+                  </div>
+                `;
               })
-              .join(" ");
+              .join("");
+
+            const ticksHtml = quarterTicks
+              .map((qt, tIdx) => {
+                if (tIdx === 0 || tIdx === quarterTicks.length - 1) return "";
+                const cls = qt.isHour
+                  ? "tl-tick-hour"
+                  : qt.isHalf
+                  ? "tl-tick-half"
+                  : "tl-tick-quarter";
+                return `<div class="tl-tick-line ${cls}" style="left: ${qt.left}%;"></div>`;
+              })
+              .join("");
 
             return `
               <tr>
-                <td style="font-weight: 600;">${assistant.name}</td>
-                <td style="white-space: nowrap; font-family: monospace;">${shiftStart} – ${shiftEnd}</td>
-                <td style="white-space: nowrap; font-family: monospace;">${lunchStart} – ${lunchEnd}</td>
-                <td>${tasksHtml || '<span style="color: #64748b; font-style: italic;">Apoio Geral à Escola</span>'}</td>
+                <td class="col-assistant">
+                  <span class="assistant-name">${assistant.name}</span>
+                  <span class="assistant-code">${code}</span>
+                </td>
+                <td class="col-shift">
+                  <span class="shift-main">${shiftStart} – ${shiftEnd}</span>
+                  <span class="shift-lunch">${
+                    lunchStr ? `Almoço: ${lunchStr}` : "Sem pausa almoço"
+                  }</span>
+                </td>
+                <td class="col-timeline">
+                  <div class="tl-row-wrap">
+                    ${ticksHtml}
+                    ${blocksHtml}
+                  </div>
+                </td>
               </tr>
             `;
           })
           .join("");
 
-        const absentSectionHtml =
-          day.absentAssistants.length > 0
-            ? `
-            <div style="margin-top: 14px; margin-bottom: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 8px 10px;">
-              <strong style="color: #475569; font-size: 10px; text-transform: uppercase;">Assistentes Ausentes / Cedidos (${day.absentAssistants.length}):</strong>
-              <ul style="margin: 4px 0 0 0; padding-left: 18px; font-size: 10px; color: #64748b;">
-                ${day.absentAssistants
-                  .map(
-                    (a) =>
-                      `<li><strong>${a.assistant.name}</strong> — ${
-                        a.isTransfer
-                          ? `Cedência temporária para ${a.transferDestName || "outra escola"}`
-                          : a.reason || "Ausência registada"
-                      }</li>`
-                  )
-                  .join("")}
-              </ul>
-            </div>
-          `
-            : "";
+        const absentRowsHtml = filteredAbsent
+          .map(({ assistant, shiftBounds }) => {
+            const shiftStart = TIME_SLOTS[shiftBounds.startSlot] || "08:30";
+            const shiftEnd = TIME_SLOTS[shiftBounds.endSlot] || "16:30";
+            const code = (assistant as any).internal_number || "";
+            const sMin = Math.max(winStartMin, timeToMin(shiftStart));
+            const eMin = Math.min(winEndMin, timeToMin(shiftEnd));
+            const left = Number(
+              (((sMin - winStartMin) / winTotalMin) * 100).toFixed(3)
+            );
+            const width = Number(
+              ((Math.max(30, eMin - sMin) / winTotalMin) * 100).toFixed(3)
+            );
+
+            const ticksHtml = quarterTicks
+              .map((qt, tIdx) => {
+                if (tIdx === 0 || tIdx === quarterTicks.length - 1) return "";
+                const cls = qt.isHour
+                  ? "tl-tick-hour"
+                  : qt.isHalf
+                  ? "tl-tick-half"
+                  : "tl-tick-quarter";
+                return `<div class="tl-tick-line ${cls}" style="left: ${qt.left}%;"></div>`;
+              })
+              .join("");
+
+            return `
+              <tr>
+                <td class="col-assistant">
+                  <span class="assistant-name">${assistant.name}</span>
+                  <span class="assistant-code">${code}</span>
+                </td>
+                <td class="col-shift">
+                  <span class="shift-main">${shiftStart} – ${shiftEnd}</span>
+                </td>
+                <td class="col-timeline">
+                  <div class="tl-row-wrap">
+                    ${ticksHtml}
+                    <div class="tl-block tl-block-absent" style="left: ${left}%; width: ${width}%;">
+                      <div class="tl-inner-absent">AUSENTE</div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            `;
+          })
+          .join("");
+
+        const legendItemsHtml = Array.from(legendMap.values())
+          .map(
+            (act) => `
+              <span class="legend-item">
+                <span class="legend-swatch" style="background-color: ${act.bg}; border: 0.4pt solid ${act.border}; border-top: 1.8pt solid ${act.color};"></span>${act.name}
+              </span>
+            `
+          )
+          .join("");
+
+        const timeHeadersHtml = timeHeaders
+          .map(
+            (th, thIdx) => `
+              <div class="tl-hour-header" style="left: ${th.left}%; width: ${
+              th.width
+            }%; ${thIdx === 0 ? "border-left:none;" : ""}">
+                <div class="tl-hour-text">${th.label}</div>
+              </div>
+            `
+          )
+          .join("");
 
         return `
-          <div class="header">
-            <div>
-              <h1>${agrupamentoName} — ${schoolName}</h1>
-              <p><strong>Escala Diária de Serviço dos Assistentes Operacionais</strong></p>
-              <p>${day.dayName}, ${day.dateStr} &nbsp;·&nbsp; Horário da Escola: <strong>${day.operatingWindowStr}</strong></p>
-            </div>
-            <div class="meta">
-              <p>Presentes em Serviço: <strong>${day.workingAssistants.length}</strong></p>
-              ${day.absentAssistants.length > 0 ? `<p>Ausentes / Cedidos: <strong>${day.absentAssistants.length}</strong></p>` : ""}
-              <p style="color: #64748b; font-size: 9px; margin-top: 4px;">Emitido em: ${new Date().toLocaleDateString("pt-PT")} ${new Date().toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}</p>
-            </div>
+          ${headerHtml}
+          <div class="legend-bar">
+            <span class="legend-label">Legenda:</span>
+            ${legendItemsHtml}
+            <span class="legend-item">
+              <span class="legend-swatch" style="background-color: #f8fafc; border: 0.4pt dashed #94a3b8; border-top: 1.8pt solid #94a3b8;"></span>Almoço
+            </span>
+            <span class="legend-item">
+              <span class="legend-swatch" style="background-color: #f8fafc; border: 0.4pt solid #cbd5e1; border-top: 1.8pt solid #94a3b8;"></span>Ausente
+            </span>
           </div>
 
-          <table>
+          <table class="schedule-table">
             <thead>
               <tr>
-                <th style="width: 26%;">Assistente Operacional</th>
-                <th style="width: 15%;">Horário de Trabalho</th>
-                <th style="width: 15%;">Pausa de Almoço</th>
-                <th>Distribuição de Tarefas e Postos</th>
+                <th class="col-assistant" style="padding: 4pt 5pt !important;">Assistente</th>
+                <th class="col-shift" style="padding: 4pt 5pt !important;">Turno / Almoço</th>
+                <th class="col-timeline">
+                  <div class="tl-header-wrap">
+                    ${timeHeadersHtml}
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
-              ${rowsHtml || '<tr><td colspan="4" style="text-align: center; color: #64748b; padding: 12px;">Sem escalas geradas para este dia.</td></tr>'}
+              ${workingRowsHtml}${absentRowsHtml}
             </tbody>
           </table>
-
-          ${absentSectionHtml}
-
-          <div class="footer-signatures">
-            <div class="signature-box">
-              A Coordenação do Estabelecimento
-            </div>
-            <div class="signature-box">
-              A Direção do Agrupamento
-            </div>
-          </div>
-
           ${idx < daysData.length - 1 ? '<div class="page-break"></div>' : ""}
         `;
       })
       .join("");
 
-    return pagesHtml;
+    return `
+      <div class="footer">
+        <span>Impresso em ${printedAt}</span>
+        <span>SGDE v1.0</span>
+      </div>
+      ${pagesHtml}
+    `;
   }
 
-  // Gerar o HTML para as Fichas Individuais
-  function generateIndividualPrintHtml() {
-    const daysSlipsHtml = daysData
-      .map((day, dIdx) => {
-        if (!day.isOpen) return "";
-
-        const filteredWorking =
-          selectedAssistantFilter === "all"
-            ? day.workingAssistants
-            : day.workingAssistants.filter(
-                (w) => String(w.assistant.id) === selectedAssistantFilter
-              );
-
-        if (filteredWorking.length === 0) return "";
-
-        const slipsHtml = filteredWorking
-          .map(({ assistant, shiftBounds, blocks }) => {
-            const shiftStart = TIME_SLOTS[shiftBounds.startSlot] || "--:--";
-            const shiftEnd = TIME_SLOTS[shiftBounds.endSlot] || "--:--";
-            const lunchStart = shiftBounds.lunchStartSlot
-              ? TIME_SLOTS[shiftBounds.lunchStartSlot]
-              : "--:--";
-            const lunchEnd = shiftBounds.lunchEndSlot
-              ? TIME_SLOTS[shiftBounds.lunchEndSlot]
-              : "--:--";
-
-            const tasksList = blocks
-              .filter(
-                (b) =>
-                  b.state !== "off" && b.state !== "lunch" && b.state !== "absent"
-              )
-              .map((b) => {
-                const s = TIME_SLOTS[b.start] || "";
-                const e =
-                  TIME_SLOTS[Math.min(b.start + b.count, 95)] || "24:00";
-                return `<li><strong>${s} – ${e}</strong>: ${b.activityName || "Atividade"}</li>`;
-              })
-              .join("");
-
-            return `
-              <div class="slip-card">
-                <div class="slip-header">
-                  <div>
-                    <div class="slip-name">${assistant.name}</div>
-                    <div class="slip-role">${schoolName} &nbsp;·&nbsp; ${assistant.role || "Assistente Operacional"}</div>
-                  </div>
-                  <div style="text-align: right; font-size: 10px; font-weight: 600; color: #475569;">
-                    ${day.dayName}<br />${day.dateStr}
-                  </div>
-                </div>
-
-                <div class="slip-shift">
-                  <div>Turno: <strong>${shiftStart} – ${shiftEnd}</strong></div>
-                  <div>Almoço: <strong>${lunchStart} – ${lunchEnd}</strong></div>
-                </div>
-
-                <div class="slip-tasks">
-                  <strong style="font-size: 10px; text-transform: uppercase; color: #475569;">Atividades / Postos Atribuídos:</strong>
-                  <ul style="margin: 4px 0 0 0; padding-left: 16px; font-size: 10px; color: #334155;">
-                    ${tasksList || "<li>Apoio Geral e Tarefas de Escola</li>"}
-                  </ul>
-                </div>
-
-                <div class="slip-ack">
-                  <div>Tomei conhecimento:</div>
-                  <div class="slip-sign-line"></div>
-                </div>
-              </div>
-            `;
-          })
-          .join("");
-
-        return `
-          <div class="header" ${dIdx > 0 ? 'style="margin-top: 18px;"' : ""}>
-            <div>
-              <h1>${schoolName}</h1>
-              <p><strong>Fichas Individuais de Horário e Atividades</strong> — ${day.dayName}, ${day.dateStr}</p>
-            </div>
-          </div>
-          <div class="slips-grid">
-            ${slipsHtml}
-          </div>
-          ${dIdx < daysData.length - 1 ? '<div class="page-break"></div>' : ""}
-        `;
-      })
-      .filter(Boolean)
-      .join("");
-
-    return (
-      daysSlipsHtml ||
-      `<div style="text-align: center; padding: 30px; color: #64748b;">Sem fichas individuais para os parâmetros selecionados.</div>`
-    );
-  }
-
-  function handleExecute() {
+  async function handleExecute() {
     if (startDate > endDate) {
       setDateError("A data final deve ser posterior ou igual à data inicial.");
       return;
     }
+    if (docModel === "monthly") {
+      if (datesInRange.length > 45) {
+        setDateError(
+          "O intervalo selecionado para o mapa mensal não pode ultrapassar 1 mês."
+        );
+        return;
+      }
+    } else if (datesInRange.length > 7) {
+      setDateError(
+        "O intervalo selecionado não pode ultrapassar 7 dias (1 semana)."
+      );
+      return;
+    }
     setDateError(null);
 
-    if (outputFormat === "csv") {
-      exportSchedulesToCsv({
-        schoolName,
-        startDate,
-        endDate,
-        daysData,
-        assistantFilterId:
-          docModel === "individual" ? selectedAssistantFilter : undefined,
+    const assistantIdFilter =
+      (docModel === "individual" || docModel === "monthly") &&
+      selectedAssistantFilter !== "all"
+        ? selectedAssistantFilter
+        : undefined;
+
+    try {
+      setIsExporting(true);
+      await schedulesService.downloadExport({
+        start_date: startDate,
+        end_date: endDate,
+        format: outputFormat,
+        model: docModel,
+        assistant_id: assistantIdFilter,
       });
+
       notify.success(
-        "Ficheiro CSV gerado e descarregado com sucesso.",
+        outputFormat === "csv"
+          ? "Ficheiro CSV gerado e descarregado com sucesso."
+          : "Documento PDF gerado e descarregado com sucesso.",
         "Exportação Concluída"
       );
       onClose();
-      return;
-    }
+    } catch (err: any) {
+      const backendMsg =
+        err?.backendMessage ||
+        err?.response?.data?.message ||
+        null;
 
-    // Caso PDF / Impressão
-    if (docModel === "wall") {
-      const title = `Escala_Afixacao_${schoolName}_${startDate}`;
-      printHtmlDocument(generateWallPrintHtml(), title, "landscape");
-      notify.success(
-        "Documento enviado para impressão / PDF.",
-        "Impressão Iniciada"
+      if (
+        backendMsg ||
+        (err?.httpStatus && err.httpStatus >= 400 && err.httpStatus < 500)
+      ) {
+        const message =
+          backendMsg ||
+          "Não existe nenhuma escala publicada para o período selecionado. Publique a escala antes de imprimir ou exportar.";
+        setDateError(message);
+        notify.warning(message, "Escala Não Publicada");
+        return;
+      }
+
+      notify.error(
+        "Não foi possível comunicar com o servidor para gerar o documento.",
+        "Erro na Exportação"
       );
-      onClose();
-    } else {
-      const title = `Fichas_Individuais_${schoolName}_${startDate}`;
-      printHtmlDocument(generateIndividualPrintHtml(), title, "portrait");
-      notify.success(
-        "Fichas individuais enviadas para impressão / PDF.",
-        "Impressão Iniciada"
-      );
-      onClose();
+    } finally {
+      setIsExporting(false);
     }
   }
 
   const selectedDaysCount = datesInRange.length;
+  const maxAllowedDays = docModel === "monthly" ? 45 : 7;
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
@@ -1009,9 +1825,16 @@ export default function PrintScheduleModal({
         <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
           {/* SECÇÃO 1: INTERVALO DE DATAS */}
           <div className="space-y-2.5">
-            <label className="text-xs font-semibold text-foreground uppercase tracking-wide">
-              Intervalo de Datas
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-foreground uppercase tracking-wide">
+                {docModel === "monthly" ? "Mês / Período de Referência" : "Intervalo de Datas"}
+              </label>
+              <span className="text-[11px] font-medium text-muted-foreground">
+                {docModel === "monthly"
+                  ? "Grelha mensal completa (Seg–Dom)"
+                  : "Máximo: 7 dias (1 semana)"}
+              </span>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -1020,8 +1843,23 @@ export default function PrintScheduleModal({
                 </span>
                 <DatePicker
                   value={startDate}
+                  allowClear={false}
                   onChange={(v) => {
+                    if (!v) return;
+                    if (docModel === "monthly") {
+                      const bounds = getMonthBoundsIso(v);
+                      setStartDate(bounds.first);
+                      setEndDate(bounds.last);
+                      setDateError(null);
+                      return;
+                    }
                     setStartDate(v);
+                    const newMaxEnd = addDaysIso(v, 6);
+                    if (endDate < v) {
+                      setEndDate(v);
+                    } else if (newMaxEnd && endDate > newMaxEnd) {
+                      setEndDate(newMaxEnd);
+                    }
                     setDateError(null);
                   }}
                   className="w-full"
@@ -1033,8 +1871,20 @@ export default function PrintScheduleModal({
                 </span>
                 <DatePicker
                   value={endDate}
+                  allowClear={false}
                   minDate={startDate || undefined}
+                  maxDate={maxEndDateIso}
                   onChange={(v) => {
+                    if (!v) return;
+                    if (maxEndDateIso && v > maxEndDateIso) {
+                      setEndDate(maxEndDateIso);
+                      setDateError(
+                        docModel === "monthly"
+                          ? "O intervalo selecionado para o mapa mensal não pode ultrapassar 1 mês."
+                          : "O intervalo selecionado não pode ultrapassar 7 dias (1 semana)."
+                      );
+                      return;
+                    }
                     setEndDate(v);
                     setDateError(null);
                   }}
@@ -1055,34 +1905,55 @@ export default function PrintScheduleModal({
                 Preenchimento rápido:
               </span>
               <div className="flex items-center gap-1.5 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => applyDatePreset("today")}
-                  className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                >
-                  Hoje
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyDatePreset("this-week")}
-                  className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                >
-                  Esta Semana
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyDatePreset("next-week")}
-                  className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                >
-                  Próxima Semana
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyDatePreset("this-month")}
-                  className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                >
-                  Este Mês
-                </button>
+                {docModel === "monthly" ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => applyDatePreset("this-month")}
+                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
+                    >
+                      Este Mês
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyDatePreset("next-month")}
+                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
+                    >
+                      Próximo Mês
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => applyDatePreset("today")}
+                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
+                    >
+                      Hoje
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyDatePreset("this-week")}
+                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
+                    >
+                      Esta Semana (Seg–Sex)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyDatePreset("full-week")}
+                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
+                    >
+                      Semana Completa (7 dias)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyDatePreset("next-week")}
+                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
+                    >
+                      Próxima Semana
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -1097,12 +1968,26 @@ export default function PrintScheduleModal({
 
             <RadioGroup
               value={docModel}
-              onValueChange={(val) => setDocModel(val as "wall" | "individual")}
-              className="grid grid-cols-1 sm:grid-cols-2 gap-2.5"
+              onValueChange={(val) => {
+                const nextModel = val as "wall" | "individual" | "monthly";
+                setDocModel(nextModel);
+                setDateError(null);
+                if (nextModel === "monthly") {
+                  const bounds = getMonthBoundsIso(startDate || dateInfo.isoDate);
+                  setStartDate(bounds.first);
+                  setEndDate(bounds.last);
+                } else {
+                  const maxEnd = addDaysIso(startDate, 6);
+                  if (maxEnd && endDate > maxEnd) {
+                    setEndDate(startDate);
+                  }
+                }
+              }}
+              className="grid grid-cols-1 sm:grid-cols-3 gap-2.5"
             >
               <label
                 htmlFor="model-wall"
-                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
                   docModel === "wall"
                     ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
                     : "border-border bg-card/60 hover:bg-muted/40 hover:border-border/80"
@@ -1115,17 +2000,17 @@ export default function PrintScheduleModal({
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-foreground">
-                    Escala Diária (Para Afixação)
+                    Escala Diária
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                    Mapa geral completo com equipa e turnos para afixar no placard.
+                    Mapa diário (A4) com linha temporal e todos os assistentes.
                   </p>
                 </div>
               </label>
 
               <label
                 htmlFor="model-individual"
-                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
                   docModel === "individual"
                     ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
                     : "border-border bg-card/60 hover:bg-muted/40 hover:border-border/80"
@@ -1138,17 +2023,40 @@ export default function PrintScheduleModal({
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-foreground">
-                    Fichas Individuais (Para Entrega)
+                    Horário Semanal
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                    Talões com horário, pausas e postos para assinatura e conhecimento.
+                    Linha temporal semanal por assistente (até 7 dias).
+                  </p>
+                </div>
+              </label>
+
+              <label
+                htmlFor="model-monthly"
+                className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                  docModel === "monthly"
+                    ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
+                    : "border-border bg-card/60 hover:bg-muted/40 hover:border-border/80"
+                }`}
+              >
+                <RadioGroupItem
+                  value="monthly"
+                  id="model-monthly"
+                  className="mt-0.5"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground">
+                    Horário Mensal
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                    Grelha de calendário mensal com turno, almoço e faltas.
                   </p>
                 </div>
               </label>
             </RadioGroup>
 
-            {/* Seletor Customizado de Assistente quando Fichas Individuais */}
-            {docModel === "individual" && (
+            {/* Seletor Customizado de Assistente */}
+            {(docModel === "individual" || docModel === "monthly") && (
               <div className="space-y-1.5 p-3 rounded-xl border border-border bg-muted/20 animate-in fade-in-50 duration-200">
                 <label className="text-xs font-medium text-foreground block">
                   Assistente a emitir:
@@ -1158,14 +2066,9 @@ export default function PrintScheduleModal({
                   onChange={(val) => setSelectedAssistantFilter(val)}
                   assistants={allAssistantsList}
                   includeAllOption={true}
-                  allOptionLabel="Todos os assistentes em serviço"
+                  allOptionLabel="Todos os assistentes"
                   placeholder="Pesquisar assistente por nome, nº ou email..."
                 />
-                <p className="text-[11px] text-muted-foreground">
-                  {selectedAssistantFilter === "all"
-                    ? "Serão geradas fichas de entrega para todos os assistentes em serviço no período."
-                    : "Será gerada apenas a ficha individual do assistente selecionado."}
-                </p>
               </div>
             )}
           </div>
@@ -1198,10 +2101,10 @@ export default function PrintScheduleModal({
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-foreground">
-                    PDF / Impressão Direta
+                    PDF A4 Horizontal
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                    Abre o diálogo de impressão ou guarda diretamente em PDF A4.
+                    Gera e descarrega diretamente o documento PDF A4 horizontal.
                   </p>
                 </div>
               </label>
@@ -1239,8 +2142,12 @@ export default function PrintScheduleModal({
               {selectedDaysCount} {selectedDaysCount === 1 ? "dia" : "dias"}
             </Badge>
             <span className="text-xs text-muted-foreground hidden sm:inline">
-              {docModel === "wall" ? "Escala Diária" : "Fichas Individuais"} ·{" "}
-              {outputFormat === "pdf" ? "PDF" : "CSV"}
+              {docModel === "wall"
+                ? "Escala Diária"
+                : docModel === "monthly"
+                ? "Horário Mensal"
+                : "Horário Semanal"}{" "}
+              · {outputFormat === "pdf" ? "PDF A4 Horizontal" : "CSV"}
             </span>
           </div>
 
@@ -1258,10 +2165,20 @@ export default function PrintScheduleModal({
               type="button"
               size="sm"
               onClick={handleExecute}
-              disabled={selectedDaysCount === 0 || !!dateError}
-              className="cursor-pointer font-medium"
+              disabled={
+                selectedDaysCount === 0 ||
+                selectedDaysCount > maxAllowedDays ||
+                !!dateError ||
+                isExporting
+              }
+              className="cursor-pointer font-medium gap-1.5"
             >
-              {outputFormat === "pdf"
+              {isExporting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {isExporting
+                ? outputFormat === "pdf"
+                  ? "A gerar PDF..."
+                  : "A gerar CSV..."
+                : outputFormat === "pdf"
                 ? "Imprimir / Gerar PDF"
                 : "Descarregar CSV / Excel"}
             </Button>

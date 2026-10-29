@@ -242,7 +242,7 @@ export default function MatrixGrid({
   }
     const [printModalState, setPrintModalState] = useState<{
     open: boolean;
-    initialDocModel?: "wall" | "individual";
+    initialDocModel?: "wall" | "individual" | "monthly";
   }>({
     open: false,
     initialDocModel: "wall",
@@ -1959,16 +1959,29 @@ function paintSlot(aid: EntityId, slot: number) {
     }));
   }, [absentAssistants]);
 
-  function handleExportDayCsv() {
-    exportDailyScheduleToCsv({
-      schoolName: selectedSchool?.name || "Escola",
-      dateStr: dayInfo.dateStr,
-      isoDate: dayInfo.isoDate,
-      operatingWindowStr,
-      workingAssistants: printableWorkingAssistants,
-      absentAssistants: printableAbsentAssistants,
-    });
-    notify.success("Ficheiro CSV da escala diária descarregado com sucesso.", "Escala Exportada");
+  async function handleExportDayCsv() {
+    try {
+      await schedulesService.downloadExport({
+        start_date: dayInfo.isoDate,
+        end_date: dayInfo.isoDate,
+        format: "csv",
+        model: "wall",
+      });
+      notify.success(
+        "Ficheiro CSV da escala diária descarregado com sucesso.",
+        "Escala Exportada"
+      );
+    } catch (err: any) {
+      const backendMsg = err?.backendMessage || err?.response?.data?.message;
+      if (backendMsg) {
+        notify.warning(backendMsg, "Escala Não Publicada");
+        return;
+      }
+      notify.error(
+        "Não foi possível exportar o ficheiro CSV.",
+        "Erro na Exportação"
+      );
+    }
   }
 
   function renderWorkingAssistantRow(assistant: (typeof activeAssistants)[0]) {
