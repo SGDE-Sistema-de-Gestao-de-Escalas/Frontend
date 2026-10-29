@@ -21,7 +21,7 @@ interface AuthContextType {
   user: UserProfile;
   login: (role: Role) => void;
   loginWithCredentials: (credentials: LoginCredentials, remember?: boolean) => Promise<Role>;
-  loginWithToken: (token: string) => Promise<Role>;
+  loginWithSession: () => Promise<Role>;
   logout: () => Promise<void>;
   switchRole: () => void;
   refreshProfile: () => Promise<void>;
@@ -91,6 +91,11 @@ export function AuthProvider({
   // Check existing session on application load (supports HttpOnly cookies or fallback localStorage token)
   useEffect(() => {
     async function checkCurrentSession() {
+      // O token já não é guardado no browser (F-10): a sessão vive num cookie HttpOnly.
+      // Apaga restos de versões anteriores.
+      localStorage.removeItem("auth_token");
+      sessionStorage.removeItem("auth_token");
+
       try {
         // With HttpOnly cookies enabled (withCredentials: true), getMe() validates the active cookie session.
         // We use silent: true so unauthenticated visitors or an idle server do not trigger intrusive toast banners on F5.
@@ -118,26 +123,14 @@ export function AuthProvider({
     const isRemember = credentials.remember !== undefined ? credentials.remember : remember;
     const response = await authService.login({ ...credentials, remember: isRemember });
 
-    if (response.token) {
-      if (isRemember) {
-        localStorage.setItem("auth_token", response.token);
-        sessionStorage.removeItem("auth_token");
-      } else {
-        sessionStorage.setItem("auth_token", response.token);
-        localStorage.removeItem("auth_token");
-      }
-    }
-
     const profile = mapAuthUserToProfile(response.user);
     setUserProfile(profile);
     setRole(profile.role);
     return profile.role;
   }
 
-  async function loginWithToken(token: string): Promise<Role> {
-    if (token) {
-      localStorage.setItem("auth_token", token);
-    }
+  // Login social: o backend já criou o cookie HttpOnly; aqui só se lê quem é o utilizador.
+  async function loginWithSession(): Promise<Role> {
     const authUser = await authService.getMe();
     const profile = mapAuthUserToProfile(authUser);
     setUserProfile(profile);
@@ -213,7 +206,7 @@ export function AuthProvider({
         user: userProfile,
         login,
         loginWithCredentials,
-        loginWithToken,
+        loginWithSession,
         logout,
         switchRole,
         refreshProfile,

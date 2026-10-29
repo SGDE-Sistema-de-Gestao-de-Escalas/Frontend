@@ -10,6 +10,7 @@ import Assistants from "../pages/Assistants";
 import Absences from "../pages/Absences";
 import Reports from "../pages/Reports";
 import Config from "../pages/Config";
+import Notifications from "../pages/Notifications";
 import Profile from "../pages/Profile";
 import PlatformSettings from "../pages/PlatformSettings";
 import Account from "../pages/Account";
@@ -95,6 +96,7 @@ export default function AppRouter() {
         <Route path="/absences" element={<AdminRoute><Absences /></AdminRoute>} />
         <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
         <Route path="/config" element={<AdminRoute><Config /></AdminRoute>} />
+        <Route path="/notifications" element={<AdminRoute><Notifications /></AdminRoute>} />
 
         <Route path="/profile" element={<Profile />} />
         <Route path="/profile/:id" element={<Profile />} />

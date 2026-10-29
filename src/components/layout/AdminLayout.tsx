@@ -23,6 +23,7 @@ export const ADMIN_PAGE_LABELS: Record<string, string> = {
   assistants: "Assistentes",
   absences: "Ausências",
   reports: "Relatórios",
+  notifications: "Notificações",
   config: "Regras do Motor",
   profile: "Perfil do Assistente",
   "add-assistant": "Novo Assistente",

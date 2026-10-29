@@ -8,6 +8,7 @@ export type AdminPage =
   | "add-assistant"
   | "assistants"
   | "reports"
+  | "notifications"
   | "account"
   | "platform-settings";
 
@@ -204,13 +205,23 @@ export type NotificationType = "alert" | "absence" | "expiry" | "info";
 export type NotifType = NotificationType;
 
 export interface Notification {
-  id: EntityId;
+  id: string;
   type: NotificationType;
+  /** Código do evento (ex.: "absence.registered"). */
+  event: string | null;
   title: string;
-  body: string;
-  time: string;
+  body: string | null;
+  /** Rota interna para onde a notificação deve levar o utilizador. */
+  link: string | null;
+  schoolId: string | null;
   read: boolean;
+  readAt: string | null;
+  /** ISO 8601 */
+  createdAt: string;
+  data: Record<string, unknown> | null;
 }
+
+export type NotificationUnreadCounts = Record<NotificationType | "all", number>;
 
 export interface ActivityType {
   id: string;
