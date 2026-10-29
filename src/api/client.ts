@@ -30,11 +30,8 @@ apiClient.interceptors.request.use(
       }
     }
 
-    const token =
-      localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    // A autenticação vai no cookie HttpOnly (withCredentials): o token não é
+    // guardado nem lido do localStorage/sessionStorage (F-10).
 
     const schoolId = localStorage.getItem("selected_school_id");
     const url = config.url || "";

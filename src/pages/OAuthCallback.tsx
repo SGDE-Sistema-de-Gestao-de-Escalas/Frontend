@@ -8,7 +8,7 @@ import appIcon from "../assets/icon.svg";
 export default function OAuthCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { loginWithToken } = useAuth();
+  const { loginWithSession } = useAuth();
   const processedRef = useRef(false);
 
   useEffect(() => {
@@ -17,7 +17,6 @@ export default function OAuthCallback() {
 
     async function handleCallback() {
       const errorParam = searchParams.get("error");
-      const tokenParam = searchParams.get("token");
 
       // Se o BackOffice enviou erro via query param (ex: Utilizador não registado, conta inativa, etc.)
       if (errorParam) {
@@ -28,36 +27,29 @@ export default function OAuthCallback() {
         return;
       }
 
-      // Se o BackOffice enviou o token de autenticação
-      if (tokenParam) {
-        try {
-          const role = await loginWithToken(tokenParam);
-          notify.success("Autenticação efetuada com sucesso!");
-          if (role === "admin") {
-            navigate("/dashboard", { replace: true });
-          } else {
-            navigate("/staff/schedule", { replace: true });
-          }
-        } catch (err: any) {
-          console.error("[OAuth] Falha ao obter dados do utilizador:", err);
-          const backendMessage =
-            err?.response?.data?.message ||
-            err?.response?.data?.error ||
-            "Não foi possível validar a sessão do utilizador com o servidor.";
-          notify.error(backendMessage);
-          navigate(`/login?error=${encodeURIComponent(backendMessage)}`, { replace: true });
+      // O BackOffice já criou a sessão num cookie HttpOnly antes de redirecionar para aqui.
+      // O token nunca viaja no endereço (F-10): se vier um "?token=", é ignorado.
+      try {
+        const role = await loginWithSession();
+        notify.success("Autenticação efetuada com sucesso!");
+        if (role === "admin") {
+          navigate("/dashboard", { replace: true });
+        } else {
+          navigate("/staff/schedule", { replace: true });
         }
-        return;
+      } catch (err: any) {
+        console.error("[OAuth] Falha ao obter dados do utilizador:", err);
+        const backendMessage =
+          err?.response?.data?.message ||
+          err?.response?.data?.error ||
+          "Não foi possível validar a sessão do utilizador com o servidor.";
+        notify.error(backendMessage);
+        navigate(`/login?error=${encodeURIComponent(backendMessage)}`, { replace: true });
       }
-
-      // Se não vier nem token nem erro
-      const fallbackMsg = "Nenhum parâmetro de autenticação foi recebido do fornecedor.";
-      notify.error(fallbackMsg);
-      navigate(`/login?error=${encodeURIComponent(fallbackMsg)}`, { replace: true });
     }
 
     handleCallback();
-  }, [searchParams, navigate, loginWithToken]);
+  }, [searchParams, navigate, loginWithSession]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
