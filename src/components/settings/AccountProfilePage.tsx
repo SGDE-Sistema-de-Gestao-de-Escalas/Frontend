@@ -35,12 +35,17 @@ export default function AccountProfilePage({
   const [firstName, setFirstName] = useState(user.first_name || "");
   const [lastName, setLastName] = useState(user.last_name || "");
   const [email, setEmail] = useState(user.email || "");
+  // Mudar o email exige a password atual (F-08): só aparece quando o email é alterado.
+  const [emailChangePassword, setEmailChangePassword] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileErrors, setProfileErrors] = useState<{
     first_name?: string;
     last_name?: string;
     email?: string;
+    current_password?: string;
   }>({});
+  const emailChanged =
+    email.trim().toLowerCase() !== (user.email || "").trim().toLowerCase();
 
   // Sync with auth user on mount or user change
   useEffect(() => {
@@ -179,7 +184,12 @@ export default function AccountProfilePage({
     const lName = lastName.trim();
     const mail = email.trim();
 
-    const errors: { first_name?: string; last_name?: string; email?: string } = {};
+    const errors: {
+      first_name?: string;
+      last_name?: string;
+      email?: string;
+      current_password?: string;
+    } = {};
 
     if (!fName) {
       errors.first_name = "O primeiro nome é obrigatório.";
@@ -192,6 +202,9 @@ export default function AccountProfilePage({
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) {
       errors.email = "Por favor introduza um email válido.";
     }
+    if (emailChanged && !emailChangePassword) {
+      errors.current_password = "Indique a sua password atual para alterar o email.";
+    }
 
     if (Object.keys(errors).length > 0) {
       setProfileErrors(errors);
@@ -203,9 +216,15 @@ export default function AccountProfilePage({
 
     try {
       await authService.updateProfile(
-        { first_name: fName, last_name: lName, email: mail },
+        {
+          first_name: fName,
+          last_name: lName,
+          email: mail,
+          ...(emailChanged ? { current_password: emailChangePassword } : {}),
+        },
         user.id
       );
+      setEmailChangePassword("");
       updateUserLocal({ first_name: fName, last_name: lName, email: mail });
       await refreshProfile();
       notify.success("Dados pessoais atualizados com sucesso.");
@@ -219,6 +238,7 @@ export default function AccountProfilePage({
           first_name: backendErrors.first_name?.[0],
           last_name: backendErrors.last_name?.[0],
           email: backendErrors.email?.[0],
+          current_password: backendErrors.current_password?.[0],
         });
         if (message) {
           notify.error(message, undefined, "Erro de Validação");
@@ -436,12 +456,45 @@ export default function AccountProfilePage({
                   </p>
                 )}
               </div>
+
+              {emailChanged && (
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1.5">
+                    Password atual <span className="text-destructive">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={emailChangePassword}
+                    onChange={(e) => {
+                      setEmailChangePassword(e.target.value);
+                      if (profileErrors.current_password) {
+                        setProfileErrors((prev) => ({ ...prev, current_password: undefined }));
+                      }
+                    }}
+                    placeholder="Confirme com a sua password atual"
+                    className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                      profileErrors.current_password
+                        ? "border-destructive focus:ring-destructive"
+                        : "border-border focus:ring-ring"
+                    }`}
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Para mudar o email tem de confirmar a sua password.
+                  </p>
+                  {profileErrors.current_password && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {profileErrors.current_password}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <button
               type="button"
               onClick={handleSaveProfile}
-              disabled={savingProfile || !firstName.trim() || !lastName.trim() || !email.trim()}
+              disabled={savingProfile || !firstName.trim() || !lastName.trim() || !email.trim() || (emailChanged && !emailChangePassword)}
               className="mt-5 flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 disabled:opacity-40 transition-colors shadow-xs"
             >
               {savingProfile ? (
