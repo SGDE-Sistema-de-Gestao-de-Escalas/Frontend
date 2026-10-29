@@ -251,6 +251,15 @@ export interface ListSchedulesParams {
   per_page?: number;
 }
 
+export interface ExportSchedulesParams {
+  start_date: string;
+  end_date: string;
+  format?: "pdf" | "csv";
+  model?: "wall" | "individual" | "monthly";
+  assistant_id?: string;
+  school_id?: string;
+}
+
 export const schedulesService = {
   /**
    * Lista as escalas da escola ativa (filtradas por intervalo de datas, assistente ou estado).
@@ -326,6 +335,79 @@ export const schedulesService = {
       saved_days_count: number;
     }>("/schedules/save-days", payload);
     return response.data;
+  },
+
+  /**
+   * Exporta a escala em PDF (A4 Horizontal) ou CSV (UTF-8 BOM) a partir do Backend.
+   * GET /api/schedules/export
+   */
+  async exportSchedules(params: ExportSchedulesParams): Promise<Blob> {
+    try {
+      const response = await apiClient.get<Blob>("/schedules/export", {
+        params,
+        responseType: "blob",
+        headers: params.school_id ? { "X-School-ID": params.school_id } : {},
+      });
+      return response.data;
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const errData = err?.response?.data;
+      if (errData instanceof Blob) {
+        try {
+          const text = await errData.text();
+          const parsed = JSON.parse(text);
+          if (parsed?.message) {
+            err.backendMessage = parsed.message;
+          }
+        } catch {
+          // Ignorar falha de parse caso não seja JSON
+        }
+      } else if (errData?.message) {
+        err.backendMessage = errData.message;
+      }
+      err.httpStatus = status;
+      throw err;
+    }
+  },
+
+  /**
+   * Faz download direto do ficheiro PDF ou CSV gerado pelo Backend.
+   */
+  async downloadExport(params: ExportSchedulesParams): Promise<void> {
+    const blob = await this.exportSchedules(params);
+    const ext = (params.format || "pdf") === "csv" ? "csv" : "pdf";
+    const prefix =
+      params.model === "monthly"
+        ? "horario_mensal"
+        : params.model === "individual"
+        ? "horario_individual"
+        : ext === "csv"
+        ? "escala_servico"
+        : "escala_diaria";
+    const dateSuffix =
+      params.start_date === params.end_date
+        ? params.start_date
+        : `${params.start_date}_a_${params.end_date}`;
+    const filename = `${prefix}_${dateSuffix}.${ext}`;
+
+    const fileBlob =
+      ext === "pdf"
+        ? new Blob([blob], { type: "application/pdf" })
+        : new Blob([blob], { type: "text/csv;charset=utf-8;" });
+
+    const url = URL.createObjectURL(fileBlob);
+
+    if (ext === "pdf") {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
   },
 };
 
