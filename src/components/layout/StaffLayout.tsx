@@ -12,7 +12,6 @@ import AccountProfilePage from "../settings/AccountProfilePage";
 export const STAFF_PAGE_LABELS: Record<string, string> = {
   schedule: "O Meu Horário",
   absences: "Ausências",
-  "register-absence": "Ausências",
   "absence-detail": "Ausências",
   account: "A Minha Conta",
 };
@@ -93,7 +92,6 @@ export default function StaffLayout({
             <>
               {activePage === "schedule" && <StaffScheduleSection />}
               {(activePage === "absences" ||
-                activePage === "register-absence" ||
                 activePage === "absence-detail") && <StaffAbsenceDetail />}
 
               {activePage === "account" && <AccountProfilePage role="staff" />}

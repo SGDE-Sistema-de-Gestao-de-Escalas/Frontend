@@ -17,8 +17,7 @@ export default function MainLayout() {
   let staffPage: StaffPage = "schedule";
 
   if (path.startsWith("/staff")) {
-    if (path.includes("register-absence")) staffPage = "register-absence";
-    else if (path.includes("absence")) staffPage = "absence-detail";
+    if (path.includes("absence")) staffPage = "absence-detail";
     else if (path.includes("account")) staffPage = "account";
     else staffPage = "schedule";
   } else {
@@ -41,7 +40,6 @@ export default function MainLayout() {
   function handleStaffNavigate(page: StaffPage) {
     if (page === "schedule") navigate("/staff/schedule");
     else if (page === "absence-detail") navigate("/staff/absences");
-    else if (page === "register-absence") navigate("/staff/register-absence");
     else if (page === "account") navigate("/staff/account");
     else navigate(`/staff/${page}`);
   }

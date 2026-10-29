@@ -127,7 +127,7 @@ export default function SidebarContent({
           <div className="space-y-1">
             {STAFF_NAV.map((item) => {
               const active = item.id === "absences"
-                ? (currentPage === "absences" || currentPage === "absence-detail" || currentPage === "register-absence")
+                ? (currentPage === "absences" || currentPage === "absence-detail")
                 : currentPage === item.id;
               return (
                 <button

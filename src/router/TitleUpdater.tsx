@@ -14,7 +14,6 @@ export const ROUTE_TITLES: Record<string, string> = {
   "/platform-settings": "Definições",
   "/account": "A Minha Conta",
   "/staff/schedule": "O Meu Horário",
-  "/staff/register-absence": "Justificar Falta",
   "/staff/absences": "As Minhas Faltas",
   "/staff/absence": "As Minhas Faltas",
   "/staff/account": "A Minha Conta",

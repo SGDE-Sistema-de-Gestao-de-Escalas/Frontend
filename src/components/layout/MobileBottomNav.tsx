@@ -40,7 +40,7 @@ export default function MobileBottomNav({
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-card border-t border-border flex items-center shadow-lg">
       {items.map((item) => {
         const isActive = item.id === "absences"
-          ? (currentPage === "absences" || currentPage === "absence-detail" || currentPage === "register-absence")
+          ? (currentPage === "absences" || currentPage === "absence-detail")
           : currentPage === item.id;
         return (
           <button
