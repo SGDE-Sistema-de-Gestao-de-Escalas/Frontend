@@ -80,11 +80,21 @@ function getScheduleTypeStatus(
   s: AssistantScheduleItem,
   all: AssistantScheduleItem[]
 ): "active" | "future" | "past" {
-  if (s.to && s.to < TODAY_STR) {
+  if (s.status === "superseded" || (s.to && s.to < TODAY_STR)) {
     return "past";
   }
-  if (s.from > TODAY_STR) {
+  if (s.status === "upcoming" || s.from > TODAY_STR) {
     return "future";
+  }
+  const hasNewerActive = all.some(
+    (other) =>
+      other.id !== s.id &&
+      other.from <= TODAY_STR &&
+      (!other.to || other.to >= TODAY_STR) &&
+      other.from > s.from
+  );
+  if (hasNewerActive) {
+    return "past";
   }
   return "active";
 }
@@ -207,9 +217,18 @@ export default function AssistantScheduleManager({
     setShiftBLunchEnd("13:30");
     setShiftBLunchDuration("30");
 
-    if (activeSchedule) {
-      if (activeSchedule.to) {
-        const nextDay = addDays(activeSchedule.to, 1);
+    const latestSchedule =
+      schedules.length > 0
+        ? [...schedules].sort((a, b) => b.from.localeCompare(a.from))[0]
+        : null;
+
+    if (latestSchedule) {
+      if (latestSchedule.to && latestSchedule.to >= TODAY_STR) {
+        const nextDay = addDays(latestSchedule.to, 1);
+        setFixedStartDate(nextDay);
+        setRotStartDate(nextDay);
+      } else if (latestSchedule.from >= TODAY_STR) {
+        const nextDay = addDays(latestSchedule.from, 1);
         setFixedStartDate(nextDay);
         setRotStartDate(nextDay);
       } else {
@@ -366,22 +385,22 @@ export default function AssistantScheduleManager({
       return;
     }
 
+    const duplicateStartSchedule = schedules.find(
+      (s) => s.id !== editingScheduleId && s.from === startVal
+    );
+    if (duplicateStartSchedule) {
+      setScheduleFieldErrors({
+        start: `Já existe um perfil de horário para este assistente a começar em ${formatDatePT(startVal)}.`,
+      });
+      return;
+    }
+
     if (activeSchedule && activeSchedule.id !== editingScheduleId) {
       if (startVal <= activeSchedule.from) {
         setScheduleError(
           `A data de início (${formatDatePT(startVal)}) deve ser posterior ao início do horário em vigor (${formatDatePT(activeSchedule.from)}).`
         );
         return;
-      }
-
-      if (activeSchedule.to) {
-        const maxAllowedStart = addDays(activeSchedule.to, 1);
-        if (startVal > maxAllowedStart) {
-          setScheduleError(
-            `A data de início (${formatDatePT(startVal)}) não pode ser superior a ${formatDatePT(maxAllowedStart)} (dia seguinte ao término do horário em vigor). Não podem existir períodos sem horário atribuído ao assistente.`
-          );
-          return;
-        }
       }
     }
 
@@ -438,19 +457,16 @@ export default function AssistantScheduleManager({
 
     try {
       if (assistantId) {
+        const fullPayload = scheduleItemToApiPayload(String(assistantId), itemToSave);
         if (editingScheduleId) {
+          const { assistant_id: _, ...updateData } = fullPayload;
           await updateScheduleMutation.mutateAsync({
             id: editingScheduleId,
             assistantId: String(assistantId),
-            data: {
-              valid_from: itemToSave.from,
-              valid_until: itemToSave.to,
-            },
+            data: updateData,
           });
         } else {
-          await createScheduleMutation.mutateAsync(
-            scheduleItemToApiPayload(String(assistantId), itemToSave)
-          );
+          await createScheduleMutation.mutateAsync(fullPayload);
         }
       }
 
@@ -1134,11 +1150,9 @@ export default function AssistantScheduleManager({
                           {scheduleFieldErrors.start}
                         </p>
                       )}
-                      {!isEditingActiveSchedule && activeSchedule && (
+                      {!isEditingActiveSchedule && schedules.length > 0 && (
                         <p className="text-[10px] text-muted-foreground mt-1">
-                          {activeSchedule.to
-                            ? `Deve iniciar no máximo a ${formatDatePT(addDays(activeSchedule.to, 1))} (dia seguinte ao término em vigor).`
-                            : "O horário em vigor terminará automaticamente na véspera desta data."}
+                          O horário anterior terminará automaticamente na véspera desta data.
                         </p>
                       )}
                     </div>
@@ -1293,11 +1307,9 @@ export default function AssistantScheduleManager({
                               {scheduleFieldErrors.start}
                             </p>
                           )}
-                          {!isEditingActiveSchedule && activeSchedule && (
+                          {!isEditingActiveSchedule && schedules.length > 0 && (
                             <p className="text-[10px] text-muted-foreground mt-1">
-                              {activeSchedule.to
-                                ? `Deve iniciar no máximo a ${formatDatePT(addDays(activeSchedule.to, 1))} (dia seguinte ao término em vigor).`
-                                : "O horário em vigor terminará automaticamente na véspera desta data."}
+                              O horário anterior terminará automaticamente na véspera desta data.
                             </p>
                           )}
                         </div>
@@ -1538,4 +1550,3 @@ export default function AssistantScheduleManager({
     </Card>
   );
 }
-
