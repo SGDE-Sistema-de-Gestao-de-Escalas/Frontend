@@ -9,7 +9,6 @@ import {
   Inbox,
   Loader2,
   Paperclip,
-  Plus,
   RefreshCw,
   Save,
   Search,
@@ -21,21 +20,17 @@ import {
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { useAuth } from "../../context/AuthContext";
 import {
   useAbsencesList,
-  useCreateAbsence,
   useUploadAbsenceDocument,
   useUpdateAbsence,
 } from "../../hooks/api/useAbsences";
-import { useAbsenceTypesList } from "../../hooks/api/useAbsenceTypes";
 import absencesService from "../../api/services/absences.service";
 import { notify } from "../common/FeedbackNotification";
 
 type StatusFilterTab = "all" | "pending" | "justified" | "unjustified";
 
 export default function StaffAbsenceDetail() {
-  const { user } = useAuth();
   const [selectedDetailId, setSelectedDetailId] = useState<
     string | number | null
   >(null);
@@ -43,17 +38,6 @@ export default function StaffAbsenceDetail() {
   const [searchQuery, setSearchQuery] = useState("");
   const [startDateFilter, setStartDateFilter] = useState("");
   const [endDateFilter, setEndDateFilter] = useState("");
-
-  // Modal de Novo Registo de Ausência
-  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
-  const [modalTypeId, setModalTypeId] = useState<string>("");
-  const [modalStartDate, setModalStartDate] = useState<string>("");
-  const [modalEndDate, setModalEndDate] = useState<string>("");
-  const [modalIsPartial, setModalIsPartial] = useState(false);
-  const [modalStartTime, setModalStartTime] = useState("08:00");
-  const [modalEndTime, setModalEndTime] = useState("17:00");
-  const [modalJustification, setModalJustification] = useState("");
-  const [modalFile, setModalFile] = useState<File | null>(null);
 
   // Formulário de justificativa na vista de detalhe
   const [detailJustification, setDetailJustification] = useState("");
@@ -70,9 +54,6 @@ export default function StaffAbsenceDetail() {
   });
   const absences = absencesResult?.data || [];
 
-  const { data: absenceTypes = [], isLoading: _isLoadingTypes } =
-    useAbsenceTypesList();
-  const createMutation = useCreateAbsence();
   const uploadDocMutation = useUploadAbsenceDocument();
   const updateMutation = useUpdateAbsence();
 
@@ -164,45 +145,6 @@ export default function StaffAbsenceDetail() {
       </Badge>
     );
   };
-
-  // Submeter novo registo de ausência
-  async function handleCreateAbsence(e: React.FormEvent) {
-    e.preventDefault();
-    if (!modalTypeId || !modalStartDate) {
-      notify.warning("Preencha o tipo de ausência e a data de início.");
-      return;
-    }
-
-    const assistantId = user.assistant_id || user.id;
-    if (!assistantId) {
-      notify.error("Assistente não identificado.");
-      return;
-    }
-
-    try {
-      await createMutation.mutateAsync({
-        assistant_id: assistantId,
-        absence_type_id: modalTypeId,
-        valid_from: modalStartDate,
-        valid_until: modalEndDate || modalStartDate,
-        start_time: modalIsPartial ? modalStartTime : undefined,
-        end_time: modalIsPartial ? modalEndTime : undefined,
-        justification: modalJustification.trim() || undefined,
-        document: modalFile,
-      });
-
-      setIsRegisterModalOpen(false);
-      setModalTypeId("");
-      setModalStartDate("");
-      setModalEndDate("");
-      setModalIsPartial(false);
-      setModalJustification("");
-      setModalFile(null);
-      await refetch();
-    } catch {
-      // Erro tratado pelo hook
-    }
-  }
 
   // Submeter atualização / substituição de ficheiro na ausência pendente
   async function handleUpdateJustification() {
@@ -654,18 +596,10 @@ export default function StaffAbsenceDetail() {
         <div>
           <h2 className="text-xl font-semibold text-foreground">Ausências</h2>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-            Histórico, registo e justificação de faltas e ausências.
+            Histórico e justificação das suas faltas e ausências.
           </p>
         </div>
 
-        <Button
-          type="button"
-          onClick={() => setIsRegisterModalOpen(true)}
-          className="gap-2 text-xs font-semibold w-full sm:w-auto"
-        >
-          <Plus size={15} />
-          <span>Registar Ausência</span>
-        </Button>
       </div>
 
       {/* Barra de Filtros por Estado */}
@@ -920,199 +854,6 @@ export default function StaffAbsenceDetail() {
             })}
           </div>
         </>
-      )}
-
-      {/* ==========================================
-          MODAL DE REGISTO DE AUSÊNCIA
-         ========================================== */}
-      {isRegisterModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-card w-full max-w-lg rounded-2xl border border-border shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <h3 className="text-base font-semibold text-foreground">
-                Registar Ausência
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsRegisterModalOpen(false)}
-                className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <form
-              onSubmit={handleCreateAbsence}
-              className="p-5 space-y-4 overflow-y-auto flex-1"
-            >
-              {/* Tipo de Ausência */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground">
-                  Tipo de Ausência *
-                </label>
-                <select
-                  required
-                  value={modalTypeId}
-                  onChange={(e) => setModalTypeId(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  <option value="">Selecione o tipo de ausência...</option>
-                  {absenceTypes.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                      {t.requires_document ? " (Exige comprovativo)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Datas de Início e Fim */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground">
-                    Data de Início *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={modalStartDate}
-                    onChange={(e) => setModalStartDate(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground">
-                    Data de Fim (Opcional)
-                  </label>
-                  <input
-                    type="date"
-                    min={modalStartDate || undefined}
-                    value={modalEndDate}
-                    onChange={(e) => setModalEndDate(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
-                </div>
-              </div>
-
-              {/* Horário Parcial */}
-              <div className="space-y-2 pt-1">
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-foreground">
-                  <input
-                    type="checkbox"
-                    checked={modalIsPartial}
-                    onChange={(e) => setModalIsPartial(e.target.checked)}
-                    className="rounded border-border text-primary focus:ring-primary"
-                  />
-                  <span>Ausência em período parcial (apenas algumas horas)</span>
-                </label>
-
-                {modalIsPartial && (
-                  <div className="grid grid-cols-2 gap-3 pl-5 pt-1">
-                    <div className="space-y-1">
-                      <span className="text-[10px] text-muted-foreground">
-                        Hora Início
-                      </span>
-                      <input
-                        type="time"
-                        value={modalStartTime}
-                        onChange={(e) => setModalStartTime(e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[10px] text-muted-foreground">
-                        Hora Fim
-                      </span>
-                      <input
-                        type="time"
-                        value={modalEndTime}
-                        onChange={(e) => setModalEndTime(e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Justificação / Motivo */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground">
-                  Justificação / Observações
-                </label>
-                <textarea
-                  value={modalJustification}
-                  onChange={(e) => setModalJustification(e.target.value)}
-                  rows={3}
-                  placeholder="Explique sucintamente o motivo da ausência..."
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-input-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
-                />
-              </div>
-
-              {/* Documento Comprovativo */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground">
-                  Documento Comprovativo (PDF, JPG, PNG até 5MB)
-                </label>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-dashed border-border hover:border-primary cursor-pointer transition-colors bg-muted/10 flex-1 truncate">
-                    <Upload
-                      size={14}
-                      className="text-muted-foreground flex-shrink-0"
-                    />
-                    <span className="text-xs text-muted-foreground flex-1 truncate">
-                      {modalFile
-                        ? `${modalFile.name} (${Math.round(
-                            modalFile.size / 1024
-                          )} KB)`
-                        : "Clique para anexar ficheiro..."}
-                    </span>
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) setModalFile(f);
-                      }}
-                    />
-                  </label>
-                  {modalFile && (
-                    <button
-                      type="button"
-                      onClick={() => setModalFile(null)}
-                      className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-destructive transition-colors"
-                      title="Remover ficheiro"
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Botões do Formulário */}
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsRegisterModalOpen(false)}
-                  className="text-xs"
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending}
-                  className="text-xs gap-1.5"
-                >
-                  {createMutation.isPending && (
-                    <Loader2 size={13} className="animate-spin" />
-                  )}
-                  <span>Registar Ausência</span>
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
       )}
     </div>
   );
