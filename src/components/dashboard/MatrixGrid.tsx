@@ -40,7 +40,6 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import PrintScheduleModal, {
-  exportDailyScheduleToCsv,
   PrintableAssistantSchedule,
   PrintableAbsentAssistant,
 } from "./PrintScheduleModal";
@@ -1958,31 +1957,6 @@ function paintSlot(aid: EntityId, slot: number) {
       shiftBounds: item.shiftBounds,
     }));
   }, [absentAssistants]);
-
-  async function handleExportDayCsv() {
-    try {
-      await schedulesService.downloadExport({
-        start_date: dayInfo.isoDate,
-        end_date: dayInfo.isoDate,
-        format: "csv",
-        model: "wall",
-      });
-      notify.success(
-        "Ficheiro CSV da escala diária descarregado com sucesso.",
-        "Escala Exportada"
-      );
-    } catch (err: any) {
-      const backendMsg = err?.backendMessage || err?.response?.data?.message;
-      if (backendMsg) {
-        notify.warning(backendMsg, "Escala Não Publicada");
-        return;
-      }
-      notify.error(
-        "Não foi possível exportar o ficheiro CSV.",
-        "Erro na Exportação"
-      );
-    }
-  }
 
   function renderWorkingAssistantRow(assistant: (typeof activeAssistants)[0]) {
 
