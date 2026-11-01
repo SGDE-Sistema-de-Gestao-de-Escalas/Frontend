@@ -27,6 +27,7 @@ import type {
   AssistantScheduleProfileApi,
   AssistantExceptionApi,
 } from "../../types/assistantSchedule.types";
+import { useAuth } from "../../context/AuthContext";
 import schedulesService, {
   type LunchBlockApi,
 } from "../../api/services/schedules.service";
@@ -745,6 +746,11 @@ export default function PrintScheduleModal({
   exceptionsByAssistant = {},
   lunchBlocksByDate = {},
 }: PrintScheduleModalProps) {
+  const { role } = useAuth();
+  if (role !== 'admin') {
+    return null;
+  }
+
   const [startDate, setStartDate] = useState<string>(dateInfo.isoDate);
   const [endDate, setEndDate] = useState<string>(dateInfo.isoDate);
   const [docModel, setDocModel] = useState<"wall" | "individual" | "monthly">(
@@ -1772,6 +1778,15 @@ export default function PrintScheduleModal({
       );
       onClose();
     } catch (err: any) {
+      if (err?.httpStatus === 403 || err?.response?.status === 403) {
+        notify.error(
+          "Apenas administradores têm permissão para imprimir e exportar escalas.",
+          "Acesso Negado"
+        );
+        onClose();
+        return;
+      }
+
       const backendMsg =
         err?.backendMessage ||
         err?.response?.data?.message ||
