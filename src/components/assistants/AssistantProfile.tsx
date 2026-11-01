@@ -1593,33 +1593,16 @@ export default function AssistantProfile({
 
       {/* ── Horários & Escalas tab ── */}
       {activeTab === "history" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-card">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-lg bg-primary/10 text-primary">
-                <Clock size={18} />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">
-                  Gestão de Horários & Vigências
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Consulte os turnos agendados e configure o horário padrão de funcionamento do assistente.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveTab("schedule")}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
-            >
-              <Clock size={13} />
-              Gerir Horários do Assistente
-            </button>
-          </div>
-
-          <ProfileScheduleHistory assistantId={assistantId} />
-        </div>
+        <ProfileScheduleHistory
+          assistantId={assistantId}
+          assistantName={
+            assistant?.name ||
+            (assistant?.first_name
+              ? `${assistant.first_name} ${assistant.last_name || ""}`.trim()
+              : undefined)
+          }
+          schoolId={assistant?.school_id}
+        />
       )}
 
       {/* Modal: Confirmar Alteração de Estado (Inativar / Ativar) */}
