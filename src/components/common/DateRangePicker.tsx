@@ -163,6 +163,23 @@ export default function DateRangePicker({
     [decadeStart]
   );
 
+  const minYear = minDate ? parseInt(minDate.split("-")[0], 10) : undefined;
+  const maxYear = maxDate ? parseInt(maxDate.split("-")[0], 10) : undefined;
+  const minMonth = minDate && minYear === viewYear ? parseInt(minDate.split("-")[1], 10) - 1 : undefined;
+  const maxMonth = maxDate && maxYear === viewYear ? parseInt(maxDate.split("-")[1], 10) - 1 : undefined;
+
+  function isYearDisabled(yr: number): boolean {
+    if (minYear !== undefined && yr < minYear) return true;
+    if (maxYear !== undefined && yr > maxYear) return true;
+    return false;
+  }
+
+  function isMonthDisabled(mo: number): boolean {
+    if (minMonth !== undefined && mo < minMonth) return true;
+    if (maxMonth !== undefined && mo > maxMonth) return true;
+    return false;
+  }
+
   function checkDateDisabled(isoDate: string): boolean {
     if (minDate && isoDate < minDate) return true;
     if (maxDate && isoDate > maxDate) return true;
@@ -171,6 +188,11 @@ export default function DateRangePicker({
   }
 
   function prevMonth() {
+    if (minYear !== undefined && minMonth !== undefined) {
+      if (viewYear < minYear || (viewYear === minYear && viewMonth <= minMonth)) {
+        return;
+      }
+    }
     if (viewMonth === 0) {
       setViewMonth(11);
       setViewYear((y) => y - 1);
@@ -304,63 +326,63 @@ export default function DateRangePicker({
 
   // Presets definition
   const presets = useMemo(() => {
-    if (customPresets) {
-      return customPresets;
-    }
-
-    const t = new Date();
-    const todayIso = toIso(t);
-
-    if (selectWeekOnly) {
-      // Week-specific presets (allowing 1 or multiple weeks)
+    const rawList = (() => {
+      if (customPresets) return customPresets;
+      const t = new Date();
+      const todayIso = toIso(t);
+      if (selectWeekOnly) {
+        const thisMon = toIso(getMondayOfDate(t));
+        const thisSun = toIso(getSundayOfDate(t));
+        const nextMonDate = new Date(t);
+        nextMonDate.setDate(t.getDate() + 7);
+        const nextMon = toIso(getMondayOfDate(nextMonDate));
+        const nextSun = toIso(getSundayOfDate(nextMonDate));
+        const next2SunDate = new Date(t);
+        next2SunDate.setDate(t.getDate() + 13);
+        const next2Sun = toIso(getSundayOfDate(next2SunDate));
+        const lastMonDate = new Date(t);
+        lastMonDate.setDate(t.getDate() - 7);
+        const lastMon = toIso(getMondayOfDate(lastMonDate));
+        const lastSun = toIso(getSundayOfDate(lastMonDate));
+        return [
+          { label: "Esta Semana", start: thisMon, end: thisSun },
+          { label: "Próxima Semana", start: nextMon, end: nextSun },
+          { label: "Próximas 2 Semanas", start: thisMon, end: next2Sun },
+          { label: "Semana Passada", start: lastMon, end: lastSun },
+        ];
+      }
       const thisMon = toIso(getMondayOfDate(t));
       const thisSun = toIso(getSundayOfDate(t));
-
-      const nextMonDate = new Date(t);
-      nextMonDate.setDate(t.getDate() + 7);
-      const nextMon = toIso(getMondayOfDate(nextMonDate));
-      const nextSun = toIso(getSundayOfDate(nextMonDate));
-
-      const next2SunDate = new Date(t);
-      next2SunDate.setDate(t.getDate() + 13);
-      const next2Sun = toIso(getSundayOfDate(next2SunDate));
-
       const lastMonDate = new Date(t);
       lastMonDate.setDate(t.getDate() - 7);
       const lastMon = toIso(getMondayOfDate(lastMonDate));
       const lastSun = toIso(getSundayOfDate(lastMonDate));
-
+      const firstDayMonth = toIso(new Date(t.getFullYear(), t.getMonth(), 1));
+      const lastDayMonth = toIso(new Date(t.getFullYear(), t.getMonth() + 1, 0));
+      const firstDayLastMonth = toIso(new Date(t.getFullYear(), t.getMonth() - 1, 1));
+      const lastDayLastMonth = toIso(new Date(t.getFullYear(), t.getMonth(), 0));
       return [
+        { label: "Hoje", start: todayIso, end: todayIso },
         { label: "Esta Semana", start: thisMon, end: thisSun },
-        { label: "Próxima Semana", start: nextMon, end: nextSun },
-        { label: "Próximas 2 Semanas", start: thisMon, end: next2Sun },
         { label: "Semana Passada", start: lastMon, end: lastSun },
+        { label: "Este Mês", start: firstDayMonth, end: lastDayMonth },
+        { label: "Mês Passado", start: firstDayLastMonth, end: lastDayLastMonth },
       ];
-    }
+    })();
 
-    // Standard Range presets
-    const thisMon = toIso(getMondayOfDate(t));
-    const thisSun = toIso(getSundayOfDate(t));
-
-    const lastMonDate = new Date(t);
-    lastMonDate.setDate(t.getDate() - 7);
-    const lastMon = toIso(getMondayOfDate(lastMonDate));
-    const lastSun = toIso(getSundayOfDate(lastMonDate));
-
-    const firstDayMonth = toIso(new Date(t.getFullYear(), t.getMonth(), 1));
-    const lastDayMonth = toIso(new Date(t.getFullYear(), t.getMonth() + 1, 0));
-
-    const firstDayLastMonth = toIso(new Date(t.getFullYear(), t.getMonth() - 1, 1));
-    const lastDayLastMonth = toIso(new Date(t.getFullYear(), t.getMonth(), 0));
-
-    return [
-      { label: "Hoje", start: todayIso, end: todayIso },
-      { label: "Esta Semana", start: thisMon, end: thisSun },
-      { label: "Semana Passada", start: lastMon, end: lastSun },
-      { label: "Este Mês", start: firstDayMonth, end: lastDayMonth },
-      { label: "Mês Passado", start: firstDayLastMonth, end: lastDayLastMonth },
-    ];
-  }, [selectWeekOnly, customPresets]);
+    return rawList
+      .filter((p) => {
+        if (minDate && p.end < minDate) return false;
+        if (maxDate && p.start > maxDate) return false;
+        return true;
+      })
+      .map((p) => {
+        if (minDate && p.start < minDate) {
+          return { ...p, start: minDate };
+        }
+        return p;
+      });
+  }, [selectWeekOnly, customPresets, minDate, maxDate]);
 
   const selectedCount = draftStart && draftEnd ? daysDiff(draftStart, draftEnd) : 0;
   const isMaxDaysExceeded = Boolean(maxDays && selectedCount > maxDays);
@@ -498,12 +520,17 @@ export default function DateRangePicker({
             <div className="flex items-center justify-between mb-3">
               <button
                 type="button"
+                disabled={
+                  (viewMode === "days" && minYear !== undefined && minMonth !== undefined && (viewYear < minYear || (viewYear === minYear && viewMonth <= minMonth))) ||
+                  (viewMode === "months" && minYear !== undefined && viewYear <= minYear) ||
+                  (viewMode === "years" && minYear !== undefined && decadeStart <= minYear)
+                }
                 onClick={() => {
                   if (viewMode === "days") prevMonth();
                   else if (viewMode === "months") setViewYear((y) => y - 1);
                   else setViewYear((y) => y - 12);
                 }}
-                className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer disabled:opacity-30 disabled:pointer-events-none"
                 title="Anterior"
               >
                 <ChevronLeft size={16} />
@@ -554,10 +581,12 @@ export default function DateRangePicker({
                   const isSelected = viewMonth === idx;
                   const isCurrent =
                     today.getFullYear() === viewYear && today.getMonth() === idx;
+                  const disabled = isMonthDisabled(idx);
                   return (
                     <button
                       key={name}
                       type="button"
+                      disabled={disabled}
                       onClick={() => {
                         setViewMonth(idx);
                         setViewMode("days");
@@ -568,7 +597,7 @@ export default function DateRangePicker({
                           : isCurrent
                           ? "bg-primary/10 text-primary font-semibold hover:bg-primary/20"
                           : "text-foreground hover:bg-muted"
-                      }`}
+                      } ${disabled ? "opacity-30 cursor-not-allowed pointer-events-none" : ""}`}
                     >
                       {name}
                     </button>
@@ -583,10 +612,12 @@ export default function DateRangePicker({
                 {yearsList.map((yr) => {
                   const isSelected = viewYear === yr;
                   const isCurrent = today.getFullYear() === yr;
+                  const disabled = isYearDisabled(yr);
                   return (
                     <button
                       key={yr}
                       type="button"
+                      disabled={disabled}
                       onClick={() => {
                         setViewYear(yr);
                         setViewMode("months");
@@ -597,7 +628,7 @@ export default function DateRangePicker({
                           : isCurrent
                           ? "bg-primary/10 text-primary font-semibold hover:bg-primary/20"
                           : "text-foreground hover:bg-muted"
-                      }`}
+                      } ${disabled ? "opacity-30 cursor-not-allowed pointer-events-none" : ""}`}
                     >
                       {yr}
                     </button>

@@ -90,8 +90,11 @@ export default function RecalculateModal({
     return d.toISOString().split("T")[0];
   }, []);
 
-  const [startDate, setStartDate] = useState(initialStartDate || todayIso);
-  const [endDate, setEndDate] = useState(initialEndDate || initialStartDate || defaultEndIso);
+  const initialSafeStart = initialStartDate && initialStartDate >= todayIso ? initialStartDate : todayIso;
+  const initialSafeEnd = initialEndDate && initialEndDate >= initialSafeStart ? initialEndDate : defaultEndIso;
+
+  const [startDate, setStartDate] = useState(initialSafeStart);
+  const [endDate, setEndDate] = useState(initialSafeEnd);
   const [strategy, setStrategy] = useState<"auto" | "full">("auto");
   const [respectExceptions, setRespectExceptions] = useState(true);
   const [step, setStep] = useState<"form" | "gap" | "done">("form");
@@ -120,10 +123,39 @@ export default function RecalculateModal({
     });
   }, [existingSchedules, startDate, endDate]);
 
+  const recalcDatePresets = useMemo(() => {
+    const t = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const toIsoStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    const thisSun = new Date(t);
+    const dow = t.getDay();
+    const daysToSun = dow === 0 ? 0 : 7 - dow;
+    thisSun.setDate(t.getDate() + daysToSun);
+
+    const nextMon = new Date(t);
+    const daysToNextMon = dow === 0 ? 1 : 8 - dow;
+    nextMon.setDate(t.getDate() + daysToNextMon);
+    const nextSun = new Date(nextMon);
+    nextSun.setDate(nextMon.getDate() + 6);
+
+    const endThisMonth = new Date(t.getFullYear(), t.getMonth() + 1, 0);
+    const startNextMonth = new Date(t.getFullYear(), t.getMonth() + 1, 1);
+    const endNextMonth = new Date(t.getFullYear(), t.getMonth() + 2, 0);
+
+    return [
+      { label: "Esta Semana", start: todayIso, end: toIsoStr(thisSun) },
+      { label: "Próxima Semana", start: toIsoStr(nextMon), end: toIsoStr(nextSun) },
+      { label: "Próximas 2 Semanas", start: todayIso, end: toIsoStr(nextSun) },
+      { label: "Resto do Mês", start: todayIso, end: toIsoStr(endThisMonth) },
+      { label: "Próximo Mês", start: toIsoStr(startNextMonth), end: toIsoStr(endNextMonth) },
+    ];
+  }, [todayIso]);
+
   useEffect(() => {
     if (open) {
-      const defaultStart = initialStartDate || todayIso;
-      const defaultEnd = initialEndDate || initialStartDate || defaultStart;
+      const defaultStart = initialStartDate && initialStartDate >= todayIso ? initialStartDate : todayIso;
+      const defaultEnd = initialEndDate && initialEndDate >= defaultStart ? initialEndDate : (defaultEndIso >= defaultStart ? defaultEndIso : defaultStart);
       setStartDate(defaultStart);
       setEndDate(defaultEnd);
       setStep("form");
@@ -132,7 +164,7 @@ export default function RecalculateModal({
       setSelectedSubstituteId(null);
       setDateErrors({});
     }
-  }, [open, initialStartDate, initialEndDate, todayIso]);
+  }, [open, initialStartDate, initialEndDate, todayIso, defaultEndIso]);
 
   // Resultado real devolvido pelo motor do Backend
   const [generationResult, setGenerationResult] =
@@ -343,6 +375,8 @@ export default function RecalculateModal({
     const errors: { start?: string; end?: string; api?: string } = {};
     if (!startDate) {
       errors.start = "A data de início é obrigatória.";
+    } else if (startDate < todayIso) {
+      errors.start = "Não é permitido gerar horários para datas passadas.";
     }
     if (!endDate) {
       errors.end = "A data de fim é obrigatória.";
@@ -693,11 +727,15 @@ export default function RecalculateModal({
                 </label>
                 <DateRangePicker
                   value={{ startDate, endDate }}
+                  minDate={todayIso}
+                  customPresets={recalcDatePresets}
                   hasError={!!dateErrors.start || !!dateErrors.end || !!dateErrors.api}
                   allowClear={false}
                   onChange={(range) => {
-                    setStartDate(range.startDate);
-                    setEndDate(range.endDate);
+                    const nextStart = range.startDate && range.startDate < todayIso ? todayIso : range.startDate;
+                    const nextEnd = range.endDate && range.endDate < nextStart ? nextStart : range.endDate;
+                    setStartDate(nextStart);
+                    setEndDate(nextEnd);
                     if (dateErrors.start || dateErrors.end || dateErrors.api) {
                       setDateErrors({});
                     }
