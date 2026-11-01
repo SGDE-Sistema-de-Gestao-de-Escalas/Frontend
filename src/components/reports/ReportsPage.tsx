@@ -1,9 +1,13 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   AlertCircle,
   AlertTriangle,
+  CheckCircle2,
   Download,
   Inbox,
+  Loader2,
+  Printer,
+  Users,
   UserX,
 } from "lucide-react";
 import {
@@ -20,59 +24,125 @@ import {
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import DateRangePicker, { type DateRange } from "../common/DateRangePicker";
-import {
-  REPORTS_COVERAGE,
-  REPORTS_ALERTS,
-  REPORTS_ABSENCE_TYPES,
-  REPORTS_ABSENCES,
-  assistants as ASSISTANTS,
-} from "../../api/mockData";
+import { useReports } from "../../hooks/api/useReports";
+import { useSchool } from "../../context/SchoolContext";
+
+function getSchoolYearStartIso(refDate: Date = new Date()): string {
+  const y = refDate.getFullYear();
+  const m = refDate.getMonth(); // 0 = Jan ... 8 = Sep
+  const startYear = m >= 8 ? y : y - 1;
+  return `${startYear}-09-01`;
+}
+
+function getTodayIso(refDate: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${refDate.getFullYear()}-${pad(refDate.getMonth() + 1)}-${pad(refDate.getDate())}`;
+}
+
+const PIE_COLORS = [
+  "#2563EB", // Primary Blue
+  "#D97706", // Amber
+  "#0E7C59", // Emerald
+  "#C8291A", // Red
+  "#7C3AED", // Purple
+  "#DB2777", // Pink
+  "#0891B2", // Cyan
+  "#475569", // Slate
+];
 
 export default function ReportsPage() {
-  const [dateRange, setDateRange] = useState<DateRange>({
-    startDate: "2026-01-01",
-    endDate: "2026-01-31",
-  });
-  const totalAbsenceDays = REPORTS_ABSENCES.reduce((s, r) => s + r.days, 0);
-  const pendingCount = REPORTS_ABSENCES.filter(
-    (r) => r.status === "pending"
-  ).length;
-  const coverageAlerts = REPORTS_ALERTS.reduce((s, r) => s + r.alerts, 0);
-  const activeExceptions = ASSISTANTS.filter(
-    (a) => a.exception !== null
-  ).length;
+  const { selectedSchool } = useSchool();
 
+  // O valor default deste DateRangePicker e desde o dia 1 do ultimo setembro ate hoje (ano letivo atual)
+  const defaultRange = useMemo<DateRange>(() => {
+    return {
+      startDate: getSchoolYearStartIso(),
+      endDate: getTodayIso(),
+    };
+  }, []);
+
+  const [dateRange, setDateRange] = useState<DateRange>(defaultRange);
+  const [activeTab, setActiveTab] = useState<"overview" | "workload">("overview");
+
+  // Presets especificos para relatorios executivos de gestao escolar
+  const reportPresets = useMemo(() => {
+    const t = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const toIso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    const schoolYearStart = getSchoolYearStartIso(t);
+    const todayStr = toIso(t);
+
+    const firstThisMonth = toIso(new Date(t.getFullYear(), t.getMonth(), 1));
+    const lastThisMonth = toIso(new Date(t.getFullYear(), t.getMonth() + 1, 0));
+
+    const firstLastMonth = toIso(new Date(t.getFullYear(), t.getMonth() - 1, 1));
+    const lastLastMonth = toIso(new Date(t.getFullYear(), t.getMonth(), 0));
+
+    const last30Days = new Date(t);
+    last30Days.setDate(t.getDate() - 30);
+
+    const last90Days = new Date(t);
+    last90Days.setDate(t.getDate() - 90);
+
+    return [
+      { label: "Ano Letivo (Desde 1 Set)", start: schoolYearStart, end: todayStr },
+      { label: "Este Mês", start: firstThisMonth, end: lastThisMonth },
+      { label: "Mês Passado", start: firstLastMonth, end: lastLastMonth },
+      { label: "Últimos 30 Dias", start: toIso(last30Days), end: todayStr },
+      { label: "Últimos 90 Dias", start: toIso(last90Days), end: todayStr },
+    ];
+  }, []);
+
+  // Consulta da API real do Backend
+  const { data: reportData, isLoading, error } = useReports(
+    dateRange.startDate,
+    dateRange.endDate
+  );
+
+  const summary = reportData?.summary;
+  const coverageRate = summary?.coverage_rate ?? null;
+  const totalRequiredHours = Math.round((summary?.required_minutes ?? 0) / 60);
+  const totalCoveredHours = Math.round((summary?.covered_minutes ?? 0) / 60);
+  const totalUncoveredHours = Math.round((summary?.uncovered_minutes ?? 0) / 60);
+  const totalAbsenceHours = Math.round((summary?.absence_minutes ?? 0) / 60);
+
+  // Cards de KPI
   const kpis = [
     {
+      label: "Taxa de Cobertura",
+      value: coverageRate !== null ? `${coverageRate}%` : "—",
+      sub: `${totalCoveredHours}h de ${totalRequiredHours}h necessárias`,
+      icon: <CheckCircle2 size={16} />,
+      variant:
+        coverageRate === null
+          ? ("muted" as const)
+          : coverageRate >= 95
+          ? ("success" as const)
+          : coverageRate >= 80
+          ? ("warning" as const)
+          : ("danger" as const),
+    },
+    {
       label: "Alertas de Cobertura",
-      value: String(coverageAlerts),
-      sub: "acumulado 5 meses",
+      value: String(summary?.total_gaps_count ?? 0),
+      sub: `${totalUncoveredHours}h a descoberto no período`,
       icon: <AlertCircle size={16} />,
-      variant: "danger" as const,
+      variant: (summary?.total_gaps_count ?? 0) > 0 ? ("danger" as const) : ("success" as const),
     },
     {
       label: "Ausências Pendentes",
-      value: String(pendingCount),
-      sub: "aguardam aprovação",
+      value: String(summary?.pending_absences_count ?? 0),
+      sub: "aguardam aprovação / validação",
       icon: <Inbox size={16} />,
-      variant: pendingCount > 0 ? ("warning" as const) : ("success" as const),
+      variant: (summary?.pending_absences_count ?? 0) > 0 ? ("warning" as const) : ("success" as const),
     },
     {
-      label: "Dias Ausentes — Jan",
-      value: String(totalAbsenceDays),
-      sub: `${
-        REPORTS_ABSENCES.filter((r) => r.days > 0).length
-      } assistentes afetados`,
+      label: "Horas de Ausência",
+      value: `${totalAbsenceHours}h`,
+      sub: `${summary?.affected_assistants ?? 0} assistentes afetados`,
       icon: <UserX size={16} />,
       variant: "muted" as const,
-    },
-    {
-      label: "Exceções Activas",
-      value: String(activeExceptions),
-      sub: "horários especiais",
-      icon: <AlertTriangle size={16} />,
-      variant:
-        activeExceptions > 2 ? ("warning" as const) : ("success" as const),
     },
   ];
 
@@ -99,352 +169,696 @@ export default function ReportsPage() {
     },
   };
 
+  // 1. Dados do Gráfico de Cobertura Diária / Semanal
+  const coverageChartData = useMemo(() => {
+    if (!reportData?.daily_coverage) return [];
+    const openDays = reportData.daily_coverage.filter((d) => d.is_open);
+
+    // Se o período for longo (> 31 dias), agrupamos por semana para o gráfico ficar legível
+    if (openDays.length > 31) {
+      const weeksMap: Record<
+        string,
+        { label: string; covered: number; required: number; gap: number }
+      > = {};
+
+      openDays.forEach((d) => {
+        // Obter início da semana do dia
+        const dt = new Date(d.date + "T12:00:00");
+        const dow = (dt.getDay() + 6) % 7;
+        const mon = new Date(dt);
+        mon.setDate(dt.getDate() - dow);
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const weekKey = `${mon.getFullYear()}-${pad(mon.getMonth() + 1)}-${pad(mon.getDate())}`;
+        const weekLabel = `Sem ${pad(mon.getDate())}/${pad(mon.getMonth() + 1)}`;
+
+        if (!weeksMap[weekKey]) {
+          weeksMap[weekKey] = { label: weekLabel, covered: 0, required: 0, gap: 0 };
+        }
+        weeksMap[weekKey].covered += d.covered_minutes;
+        weeksMap[weekKey].required += d.required_minutes;
+        weeksMap[weekKey].gap += d.uncovered_minutes;
+      });
+
+      return Object.values(weeksMap).map((w) => ({
+        name: w.label,
+        coveredHours: Math.round((w.covered / 60) * 10) / 10,
+        requiredHours: Math.round((w.required / 60) * 10) / 10,
+        gapHours: Math.round((w.gap / 60) * 10) / 10,
+        hasDeficit: w.gap > 0,
+      }));
+    }
+
+    // Período mais curto (até 31 dias): mostra dia a dia
+    const dayNames = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+    return openDays.map((d) => {
+      const parts = d.date.split("-");
+      const dayNum = parts[2];
+      const monNum = parts[1];
+      const dowLabel = dayNames[d.day_of_week] || "";
+      const label = `${dowLabel} ${dayNum}/${monNum}`;
+
+      return {
+        name: label,
+        date: d.date,
+        coveredHours: Math.round((d.covered_minutes / 60) * 10) / 10,
+        requiredHours: Math.round((d.required_minutes / 60) * 10) / 10,
+        gapHours: Math.round((d.uncovered_minutes / 60) * 10) / 10,
+        hasDeficit: d.uncovered_minutes > 0,
+      };
+    });
+  }, [reportData?.daily_coverage]);
+
+  // 2. Dados do Gráfico de Incumprimentos / Alertas por Mês
+  const alertsChartData = useMemo(() => {
+    if (!reportData?.coverage_gaps) return [];
+    const gaps = reportData.coverage_gaps;
+    const monthNames = [
+      "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+      "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+    ];
+
+    const monthsMap: Record<string, { month: string; alerts: number; hours: number }> = {};
+    gaps.forEach((g) => {
+      const parts = g.date.split("-");
+      const y = parts[0];
+      const m = parseInt(parts[1], 10) - 1;
+      const key = `${y}-${m}`;
+      const label = `${monthNames[m]} ${y.slice(2)}`;
+
+      if (!monthsMap[key]) {
+        monthsMap[key] = { month: label, alerts: 0, hours: 0 };
+      }
+      monthsMap[key].alerts += 1;
+      monthsMap[key].hours += Math.round((g.uncovered_minutes / 60) * 10) / 10;
+    });
+
+    const entries = Object.values(monthsMap);
+    if (entries.length === 0) {
+      return [{ month: "Sem Alertas", alerts: 0, hours: 0 }];
+    }
+    return entries;
+  }, [reportData?.coverage_gaps]);
+
+  // 3. Dados de Ausências por Tipo para o PieChart
+  const absenceTypesData = useMemo(() => {
+    if (!reportData?.absences_by_type) return [];
+    return reportData.absences_by_type.map((t, idx) => ({
+      type: t.name || "Outra",
+      minutes: t.absence_minutes,
+      hours: Math.round(t.absence_minutes / 60),
+      days: Math.round((t.absence_minutes / 60 / 7) * 10) / 10,
+      color: PIE_COLORS[idx % PIE_COLORS.length],
+    }));
+  }, [reportData?.absences_by_type]);
+
+  const totalAbsencePieHours = useMemo(
+    () => absenceTypesData.reduce((s, t) => s + t.hours, 0),
+    [absenceTypesData]
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      {/* Cabeçalho com Título, Seletor de Período e Botão de Exportar */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">Relatórios</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-semibold text-foreground">Relatórios Executivos</h2>
+            {selectedSchool && (
+              <Badge variant="outline" className="text-xs">
+                {selectedSchool.name}
+              </Badge>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Cobertura, absentismo e exceções — Janeiro 2026
+            Análise de cobertura horária, absentismo, défices de escala e carga horária
           </p>
         </div>
+
         <div className="flex items-center gap-2 flex-wrap">
           <DateRangePicker
             value={dateRange}
-            onChange={setDateRange}
+            customPresets={reportPresets}
+            allowClear={false}
+            onChange={(range) => {
+              if (range.startDate && range.endDate) {
+                setDateRange(range);
+              }
+            }}
             className="w-[280px]"
           />
           <button
             type="button"
-            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            onClick={() => window.print()}
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-card hover:bg-muted shadow-2xs"
+            title="Imprimir ou exportar relatório em PDF"
           >
-            <Download size={13} />
+            <Printer size={13} />
             Exportar PDF
           </button>
         </div>
       </div>
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {kpis.map((k) => {
-          const s = variantStyles[k.variant];
-          return (
-            <Card key={k.label} className="p-4">
-              <div
-                className={`w-8 h-8 rounded-lg ${s.bg} flex items-center justify-center mb-3 ${s.icon}`}
-              >
-                {k.icon}
-              </div>
-              <p className="text-2xl font-semibold font-mono text-foreground">
-                {k.value}
-              </p>
-              <p className="text-xs font-medium text-foreground mt-0.5">
-                {k.label}
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                {k.sub}
-              </p>
-            </Card>
-          );
-        })}
-      </div>
+      {/* Indicador de Carregamento Global */}
+      {isLoading && (
+        <div className="p-12 text-center text-xs text-muted-foreground flex items-center justify-center gap-2 bg-card border border-border rounded-xl">
+          <Loader2 size={16} className="animate-spin text-primary" />
+          <span>A carregar métricas de relatórios para o período selecionado...</span>
+        </div>
+      )}
 
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Coverage vs minimum this week */}
-        <Card className="p-4">
-          <h3 className="text-sm font-semibold text-foreground mb-0.5">
-            Cobertura Diária vs Mínimo
-          </h3>
-          <p className="text-xs text-muted-foreground mb-4">
-            Semana de 27 Jan — vermelho indica incumprimento
-          </p>
-          <div style={{ height: 190 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={REPORTS_COVERAGE}
-                barGap={4}
-                barCategoryGap="30%"
-              >
-                <XAxis
-                  dataKey="day"
-                  tick={{ fontSize: 10, fill: "#5A6478" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 10, fill: "#5A6478" }}
-                  axisLine={false}
-                  tickLine={false}
-                  domain={[0, 13]}
-                />
-                <Tooltip
-                  contentStyle={{
-                    fontSize: 11,
-                    borderRadius: 8,
-                    border: "1px solid #E8EBF2",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                  }}
-                  formatter={(v: any, name: any) => [
-                    v,
-                    name === "present" ? "Presentes" : "Mínimo",
-                  ]}
-                />
-                <Bar
-                  key="bar-present"
-                  dataKey="present"
-                  radius={[4, 4, 0, 0]}
-                  name="present"
-                >
-                  {REPORTS_COVERAGE.map((e, i) => (
-                    <Cell
-                      key={`cov-${i}`}
-                      fill={e.present < e.min ? "#C8291A" : "#1A56DB"}
-                    />
-                  ))}
-                </Bar>
-                <Bar
-                  key="bar-min"
-                  dataKey="min"
-                  fill="#E8EBF2"
-                  radius={[4, 4, 0, 0]}
-                  name="min"
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
+      {/* Erro de Carregamento */}
+      {error && !isLoading && (
+        <div className="p-4 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive text-xs flex items-center gap-2.5">
+          <AlertCircle size={16} className="shrink-0" />
+          <span>
+            Não foi possível carregar os dados do relatório. Verifique se tem uma escola ativa selecionada.
+          </span>
+        </div>
+      )}
 
-        {/* Coverage alerts per month */}
-        <Card className="p-4">
-          <h3 className="text-sm font-semibold text-foreground mb-0.5">
-            Alertas de Cobertura Insuficiente
-          </h3>
-          <p className="text-xs text-muted-foreground mb-4">
-            Número de incumprimentos detectados por mês
-          </p>
-          <div style={{ height: 190 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={REPORTS_ALERTS} barCategoryGap="40%">
-                <XAxis
-                  dataKey="month"
-                  tick={{ fontSize: 10, fill: "#5A6478" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 10, fill: "#5A6478" }}
-                  axisLine={false}
-                  tickLine={false}
-                  domain={[0, 8]}
-                />
-                <Tooltip
-                  contentStyle={{
-                    fontSize: 11,
-                    borderRadius: 8,
-                    border: "1px solid #E8EBF2",
-                  }}
-                  formatter={(v: any) => [v, "Alertas"]}
-                />
-                <Bar key="bar-alerts" dataKey="alerts" radius={[4, 4, 0, 0]}>
-                  {REPORTS_ALERTS.map((e, i) => (
-                    <Cell
-                      key={`alert-${i}`}
-                      fill={
-                        e.alerts >= 5
-                          ? "#C8291A"
-                          : e.alerts >= 3
-                          ? "#D97706"
-                          : "#1A56DB"
-                      }
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          {/* Legend */}
-          <div className="flex items-center gap-4 mt-3">
-            {[
-              { color: "#C8291A", label: "Crítico (≥5)" },
-              { color: "#D97706", label: "Atenção (3–4)" },
-              { color: "#1A56DB", label: "Normal (<3)" },
-            ].map((l) => (
-              <div key={l.label} className="flex items-center gap-1.5">
-                <div
-                  className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-                  style={{ backgroundColor: l.color }}
-                />
-                <span className="text-[10px] text-muted-foreground">
-                  {l.label}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-
-      {/* Absence types + table */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Absence by type */}
-        <Card className="p-4">
-          <h3 className="text-sm font-semibold text-foreground mb-0.5">
-            Ausências por Tipo
-          </h3>
-          <p className="text-xs text-muted-foreground mb-3">
-            Total de dias — Jan 2026
-          </p>
-          <div style={{ height: 160 }} className="mb-3">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  key="pie-types"
-                  data={REPORTS_ABSENCE_TYPES}
-                  dataKey="count"
-                  nameKey="type"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={45}
-                  outerRadius={70}
-                  paddingAngle={3}
-                >
-                  {REPORTS_ABSENCE_TYPES.map((e, i) => (
-                    <Cell key={`type-${i}`} fill={e.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    fontSize: 11,
-                    borderRadius: 8,
-                    border: "1px solid #E8EBF2",
-                  }}
-                  formatter={(v: any, name: any) => [`${v} dias`, name]}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="space-y-1.5">
-            {REPORTS_ABSENCE_TYPES.map((t) => (
-              <div key={t.type} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+      {/* Conteúdo Principal quando Carregado */}
+      {!isLoading && reportData && (
+        <>
+          {/* Cartões de KPI */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {kpis.map((k) => {
+              const s = variantStyles[k.variant];
+              return (
+                <Card key={k.label} className="p-4 shadow-2xs">
                   <div
-                    className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-                    style={{ backgroundColor: t.color }}
-                  />
-                  <span className="text-xs text-muted-foreground">{t.type}</span>
-                </div>
-                <span className="text-xs font-mono font-semibold text-foreground">
-                  {t.count}d
-                </span>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {/* Absence table */}
-        <Card className="lg:col-span-2 overflow-hidden">
-          <div className="px-4 py-3 border-b border-border">
-            <h3 className="text-sm font-semibold text-foreground">
-              Ausências por Assistente — Jan 2026
-            </h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/20">
-                  {[
-                    "Assistente",
-                    "Tipo",
-                    "Dias",
-                    "Estado",
-                    "Cobertura",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {REPORTS_ABSENCES.map((r, i) => (
-                  <tr
-                    key={i}
-                    className="border-b border-border/50 hover:bg-muted/20 transition-colors"
+                    className={`w-8 h-8 rounded-lg ${s.bg} flex items-center justify-center mb-3 ${s.icon}`}
                   >
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <span className="text-[10px] font-bold text-primary font-mono">
-                            {r.initials}
-                          </span>
-                        </div>
-                        <span className="text-sm font-medium text-foreground whitespace-nowrap">
-                          {r.name}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-                      {r.type}
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-xs font-semibold text-foreground">
-                      {r.days > 0 ? `${r.days}d` : "—"}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {r.status === "approved" && (
-                        <Badge
-                          variant="outline"
-                          className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                        >
-                          Aprovada
-                        </Badge>
-                      )}
-                      {r.status === "pending" && (
-                        <Badge
-                          variant="outline"
-                          className="bg-amber-500/10 text-amber-600 border-amber-500/20"
-                        >
-                          Pendente
-                        </Badge>
-                      )}
-                      {r.status === "rejected" && (
-                        <Badge
-                          variant="outline"
-                          className="bg-destructive/10 text-destructive border-destructive/20"
-                        >
-                          Rejeitada
-                        </Badge>
-                      )}
-                      {r.status === "none" && (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Badge
-                        variant="outline"
-                        className={
-                          r.coverage === "impacto alto"
-                            ? "bg-destructive/10 text-destructive border-destructive/20"
-                            : r.coverage === "impacto médio"
-                            ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
-                            : r.coverage === "impacto baixo"
-                            ? "bg-muted text-muted-foreground border-border"
-                            : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                        }
-                      >
-                        {r.coverage}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    {k.icon}
+                  </div>
+                  <p className="text-2xl font-semibold font-mono text-foreground">
+                    {k.value}
+                  </p>
+                  <p className="text-xs font-medium text-foreground mt-0.5">
+                    {k.label}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {k.sub}
+                  </p>
+                </Card>
+              );
+            })}
           </div>
-        </Card>
-      </div>
+
+          {/* Abas de Navegação entre Visão Geral e Carga Horária */}
+          <div className="flex items-center gap-2 border-b border-border pb-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab("overview")}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-t-lg transition-colors cursor-pointer border-b-2 ${
+                activeTab === "overview"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Visão Geral e Cobertura
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("workload")}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-t-lg transition-colors cursor-pointer border-b-2 ${
+                activeTab === "workload"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Carga Horária por Assistente ({reportData.workload_by_assistant?.length ?? 0})
+            </button>
+          </div>
+
+          {activeTab === "overview" && (
+            <>
+              {/* Linha dos 2 Primeiros Gráficos */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* 1. Cobertura vs Mínimo */}
+                <Card className="p-4 shadow-2xs">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Cumprimento de Horas Necessárias
+                    </h3>
+                    <span className="text-[11px] text-muted-foreground font-mono">
+                      {coverageChartData.length > 31 ? "Agrupado por Semana" : "Dias de Funcionamento"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Horas cumpridas vs horas mínimas obrigatórias no período
+                  </p>
+                  <div style={{ height: 210 }}>
+                    {coverageChartData.length === 0 ? (
+                      <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
+                        Nenhum dia de funcionamento aberto encontrado no período.
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={coverageChartData}
+                          barGap={3}
+                          barCategoryGap={coverageChartData.length > 20 ? "15%" : "30%"}
+                        >
+                          <XAxis
+                            dataKey="name"
+                            tick={{ fontSize: 9, fill: "#5A6478" }}
+                            axisLine={false}
+                            tickLine={false}
+                            interval={coverageChartData.length > 20 ? 1 : 0}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 10, fill: "#5A6478" }}
+                            axisLine={false}
+                            tickLine={false}
+                            unit="h"
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              fontSize: 11,
+                              borderRadius: 8,
+                              border: "1px solid #E8EBF2",
+                              boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                            }}
+                            formatter={(v: any, name: any) => [
+                              `${v}h`,
+                              name === "coveredHours" ? "Horas Cumpridas" : "Horas Necessárias",
+                            ]}
+                          />
+                          <Bar
+                            key="bar-covered"
+                            dataKey="coveredHours"
+                            radius={[3, 3, 0, 0]}
+                            name="coveredHours"
+                          >
+                            {coverageChartData.map((e, i) => (
+                              <Cell
+                                key={`cov-${i}`}
+                                fill={e.hasDeficit ? "#C8291A" : "#2563EB"}
+                              />
+                            ))}
+                          </Bar>
+                          <Bar
+                            key="bar-req"
+                            dataKey="requiredHours"
+                            fill="#E2E8F0"
+                            radius={[3, 3, 0, 0]}
+                            name="requiredHours"
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4 mt-3 pt-2 border-t border-border/50 text-[11px] text-muted-foreground">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-sm bg-[#2563EB]" />
+                      <span>Cumprido</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-sm bg-[#C8291A]" />
+                      <span>Défice / Falta de Cobertura</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-sm bg-[#E2E8F0]" />
+                      <span>Mínimo Necessário</span>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* 2. Alertas de Cobertura / Incumprimentos por Mês */}
+                <Card className="p-4 shadow-2xs">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Incumprimentos de Regras por Mês
+                    </h3>
+                    <Badge variant="outline" className="text-[10px] font-mono">
+                      {summary?.total_gaps_count ?? 0} ocorrências
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Número de intervalos sem rácio mínimo atingido
+                  </p>
+                  <div style={{ height: 210 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={alertsChartData} barCategoryGap="40%">
+                        <XAxis
+                          dataKey="month"
+                          tick={{ fontSize: 10, fill: "#5A6478" }}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 10, fill: "#5A6478" }}
+                          axisLine={false}
+                          tickLine={false}
+                          allowDecimals={false}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            fontSize: 11,
+                            borderRadius: 8,
+                            border: "1px solid #E8EBF2",
+                          }}
+                          formatter={(v: any) => [`${v} ocorrências`, "Défices"]}
+                        />
+                        <Bar key="bar-alerts" dataKey="alerts" radius={[4, 4, 0, 0]}>
+                          {alertsChartData.map((e, i) => (
+                            <Cell
+                              key={`alert-${i}`}
+                              fill={
+                                e.alerts >= 5
+                                  ? "#C8291A"
+                                  : e.alerts >= 2
+                                  ? "#D97706"
+                                  : e.alerts > 0
+                                  ? "#2563EB"
+                                  : "#0E7C59"
+                              }
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {/* Legenda de Alertas */}
+                  <div className="flex items-center gap-4 mt-3 pt-2 border-t border-border/50 text-[10px] text-muted-foreground">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-sm bg-[#0E7C59]" />
+                      <span>Sem Falhas (0)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-sm bg-[#2563EB]" />
+                      <span>Normal (1)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-sm bg-[#D97706]" />
+                      <span>Atenção (2–4)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-sm bg-[#C8291A]" />
+                      <span>Crítico (≥5)</span>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Linha de Tipos de Ausência + Tabela de Ausências */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* 3. Ausências por Tipo (Donut Chart) */}
+                <Card className="p-4 shadow-2xs">
+                  <h3 className="text-sm font-semibold text-foreground mb-0.5">
+                    Ausências por Motivo
+                  </h3>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Horas totais por classificação de falta
+                  </p>
+                  <div style={{ height: 160 }} className="mb-3">
+                    {absenceTypesData.length === 0 ? (
+                      <div className="h-full flex items-center justify-center text-xs text-muted-foreground italic">
+                        Nenhuma ausência registada no período.
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={absenceTypesData}
+                            dataKey="hours"
+                            nameKey="type"
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={45}
+                            outerRadius={70}
+                            paddingAngle={3}
+                          >
+                            {absenceTypesData.map((e, i) => (
+                              <Cell key={`type-${i}`} fill={e.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={{
+                              fontSize: 11,
+                              borderRadius: 8,
+                              border: "1px solid #E8EBF2",
+                            }}
+                            formatter={(v: any, name: any) => [`${v}h`, name]}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                  <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                    {absenceTypesData.map((t) => {
+                      const pct =
+                        totalAbsencePieHours > 0
+                          ? Math.round((t.hours / totalAbsencePieHours) * 100)
+                          : 0;
+                      return (
+                        <div key={t.type} className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div
+                              className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                              style={{ backgroundColor: t.color }}
+                            />
+                            <span className="text-muted-foreground truncate">{t.type}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 font-mono text-xs font-semibold text-foreground shrink-0">
+                            <span>{t.hours}h</span>
+                            <span className="text-[10px] text-muted-foreground font-normal">
+                              ({pct}%)
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+
+                {/* 4. Tabela de Ausências Reais por Assistente */}
+                <Card className="lg:col-span-2 overflow-hidden shadow-2xs">
+                  <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Registo de Ausências no Período
+                      </h3>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {reportData.absences.length} registos encontrados
+                      </p>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 z-10">
+                        <tr className="border-b border-border bg-muted/90 backdrop-blur-xs">
+                          {[
+                            "Assistente",
+                            "Tipo de Falta",
+                            "Período",
+                            "Impacto / Dias",
+                            "Estado",
+                          ].map((h) => (
+                            <th
+                              key={h}
+                              className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap"
+                            >
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportData.absences.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={5}
+                              className="px-4 py-8 text-center text-xs text-muted-foreground italic"
+                            >
+                              Nenhuma ausência registada neste intervalo de datas.
+                            </td>
+                          </tr>
+                        ) : (
+                          reportData.absences.map((r) => {
+                            const initials = (r.assistant_name || "AO")
+                              .split(" ")
+                              .map((n) => n[0])
+                              .slice(0, 2)
+                              .join("")
+                              .toUpperCase();
+
+                            const hours = Math.round(r.absence_minutes / 60);
+
+                            return (
+                              <tr
+                                key={r.id}
+                                className="border-b border-border/50 hover:bg-muted/20 transition-colors"
+                              >
+                                <td className="px-4 py-2.5">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                      <span className="text-[10px] font-bold text-primary font-mono">
+                                        {initials}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs font-medium text-foreground whitespace-nowrap">
+                                      {r.assistant_name}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                                  {r.absence_type || "Geral"}
+                                </td>
+                                <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                                  {r.start_date === r.end_date
+                                    ? r.start_date
+                                    : `${r.start_date} → ${r.end_date || "termo"}`}
+                                </td>
+                                <td className="px-4 py-2.5 font-mono text-xs font-semibold text-foreground whitespace-nowrap">
+                                  {r.affected_workdays > 0 ? `${r.affected_workdays}d` : "—"}
+                                  {hours > 0 && (
+                                    <span className="text-muted-foreground font-normal ml-1 text-[11px]">
+                                      ({hours}h)
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2.5 whitespace-nowrap">
+                                  {r.status === "approved" || r.status === "justified" ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]"
+                                    >
+                                      Justificada
+                                    </Badge>
+                                  ) : r.status === "pending" ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]"
+                                    >
+                                      Pendente
+                                    </Badge>
+                                  ) : r.status === "rejected" || r.status === "unjustified" ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="bg-destructive/10 text-destructive border-destructive/20 text-[10px]"
+                                    >
+                                      Injustificada
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-[10px]">
+                                      {r.status}
+                                    </Badge>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              </div>
+            </>
+          )}
+
+          {/* Aba 2: Carga Horária por Assistente */}
+          {activeTab === "workload" && (
+            <Card className="p-4 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Carga Horária e Cumprimento por Assistente Operacional
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Horas previstas contratualmente vs horas atribuídas em escala publicada
+                  </p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/20">
+                      {[
+                        "Assistente",
+                        "Horas Previstas",
+                        "Horas Escaladas",
+                        "Horas Ausência",
+                        "Cumprimento",
+                      ].map((h) => (
+                        <th
+                          key={h}
+                          className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap"
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.workload_by_assistant?.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="px-4 py-8 text-center text-xs text-muted-foreground italic"
+                        >
+                          Nenhum assistente com perfil ativo no período.
+                        </td>
+                      </tr>
+                    ) : (
+                      reportData.workload_by_assistant?.map((w) => {
+                        const expHours = Math.round((w.expected_minutes / 60) * 10) / 10;
+                        const asgHours = Math.round((w.assigned_minutes / 60) * 10) / 10;
+                        const absHours = Math.round((w.absence_minutes / 60) * 10) / 10;
+                        const pct =
+                          w.expected_minutes > 0
+                            ? Math.round((w.assigned_minutes / w.expected_minutes) * 100)
+                            : 0;
+
+                        return (
+                          <tr
+                            key={w.assistant_id}
+                            className="border-b border-border/50 hover:bg-muted/20 transition-colors"
+                          >
+                            <td className="px-4 py-3 font-medium text-foreground">
+                              {w.assistant_name}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                              {expHours}h
+                            </td>
+                            <td className="px-4 py-3 font-mono text-xs font-semibold text-foreground">
+                              {asgHours}h
+                            </td>
+                            <td className="px-4 py-3 font-mono text-xs text-destructive">
+                              {absHours > 0 ? `${absHours}h` : "—"}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2.5 min-w-[120px]">
+                                <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all ${
+                                      pct >= 95
+                                        ? "bg-emerald-500"
+                                        : pct >= 80
+                                        ? "bg-primary"
+                                        : "bg-amber-500"
+                                    }`}
+                                    style={{ width: `${Math.min(100, pct)}%` }}
+                                  />
+                                </div>
+                                <span className="font-mono text-xs font-semibold text-foreground w-10 text-right">
+                                  {pct}%
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+        </>
+      )}
     </div>
   );
 }
-
