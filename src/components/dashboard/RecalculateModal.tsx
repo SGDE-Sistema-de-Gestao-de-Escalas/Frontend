@@ -3,13 +3,11 @@ import {
   AlertCircle,
   AlertTriangle,
   Building2,
-  Calendar,
   Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   Clock,
-  HelpCircle,
   Info,
   Loader2,
   Sparkles,
@@ -719,8 +717,7 @@ export default function RecalculateModal({
             <>
               {/* Seleção do Período */}
               <div className="space-y-3">
-                <label className="text-xs font-semibold text-foreground uppercase tracking-wide flex items-center gap-1.5">
-                  <Calendar size={13} className="text-primary" />
+                <label className="text-xs font-semibold text-foreground uppercase tracking-wide block">
                   Período da Escala:
                 </label>
 
@@ -884,34 +881,7 @@ export default function RecalculateModal({
                 </div>
               )}
 
-              {/* Alerta se o período já se encontra publicado */}
-              {hasPublishedSchedulesInRange && (
-                <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5 animate-in fade-in-50">
-                  <AlertTriangle
-                    size={16}
-                    className="text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0"
-                  />
-                  <div className="space-y-1">
-                    <p className="font-semibold text-foreground">
-                      Atenção: Horário deste período já se encontra publicado
-                    </p>
-                    <p className="leading-relaxed opacity-90">
-                      O período selecionado ({startDate === endDate ? startDate : `${startDate} a ${endDate}`}) já possui uma escala publicada. Ao recalcular, esta escala passará para o estado de <strong>Rascunho (Draft)</strong> e deixará de estar em vigor até ser novamente publicada.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Caixa Informativa sobre as Fases do Motor (Estilo idêntico ao modelo CSV) */}
-              <div className="rounded-lg border border-border bg-muted/30 p-3.5 space-y-2 text-xs">
-                <div className="flex items-center gap-1.5 font-medium text-foreground">
-                  <HelpCircle size={14} className="text-primary" />
-                  <span>Como opera o Motor Inteligente de Geração?</span>
-                </div>
-                <p className="text-muted-foreground text-[11px] leading-relaxed">
-                  O motor executa as <strong>3 Rondas Obrigatórias</strong> (Ronda A para período completo, Ronda B com divisão em blocos de 15 min, Ronda C1 de troca atómica e Ronda C2 de aptidão universal), posiciona a pausa de <strong>Almoço Balanceado</strong> e preenche o turno remanescente com <strong>Apoio Escola</strong>.
-                </p>
-              </div>
+              
             </>
           )}
 
