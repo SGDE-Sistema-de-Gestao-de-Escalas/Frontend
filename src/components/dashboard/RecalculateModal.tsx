@@ -24,7 +24,7 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import DatePicker from "../common/DatePicker";
+import DateRangePicker from "../common/DateRangePicker";
 import TimePicker from "../common/TimePicker";
 import CustomSelect from "../common/CustomSelect";
 import {
@@ -322,35 +322,6 @@ export default function RecalculateModal({
       setStep("done");
     }
   }, [step, conflicts.length, generateMutation.isPending]);
-
-  function applyDatePreset(preset: "this-week" | "next-week" | "next-month") {
-    const now = new Date();
-    if (preset === "this-week") {
-      const currentDow = now.getDay();
-      const diffToMon = currentDow === 0 ? -6 : 1 - currentDow;
-      const mon = new Date(now);
-      mon.setDate(now.getDate() + diffToMon);
-      const fri = new Date(mon);
-      fri.setDate(mon.getDate() + 4);
-      setStartDate(mon.toISOString().split("T")[0]);
-      setEndDate(fri.toISOString().split("T")[0]);
-    } else if (preset === "next-week") {
-      const currentDow = now.getDay();
-      const diffToNextMon = currentDow === 0 ? 1 : 8 - currentDow;
-      const nextMon = new Date(now);
-      nextMon.setDate(now.getDate() + diffToNextMon);
-      const nextFri = new Date(nextMon);
-      nextFri.setDate(nextMon.getDate() + 4);
-      setStartDate(nextMon.toISOString().split("T")[0]);
-      setEndDate(nextFri.toISOString().split("T")[0]);
-    } else if (preset === "next-month") {
-      const nextMonthFirst = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      const nextMonthLast = new Date(now.getFullYear(), now.getMonth() + 2, 0);
-      setStartDate(nextMonthFirst.toISOString().split("T")[0]);
-      setEndDate(nextMonthLast.toISOString().split("T")[0]);
-    }
-    setDateErrors({});
-  }
 
   function handleClose() {
     if (generateMutation.isPending || publishMutation.isPending) return;
@@ -716,96 +687,28 @@ export default function RecalculateModal({
           {step === "form" && (
             <>
               {/* Seleção do Período */}
-              <div className="space-y-3">
+              <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground uppercase tracking-wide block">
                   Período da Escala:
                 </label>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1 font-medium">
-                      Data de Início *
-                    </label>
-                    <DatePicker
-                      value={startDate}
-                      hasError={!!dateErrors.start}
-                      onChange={(v) => {
-                        setStartDate(v);
-                        if (dateErrors.start || dateErrors.api) {
-                          setDateErrors((p) => ({
-                            ...p,
-                            start: undefined,
-                            api: undefined,
-                          }));
-                        }
-                        if (v && endDate && endDate < v) {
-                          setEndDate(v);
-                        }
-                      }}
-                      className="w-full"
-                    />
-                    {dateErrors.start && (
-                      <p className="text-[11px] text-destructive mt-1 font-medium">
-                        {dateErrors.start}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1 font-medium">
-                      Data de Fim *
-                    </label>
-                    <DatePicker
-                      value={endDate}
-                      hasError={!!dateErrors.end}
-                      minDate={startDate || undefined}
-                      onChange={(v) => {
-                        setEndDate(v);
-                        if (dateErrors.end || dateErrors.api) {
-                          setDateErrors((p) => ({
-                            ...p,
-                            end: undefined,
-                            api: undefined,
-                          }));
-                        }
-                      }}
-                      className="w-full"
-                    />
-                    {dateErrors.end && (
-                      <p className="text-[11px] text-destructive mt-1 font-medium">
-                        {dateErrors.end}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Atalhos Rápidos por baixo das datas de forma limpa e desafogada */}
-                <div className="flex items-center gap-2 pt-0.5 flex-wrap">
-                  <span className="text-[11px] text-muted-foreground font-medium">Preenchimento rápido:</span>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => applyDatePreset("this-week")}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                    >
-                      Esta Semana
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyDatePreset("next-week")}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                    >
-                      Próxima Semana
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyDatePreset("next-month")}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                    >
-                      Próximo Mês
-                    </button>
-                  </div>
-                </div>
+                <DateRangePicker
+                  value={{ startDate, endDate }}
+                  hasError={!!dateErrors.start || !!dateErrors.end || !!dateErrors.api}
+                  allowClear={false}
+                  onChange={(range) => {
+                    setStartDate(range.startDate);
+                    setEndDate(range.endDate);
+                    if (dateErrors.start || dateErrors.end || dateErrors.api) {
+                      setDateErrors({});
+                    }
+                  }}
+                  className="w-full"
+                />
+                {(dateErrors.start || dateErrors.end) && (
+                  <p className="text-[11px] text-destructive mt-1 font-medium">
+                    {dateErrors.start || dateErrors.end}
+                  </p>
+                )}
               </div>
 
               {/* Estratégia de Alocação (Select com descrição dinâmica) */}
