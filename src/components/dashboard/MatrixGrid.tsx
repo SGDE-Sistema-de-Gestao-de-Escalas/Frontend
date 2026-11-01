@@ -45,6 +45,7 @@ import PrintScheduleModal, {
   PrintableAbsentAssistant,
 } from "./PrintScheduleModal";
 import { useAuth } from "../../context/AuthContext";
+import schedulesService from "../../api/services/schedules.service";
 import type { Assistant, BlockState, EntityId, ScheduleMatrix } from "../../types";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
