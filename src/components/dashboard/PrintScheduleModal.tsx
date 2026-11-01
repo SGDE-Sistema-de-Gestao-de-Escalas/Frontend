@@ -1,5 +1,18 @@
 import { useMemo, useState, useEffect } from "react";
-import { Loader2, Printer } from "lucide-react";
+import {
+  AlertCircle,
+  Calendar,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  FileSpreadsheet,
+  Loader2,
+  Printer,
+  Sparkles,
+  UserCheck,
+  Users,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +25,7 @@ import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import DatePicker from "../common/DatePicker";
+import DateRangePicker from "../common/DateRangePicker";
 import AssistantSelect from "../common/AssistantSelect";
 import { notify } from "../common/FeedbackNotification";
 import type { Assistant } from "../../types";
@@ -756,6 +770,7 @@ export default function PrintScheduleModal({
   const [docModel, setDocModel] = useState<"wall" | "individual" | "monthly">(
     initialDocModel
   );
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedAssistantFilter, setSelectedAssistantFilter] =
     useState<string>("all");
   const [outputFormat, setOutputFormat] = useState<"pdf" | "csv">("pdf");
@@ -775,11 +790,31 @@ export default function PrintScheduleModal({
     };
   }
 
+  // Utilitário para calcular a segunda e domingo de uma semana a partir de uma data ISO YYYY-MM-DD
+  function getWeekBoundsIso(iso: string): { first: string; last: string } {
+    const d = iso ? new Date(iso + "T12:00:00") : new Date();
+    const day = d.getDay(); // 0 = Sun
+    const diffToMon = (day + 6) % 7;
+    const mon = new Date(d);
+    mon.setDate(d.getDate() - diffToMon);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    return {
+      first: mon.toISOString().split("T")[0],
+      last: sun.toISOString().split("T")[0],
+    };
+  }
+
   // Resetar datas para a data atual do dashboard ao abrir o modal
   useEffect(() => {
     if (open) {
+      setStep(1);
       if (initialDocModel === "monthly") {
         const bounds = getMonthBoundsIso(dateInfo.isoDate);
+        setStartDate(bounds.first);
+        setEndDate(bounds.last);
+      } else if (initialDocModel === "individual") {
+        const bounds = getWeekBoundsIso(dateInfo.isoDate);
         setStartDate(bounds.first);
         setEndDate(bounds.last);
       } else {
@@ -824,7 +859,7 @@ export default function PrintScheduleModal({
   // Data máxima permitida (máximo de 7 dias para diária/semanal; mês completo para mensal)
   const maxEndDateIso = useMemo(() => {
     if (!startDate) return undefined;
-    if (docModel === "monthly") {
+    if (docModel === "monthly" || docModel === "individual") {
       return addDaysIso(startDate, 44);
     }
     return addDaysIso(startDate, 6);
@@ -1073,91 +1108,100 @@ export default function PrintScheduleModal({
           ? allAssistantsList.filter((a) => String(a.id) === assistantFilterId)
           : allAssistantsList;
 
-      const rowsCount = Math.max(1, daysData.length);
-      const rowHeightPt = Math.min(76, Math.max(54, Math.floor(420 / rowsCount)));
-      const blockHeightPt = Number((rowHeightPt - 13.2).toFixed(1));
-      const padTopNormal = Math.max(3, Math.floor((blockHeightPt - 18) / 2));
-      const padTop15 = Math.max(2, Math.floor((blockHeightPt - 22) / 2));
-      const padTopSpecial = Math.max(4, Math.floor((blockHeightPt - 12) / 2));
-
-      const [firstOpen = "07:30", firstClose = "18:00"] = (
-        daysData[0]?.operatingWindowStr ||
-        operatingWindowStr ||
-        "07:30–18:00"
-      )
-        .split(/[–-]/)
-        .map((s) => s.trim());
-
-      const winStartMin = timeToMin(firstOpen);
-      const winEndMin = timeToMin(firstClose);
-      const winTotalMin = Math.max(60, winEndMin - winStartMin);
-
-      const timeHeaders: { label: string; left: number; width: number }[] = [];
-      for (let m = winStartMin; m < winEndMin; m += 30) {
-        const hh = String(Math.floor(m / 60)).padStart(2, "0");
-        const mm = String(m % 60).padStart(2, "0");
-        timeHeaders.push({
-          label: `${hh}:${mm}`,
-          left: Number((((m - winStartMin) / winTotalMin) * 100).toFixed(3)),
-          width: Number(((30 / winTotalMin) * 100).toFixed(3)),
-        });
+      // Dividir os dias em blocos semanais (até 7 dias cada) para não transbordar a página A4
+      const weekChunks: DailyExportDayData[][] = [];
+      for (let i = 0; i < daysData.length; i += 7) {
+        weekChunks.push(daysData.slice(i, i + 7));
       }
 
-      const quarterTicks: {
-        left: number;
-        isHour: boolean;
-        isHalf: boolean;
-      }[] = [];
-      for (let m = winStartMin; m <= winEndMin; m += 15) {
-        quarterTicks.push({
-          left: Number((((m - winStartMin) / winTotalMin) * 100).toFixed(3)),
-          isHour: m % 60 === 0,
-          isHalf: m % 30 === 0,
-        });
-      }
+      const allPages: string[] = [];
 
-      const timeHeadersHtml = timeHeaders
-        .map(
-          (th, thIdx) => `
-            <div class="tl-hour-header" style="left: ${th.left}%; width: ${
-            th.width
-          }%; ${thIdx === 0 ? "border-left:none;" : ""}">
-              <div class="tl-hour-text">${th.label}</div>
-            </div>
-          `
-        )
-        .join("");
+      targetAssistants.forEach((assistant) => {
+        const code = (assistant as any).internal_number || "AO";
 
-      const ticksHtml = quarterTicks
-        .map((qt, tIdx) => {
-          if (tIdx === 0 || tIdx === quarterTicks.length - 1) return "";
-          const cls = qt.isHour
-            ? "tl-tick-hour"
-            : qt.isHalf
-            ? "tl-tick-half"
-            : "tl-tick-quarter";
-          return `<div class="tl-tick-line ${cls}" style="left: ${qt.left}%; height: ${rowHeightPt}pt;"></div>`;
-        })
-        .join("");
+        weekChunks.forEach((weekDays) => {
+          const rowsCount = Math.max(1, weekDays.length);
+          const rowHeightPt = Math.min(76, Math.max(54, Math.floor(420 / rowsCount)));
+          const blockHeightPt = Number((rowHeightPt - 13.2).toFixed(1));
+          const padTopNormal = Math.max(3, Math.floor((blockHeightPt - 18) / 2));
+          const padTop15 = Math.max(2, Math.floor((blockHeightPt - 22) / 2));
+          const padTopSpecial = Math.max(4, Math.floor((blockHeightPt - 12) / 2));
 
-      const periodLabel =
-        startDate === endDate
-          ? daysData[0]
-            ? `${daysData[0].dayName}, ${daysData[0].dateStr}`
-            : startDate
-          : `${daysData[0]?.dateStr || startDate} a ${
-              daysData[daysData.length - 1]?.dateStr || endDate
-            }`;
+          const [firstOpen = "07:30", firstClose = "18:00"] = (
+            weekDays[0]?.operatingWindowStr ||
+            operatingWindowStr ||
+            "07:30–18:00"
+          )
+            .split(/[–-]/)
+            .map((s) => s.trim());
 
-      const indivPagesHtml = targetAssistants
-        .map((assistant, sIdx) => {
-          const code = (assistant as any).internal_number || "AO";
+          const winStartMin = timeToMin(firstOpen);
+          const winEndMin = timeToMin(firstClose);
+          const winTotalMin = Math.max(60, winEndMin - winStartMin);
+
+          const timeHeaders: { label: string; left: number; width: number }[] = [];
+          for (let m = winStartMin; m < winEndMin; m += 30) {
+            const hh = String(Math.floor(m / 60)).padStart(2, "0");
+            const mm = String(m % 60).padStart(2, "0");
+            timeHeaders.push({
+              label: `${hh}:${mm}`,
+              left: Number((((m - winStartMin) / winTotalMin) * 100).toFixed(3)),
+              width: Number(((30 / winTotalMin) * 100).toFixed(3)),
+            });
+          }
+
+          const quarterTicks: {
+            left: number;
+            isHour: boolean;
+            isHalf: boolean;
+          }[] = [];
+          for (let m = winStartMin; m <= winEndMin; m += 15) {
+            quarterTicks.push({
+              left: Number((((m - winStartMin) / winTotalMin) * 100).toFixed(3)),
+              isHour: m % 60 === 0,
+              isHalf: m % 30 === 0,
+            });
+          }
+
+          const timeHeadersHtml = timeHeaders
+            .map(
+              (th, thIdx) => `
+                <div class="tl-hour-header" style="left: ${th.left}%; width: ${
+                th.width
+              }%; ${thIdx === 0 ? "border-left:none;" : ""}">
+                  <div class="tl-hour-text">${th.label}</div>
+                </div>
+              `
+            )
+            .join("");
+
+          const ticksHtml = quarterTicks
+            .map((qt, tIdx) => {
+              if (tIdx === 0 || tIdx === quarterTicks.length - 1) return "";
+              const cls = qt.isHour
+                ? "tl-tick-hour"
+                : qt.isHalf
+                ? "tl-tick-half"
+                : "tl-tick-quarter";
+              return `<div class="tl-tick-line ${cls}" style="left: ${qt.left}%; height: ${rowHeightPt}pt;"></div>`;
+            })
+            .join("");
+
+          const periodLabel =
+            weekDays[0]?.isoDate === weekDays[weekDays.length - 1]?.isoDate
+              ? weekDays[0]
+                ? `${weekDays[0].dayName}, ${weekDays[0].dateStr}`
+                : startDate
+              : `${weekDays[0]?.dateStr || startDate} a ${
+                  weekDays[weekDays.length - 1]?.dateStr || endDate
+                }`;
+
           const legendMap = new Map<
             string,
             { name: string; color: string; bg: string; border: string }
           >();
 
-          const dayRowsHtml = daysData
+          const dayRowsHtml = weekDays
             .map((day) => {
               const dObj = new Date(day.isoDate + "T12:00:00");
               const dateDisplay = dObj.toLocaleDateString("pt-PT", {
@@ -1353,7 +1397,7 @@ export default function PrintScheduleModal({
             )
             .join("");
 
-          return `
+          allPages.push(`
             <table class="header-table">
               <tr>
                 <td style="width: 88pt;">
@@ -1403,14 +1447,11 @@ export default function PrintScheduleModal({
                 ${dayRowsHtml}
               </tbody>
             </table>
-            ${
-              sIdx < targetAssistants.length - 1
-                ? '<div class="page-break"></div>'
-                : ""
-            }
-          `;
-        })
-        .join("");
+          `);
+        });
+      });
+
+      const indivPagesHtml = allPages.join('<div class="page-break"></div>');
 
       return `
         <div class="footer">
@@ -1739,18 +1780,20 @@ export default function PrintScheduleModal({
       setDateError("A data final deve ser posterior ou igual à data inicial.");
       return;
     }
-    if (docModel === "monthly") {
-      if (datesInRange.length > 45) {
+    if (docModel === "wall") {
+      if (datesInRange.length > 7) {
         setDateError(
-          "O intervalo selecionado para o mapa mensal não pode ultrapassar 1 mês."
+          "O intervalo selecionado para a escala diária não pode ultrapassar 7 dias (1 semana)."
         );
         return;
       }
-    } else if (datesInRange.length > 7) {
-      setDateError(
-        "O intervalo selecionado não pode ultrapassar 7 dias (1 semana)."
-      );
-      return;
+    } else {
+      if (datesInRange.length > 45) {
+        setDateError(
+          "O intervalo selecionado não pode ultrapassar 45 dias."
+        );
+        return;
+      }
     }
     setDateError(null);
 
@@ -1814,391 +1857,563 @@ export default function PrintScheduleModal({
   }
 
   const selectedDaysCount = datesInRange.length;
-  const maxAllowedDays = docModel === "monthly" ? 45 : 7;
+  const maxAllowedDays = docModel === "wall" ? 7 : 45;
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="w-full max-w-xl p-0 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+      <DialogContent className="w-full max-w-2xl p-0 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl flex flex-col">
         {/* Header do Modal */}
-        <DialogHeader className="px-6 py-5 border-b border-border bg-card">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-xs">
-              <Printer size={20} />
+        <DialogHeader className="px-6 pt-5 pb-4 border-b border-border bg-card">
+          <div className="flex items-center gap-3 pr-8">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+              <Printer size={18} />
             </div>
             <div>
-              <DialogTitle className="text-base font-semibold text-foreground">
-                Imprimir e Exportar Horários
+              <DialogTitle className="text-base sm:text-lg font-semibold text-foreground">
+                {step === 1 && "Modelo de Escala"}
+                {step === 2 && "Período e Assistentes"}
+                {step === 3 && "Formato e Emissão"}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                {schoolName} · {agrupamentoName}
+                {step === 1 && "Escolha o tipo de mapa de trabalho pretendido para o estabelecimento."}
+                {step === 2 && "Defina o intervalo de datas e a seleção de assistentes para a emissão."}
+                {step === 3 && "Reveja os parâmetros e selecione o formato final de exportação."}
               </DialogDescription>
+            </div>
+          </div>
+
+          {/* Stepper por baixo dos títulos - 3 colunas centradas com espaçamento simétrico */}
+          <div className="!mt-4 pt-4 border-t border-border/60">
+            <div className="max-w-md mx-auto grid grid-cols-3 relative">
+              {/* Linha de ligação horizontal em fundo */}
+              <div className="absolute top-2.5 left-[16.6%] right-[16.6%] h-px bg-border">
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-300"
+                  style={{
+                    width: step === 1 ? "0%" : step === 2 ? "50%" : "100%",
+                  }}
+                />
+              </div>
+
+              {/* Passo 1 */}
+              <div
+                className="flex flex-col items-center text-center cursor-pointer relative z-10"
+                onClick={() => setStep(1)}
+              >
+                <div
+                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
+                    step === 1
+                      ? "bg-primary text-primary-foreground shadow-xs ring-4 ring-card"
+                      : step > 1
+                      ? "bg-emerald-500 text-white ring-4 ring-card"
+                      : "bg-muted text-muted-foreground border border-border ring-4 ring-card"
+                  }`}
+                >
+                  {step > 1 ? <Check size={11} strokeWidth={3} /> : "1"}
+                </div>
+                <span
+                  className={`text-xs mt-1.5 transition-colors ${
+                    step === 1 ? "font-semibold text-foreground" : "text-muted-foreground font-medium"
+                  }`}
+                >
+                  1. Modelo
+                </span>
+              </div>
+
+              {/* Passo 2 */}
+              <div
+                className={`flex flex-col items-center text-center relative z-10 ${
+                  step >= 2 ? "cursor-pointer" : "opacity-60"
+                }`}
+                onClick={() => step > 2 && setStep(2)}
+              >
+                <div
+                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
+                    step === 2
+                      ? "bg-primary text-primary-foreground shadow-xs ring-4 ring-card"
+                      : step > 2
+                      ? "bg-emerald-500 text-white ring-4 ring-card"
+                      : "bg-muted text-muted-foreground border border-border ring-4 ring-card"
+                  }`}
+                >
+                  {step > 2 ? <Check size={11} strokeWidth={3} /> : "2"}
+                </div>
+                <span
+                  className={`text-xs mt-1.5 transition-colors ${
+                    step === 2 ? "font-semibold text-foreground" : "text-muted-foreground font-medium"
+                  }`}
+                >
+                  2. Datas e Seleção
+                </span>
+              </div>
+
+              {/* Passo 3 */}
+              <div className={`flex flex-col items-center text-center relative z-10 ${step === 3 ? "" : "opacity-60"}`}>
+                <div
+                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
+                    step === 3
+                      ? "bg-primary text-primary-foreground shadow-xs ring-4 ring-card"
+                      : "bg-muted text-muted-foreground border border-border ring-4 ring-card"
+                  }`}
+                >
+                  3
+                </div>
+                <span
+                  className={`text-xs mt-1.5 transition-colors ${
+                    step === 3 ? "font-semibold text-foreground" : "text-muted-foreground font-medium"
+                  }`}
+                >
+                  3. Exportação
+                </span>
+              </div>
             </div>
           </div>
         </DialogHeader>
 
-        {/* Corpo do Modal */}
-        <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
-          {/* SECÇÃO 1: INTERVALO DE DATAS */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-foreground uppercase tracking-wide">
-                {docModel === "monthly" ? "Mês / Período de Referência" : "Intervalo de Datas"}
-              </label>
-              <span className="text-[11px] font-medium text-muted-foreground">
-                {docModel === "monthly"
-                  ? "Grelha mensal completa (Seg–Dom)"
-                  : "Máximo: 7 dias (1 semana)"}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <span className="block text-[11px] font-medium text-muted-foreground mb-1">
-                  Data Inicial:
-                </span>
-                <DatePicker
-                  value={startDate}
-                  allowClear={false}
-                  onChange={(v) => {
-                    if (!v) return;
-                    if (docModel === "monthly") {
-                      const bounds = getMonthBoundsIso(v);
-                      setStartDate(bounds.first);
-                      setEndDate(bounds.last);
-                      setDateError(null);
-                      return;
-                    }
-                    setStartDate(v);
-                    const newMaxEnd = addDaysIso(v, 6);
-                    if (endDate < v) {
-                      setEndDate(v);
-                    } else if (newMaxEnd && endDate > newMaxEnd) {
-                      setEndDate(newMaxEnd);
-                    }
-                    setDateError(null);
-                  }}
-                  className="w-full"
-                />
+        {/* Corpo do Modal com Transição entre Passos */}
+        <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+          {/* ========================================================= */}
+          {/* PASSO 1: ESCOLHA DO MODELO DE ESCALA                      */}
+          {/* ========================================================= */}
+          {step === 1 && (
+            <div className="space-y-4 animate-in fade-in-50 duration-200">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground uppercase tracking-wide">
+                  Escolha o Modelo de Documento:
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Selecione o formato de organização visual pretendido para a escala da escola.
+                </p>
               </div>
-              <div>
-                <span className="block text-[11px] font-medium text-muted-foreground mb-1">
-                  Data Final:
-                </span>
-                <DatePicker
-                  value={endDate}
-                  allowClear={false}
-                  minDate={startDate || undefined}
-                  maxDate={maxEndDateIso}
-                  onChange={(v) => {
-                    if (!v) return;
-                    if (maxEndDateIso && v > maxEndDateIso) {
-                      setEndDate(maxEndDateIso);
-                      setDateError(
-                        docModel === "monthly"
-                          ? "O intervalo selecionado para o mapa mensal não pode ultrapassar 1 mês."
-                          : "O intervalo selecionado não pode ultrapassar 7 dias (1 semana)."
-                      );
-                      return;
-                    }
-                    setEndDate(v);
-                    setDateError(null);
-                  }}
-                  className="w-full"
-                />
-              </div>
+
+              <RadioGroup
+                value={docModel}
+                onValueChange={(val) => {
+                  const nextModel = val as "wall" | "individual" | "monthly";
+                  setDocModel(nextModel);
+                  setDateError(null);
+                  if (nextModel === "monthly") {
+                    const bounds = getMonthBoundsIso(startDate || dateInfo.isoDate);
+                    setStartDate(bounds.first);
+                    setEndDate(bounds.last);
+                  } else if (nextModel === "individual") {
+                    const bounds = getWeekBoundsIso(startDate || dateInfo.isoDate);
+                    setStartDate(bounds.first);
+                    setEndDate(bounds.last);
+                  } else {
+                    const singleDay = startDate || dateInfo.isoDate;
+                    setStartDate(singleDay);
+                    setEndDate(singleDay);
+                  }
+                }}
+                className="grid grid-cols-1 gap-3"
+              >
+                {/* 1. Escala Diária (Mural / Afixação) */}
+                <label
+                  htmlFor="model-wall"
+                  className={`flex items-start gap-3.5 p-4 rounded-xl border cursor-pointer transition-all ${
+                    docModel === "wall"
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
+                      : "border-border bg-card hover:bg-muted/40 hover:border-border/80"
+                  }`}
+                >
+                  <RadioGroupItem value="wall" id="model-wall" className="mt-1" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-semibold text-foreground block">
+                      Escala Diária de Serviço (Mural / Afixação)
+                    </span>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      Grelha horizontal completa por escola. Mostra todos os assistentes em serviço, turnos, intervalos e tarefas diárias em página A4 para afixação.
+                    </p>
+                  </div>
+                </label>
+
+                {/* 2. Horário Semanal (Individual) */}
+                <label
+                  htmlFor="model-individual"
+                  className={`flex items-start gap-3.5 p-4 rounded-xl border cursor-pointer transition-all ${
+                    docModel === "individual"
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
+                      : "border-border bg-card hover:bg-muted/40 hover:border-border/80"
+                  }`}
+                >
+                  <RadioGroupItem value="individual" id="model-individual" className="mt-1" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-semibold text-foreground block">
+                      Horário Semanal de Serviço (Individual)
+                    </span>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      Horário individual estruturado por semana(s) de Segunda a Domingo. Ideal para entrega direta a cada assistente ou consulta do plano semanal de trabalho.
+                    </p>
+                  </div>
+                </label>
+
+                {/* 3. Horário Geral Mensal */}
+                <label
+                  htmlFor="model-monthly"
+                  className={`flex items-start gap-3.5 p-4 rounded-xl border cursor-pointer transition-all ${
+                    docModel === "monthly"
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
+                      : "border-border bg-card hover:bg-muted/40 hover:border-border/80"
+                  }`}
+                >
+                  <RadioGroupItem value="monthly" id="model-monthly" className="mt-1" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-semibold text-foreground block">
+                      Horário Geral Mensal
+                    </span>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      Visão mensal global dos turnos de todos os assistentes operacionais, incluindo intervalos de almoço e faltas, para arquivo e gestão administrativa.
+                    </p>
+                  </div>
+                </label>
+              </RadioGroup>
             </div>
+          )}
 
-            {dateError && (
-              <p className="text-[11px] text-destructive font-medium">
-                {dateError}
-              </p>
-            )}
+          {/* ========================================================= */}
+          {/* PASSO 2: DEFINIÇÃO DE DATAS E ASSISTENTES                 */}
+          {/* ========================================================= */}
+          {step === 2 && (
+            <div className="space-y-5 animate-in fade-in-50 duration-200">
+              {/* Seleção do Intervalo de Datas */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground uppercase tracking-wide flex items-center gap-1.5">
+                    {docModel === "monthly" ? "Mês de Referência:" : "Intervalo de Datas:"}
+                  </label>
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    {docModel === "monthly"
+                      ? "Grelha mensal completa (Seg–Dom)"
+                      : docModel === "individual"
+                      ? "Semanas completas (Seg–Dom)"
+                      : "Máximo: 7 dias"}
+                  </span>
+                </div>
 
-            {/* Atalhos de Preenchimento Rápido */}
-            <div className="flex items-center gap-2 pt-1 flex-wrap">
-              <span className="text-[11px] text-muted-foreground font-medium">
-                Preenchimento rápido:
-              </span>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {docModel === "monthly" ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => applyDatePreset("this-month")}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                    >
-                      Este Mês
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyDatePreset("next-month")}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                    >
-                      Próximo Mês
-                    </button>
-                  </>
+                {docModel === "individual" ? (
+                  <div>
+                    <span className="block text-[11px] font-medium text-muted-foreground mb-1">
+                      Selecione uma ou várias semanas completas (Segunda a Domingo):
+                    </span>
+                    <DateRangePicker
+                      value={{ startDate, endDate }}
+                      selectWeekOnly={true}
+                      allowClear={false}
+                      onChange={(range) => {
+                        if (!range.startDate || !range.endDate) return;
+                        setStartDate(range.startDate);
+                        setEndDate(range.endDate);
+                        setDateError(null);
+                      }}
+                      className="w-full"
+                    />
+                  </div>
+                ) : docModel === "wall" ? (
+                  <div>
+                    <span className="block text-[11px] font-medium text-muted-foreground mb-1">
+                      Intervalo de datas da escala diária (máximo 7 dias):
+                    </span>
+                    <DateRangePicker
+                      value={{ startDate, endDate }}
+                      maxDays={7}
+                      allowClear={false}
+                      onChange={(range) => {
+                        if (!range.startDate || !range.endDate) return;
+                        setStartDate(range.startDate);
+                        setEndDate(range.endDate);
+                        setDateError(null);
+                      }}
+                      className="w-full"
+                    />
+                  </div>
                 ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => applyDatePreset("today")}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                    >
-                      Hoje
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyDatePreset("this-week")}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                    >
-                      Esta Semana (Seg–Sex)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyDatePreset("full-week")}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                    >
-                      Semana Completa (7 dias)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyDatePreset("next-week")}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                    >
-                      Próxima Semana
-                    </button>
-                  </>
+                  <div>
+                    <span className="block text-[11px] font-medium text-muted-foreground mb-1">
+                      Mês de referência (selecione o mês pretendido):
+                    </span>
+                    <DatePicker
+                      value={startDate}
+                      allowClear={false}
+                      onChange={(v) => {
+                        if (!v) return;
+                        const bounds = getMonthBoundsIso(v);
+                        setStartDate(bounds.first);
+                        setEndDate(bounds.last);
+                        setDateError(null);
+                      }}
+                      className="w-full"
+                    />
+                  </div>
+                )}
+
+                {dateError && (
+                  <p className="text-[11px] text-destructive font-medium flex items-center gap-1 pt-1">
+                    <AlertCircle size={12} />
+                    {dateError}
+                  </p>
+                )}
+              </div>
+
+              <div className="h-px bg-border/60" />
+
+              {/* Seleção de Assistentes */}
+              <div className="space-y-2.5">
+                <label className="text-xs font-semibold text-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  Assistentes a Incluir:
+                </label>
+
+                {docModel === "wall" ? (
+                  <div className="p-3.5 rounded-xl border border-border bg-muted/20 text-xs text-muted-foreground leading-relaxed flex items-center gap-2.5">
+                    <Check size={15} className="text-primary shrink-0" />
+                    <span>
+                      A <strong>Escala Diária de Mural</strong> inclui automaticamente todos os assistentes operacionais escalados no estabelecimento escolar.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 p-3.5 rounded-xl border border-border bg-muted/20">
+                    <span className="text-[11px] font-medium text-foreground block">
+                      Filtrar assistente operacional:
+                    </span>
+                    <AssistantSelect
+                      value={selectedAssistantFilter}
+                      onChange={(val) => setSelectedAssistantFilter(val)}
+                      assistants={allAssistantsList}
+                      includeAllOption={true}
+                      allOptionLabel="Todos os assistentes operacionais da escola"
+                      placeholder="Pesquisar assistente por nome, nº ou email..."
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Pode emitir para todos os assistentes da escola ou apenas para um assistente específico.
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
-          </div>
+          )}
 
-          <div className="h-px bg-border/60" />
+          {/* ========================================================= */}
+          {/* PASSO 3: FORMATO DE SAÍDA E RESUMO                        */}
+          {/* ========================================================= */}
+          {step === 3 && (
+            <div className="space-y-5 animate-in fade-in-50 duration-200">
+              {/* Resumo da Configuração */}
+              <div className="p-4 rounded-xl border border-border bg-muted/20 space-y-3">
+                <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  Resumo da Emissão
+                </h4>
 
-          {/* SECÇÃO 2: MODELO DE DOCUMENTO */}
-          <div className="space-y-2.5">
-            <label className="text-xs font-semibold text-foreground uppercase tracking-wide">
-              Modelo de Documento:
-            </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Modelo Selecionado:</span>
+                    <span className="font-semibold text-foreground">
+                      {docModel === "wall"
+                        ? "Escala Diária (Mural / Afixação)"
+                        : docModel === "individual"
+                        ? "Horário Semanal (Individual)"
+                        : "Horário Geral Mensal"}
+                    </span>
+                  </div>
 
-            <RadioGroup
-              value={docModel}
-              onValueChange={(val) => {
-                const nextModel = val as "wall" | "individual" | "monthly";
-                setDocModel(nextModel);
-                setDateError(null);
-                if (nextModel === "monthly") {
-                  const bounds = getMonthBoundsIso(startDate || dateInfo.isoDate);
-                  setStartDate(bounds.first);
-                  setEndDate(bounds.last);
-                } else {
-                  const maxEnd = addDaysIso(startDate, 6);
-                  if (maxEnd && endDate > maxEnd) {
-                    setEndDate(startDate);
-                  }
-                }
-              }}
-              className="grid grid-cols-1 sm:grid-cols-3 gap-2.5"
-            >
-              <label
-                htmlFor="model-wall"
-                className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                  docModel === "wall"
-                    ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
-                    : "border-border bg-card/60 hover:bg-muted/40 hover:border-border/80"
-                }`}
-              >
-                <RadioGroupItem
-                  value="wall"
-                  id="model-wall"
-                  className="mt-0.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground">
-                    Escala Diária
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                    Mapa diário (A4) com linha temporal e todos os assistentes.
-                  </p>
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Estabelecimento:</span>
+                    <span className="font-medium text-foreground truncate block">
+                      {schoolName}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Período de Datas:</span>
+                    <span className="font-mono font-medium text-foreground">
+                      {startDate} → {endDate}
+                    </span>
+                    <span className="text-muted-foreground ml-1.5 text-[11px]">
+                      ({selectedDaysCount} {selectedDaysCount === 1 ? "dia" : "dias"}
+                      {docModel === "individual" && selectedDaysCount > 1
+                        ? ` · ${Math.ceil(selectedDaysCount / 7)} sem.`
+                        : ""})
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Destinatário(s):</span>
+                    <span className="font-medium text-foreground">
+                      {docModel === "wall" || selectedAssistantFilter === "all"
+                        ? `Todos os assistentes (${allAssistantsList.length})`
+                        : allAssistantsList.find((a) => String(a.id) === selectedAssistantFilter)?.name ||
+                          "Assistente selecionado"}
+                    </span>
+                  </div>
                 </div>
-              </label>
-
-              <label
-                htmlFor="model-individual"
-                className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                  docModel === "individual"
-                    ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
-                    : "border-border bg-card/60 hover:bg-muted/40 hover:border-border/80"
-                }`}
-              >
-                <RadioGroupItem
-                  value="individual"
-                  id="model-individual"
-                  className="mt-0.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground">
-                    Horário Semanal
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                    Linha temporal semanal por assistente (até 7 dias).
-                  </p>
-                </div>
-              </label>
-
-              <label
-                htmlFor="model-monthly"
-                className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                  docModel === "monthly"
-                    ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
-                    : "border-border bg-card/60 hover:bg-muted/40 hover:border-border/80"
-                }`}
-              >
-                <RadioGroupItem
-                  value="monthly"
-                  id="model-monthly"
-                  className="mt-0.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground">
-                    Horário Mensal
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                    Grelha de calendário mensal com turno, almoço e faltas.
-                  </p>
-                </div>
-              </label>
-            </RadioGroup>
-
-            {/* Seletor Customizado de Assistente */}
-            {(docModel === "individual" || docModel === "monthly") && (
-              <div className="space-y-1.5 p-3 rounded-xl border border-border bg-muted/20 animate-in fade-in-50 duration-200">
-                <label className="text-xs font-medium text-foreground block">
-                  Assistente a emitir:
-                </label>
-                <AssistantSelect
-                  value={selectedAssistantFilter}
-                  onChange={(val) => setSelectedAssistantFilter(val)}
-                  assistants={allAssistantsList}
-                  includeAllOption={true}
-                  allOptionLabel="Todos os assistentes"
-                  placeholder="Pesquisar assistente por nome, nº ou email..."
-                />
               </div>
-            )}
-          </div>
 
-          <div className="h-px bg-border/60" />
+              {/* Formato de Exportação */}
+              <div className="space-y-2.5">
+                <label className="text-xs font-semibold text-foreground uppercase tracking-wide">
+                  Formato de Saída Pretendido:
+                </label>
 
-          {/* SECÇÃO 3: FORMATO DE SAÍDA */}
-          <div className="space-y-2.5">
-            <label className="text-xs font-semibold text-foreground uppercase tracking-wide">
-              Formato de Saída:
-            </label>
+                <RadioGroup
+                  value={outputFormat}
+                  onValueChange={(val) => setOutputFormat(val as "pdf" | "csv")}
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                >
+                  {/* PDF */}
+                  <label
+                    htmlFor="format-pdf"
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                      outputFormat === "pdf"
+                        ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
+                        : "border-border bg-card hover:bg-muted/40 hover:border-border/80"
+                    }`}
+                  >
+                    <RadioGroupItem value="pdf" id="format-pdf" className="mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-foreground">
+                        Documento PDF A4 Horizontal
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                        Pronto a imprimir ou enviar, com cabeçalhos oficiais, cores por atividade e paginação automática.
+                      </p>
+                    </div>
+                  </label>
 
-            <RadioGroup
-              value={outputFormat}
-              onValueChange={(val) => setOutputFormat(val as "pdf" | "csv")}
-              className="grid grid-cols-1 sm:grid-cols-2 gap-2.5"
-            >
-              <label
-                htmlFor="format-pdf"
-                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                  outputFormat === "pdf"
-                    ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
-                    : "border-border bg-card/60 hover:bg-muted/40 hover:border-border/80"
-                }`}
-              >
-                <RadioGroupItem
-                  value="pdf"
-                  id="format-pdf"
-                  className="mt-0.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground">
-                    PDF A4 Horizontal
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                    Gera e descarrega diretamente o documento PDF A4 horizontal.
-                  </p>
-                </div>
-              </label>
-
-              <label
-                htmlFor="format-csv"
-                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                  outputFormat === "csv"
-                    ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
-                    : "border-border bg-card/60 hover:bg-muted/40 hover:border-border/80"
-                }`}
-              >
-                <RadioGroupItem
-                  value="csv"
-                  id="format-csv"
-                  className="mt-0.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground">
-                    Excel / CSV (.csv)
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                    Tabela estruturada com UTF-8 BOM compatível com Microsoft Excel.
-                  </p>
-                </div>
-              </label>
-            </RadioGroup>
-          </div>
+                  {/* CSV */}
+                  <label
+                    htmlFor="format-csv"
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                      outputFormat === "csv"
+                        ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
+                        : "border-border bg-card hover:bg-muted/40 hover:border-border/80"
+                    }`}
+                  >
+                    <RadioGroupItem value="csv" id="format-csv" className="mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-foreground">
+                        Ficheiro Excel / CSV (.csv)
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                        Exportação em folha de cálculo com codificação UTF-8 BOM diretamente compatível com o Microsoft Excel.
+                      </p>
+                    </div>
+                  </label>
+                </RadioGroup>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Footer do Modal */}
+        {/* Footer do Modal com Navegação entre Passos */}
         <DialogFooter className="px-6 py-4 border-t border-border bg-card flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-xs font-normal">
-              {selectedDaysCount} {selectedDaysCount === 1 ? "dia" : "dias"}
+              Passo {step} de 3
             </Badge>
             <span className="text-xs text-muted-foreground hidden sm:inline">
               {docModel === "wall"
                 ? "Escala Diária"
-                : docModel === "monthly"
-                ? "Horário Mensal"
-                : "Horário Semanal"}{" "}
-              · {outputFormat === "pdf" ? "PDF A4 Horizontal" : "CSV"}
+                : docModel === "individual"
+                ? "Horário Semanal"
+                : "Horário Mensal"}
             </span>
           </div>
 
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onClose}
-              className="cursor-pointer"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleExecute}
-              disabled={
-                selectedDaysCount === 0 ||
-                selectedDaysCount > maxAllowedDays ||
-                !!dateError ||
-                isExporting
-              }
-              className="cursor-pointer font-medium gap-1.5"
-            >
-              {isExporting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {isExporting
-                ? outputFormat === "pdf"
-                  ? "A gerar PDF..."
-                  : "A gerar CSV..."
-                : outputFormat === "pdf"
-                ? "Imprimir / Gerar PDF"
-                : "Descarregar CSV / Excel"}
-            </Button>
-          </div>
-        </DialogFooter>
+            {step === 1 && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onClose}
+                  className="cursor-pointer"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setStep(2)}
+                  className="cursor-pointer font-medium gap-1.5"
+                >
+                  Continuar
+                  <ChevronRight size={14} />
+                </Button>
+              </>
+            )}
+
+            {step === 2 && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setStep(1)}
+                  className="cursor-pointer gap-1"
+                >
+                  <ChevronLeft size={14} />
+                  Voltar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={
+                    selectedDaysCount === 0 ||
+                    selectedDaysCount > maxAllowedDays ||
+                    !!dateError
+                  }
+                  onClick={() => setStep(3)}
+                  className="cursor-pointer font-medium gap-1.5"
+                >
+                  Continuar
+                  <ChevronRight size={14} />
+                </Button>
+              </>
+            )}
+
+            {step === 3 && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isExporting}
+                  onClick={() => setStep(2)}
+                  className="cursor-pointer gap-1"
+                >
+                  <ChevronLeft size={14} />
+                  Voltar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={
+                    selectedDaysCount === 0 ||
+                    selectedDaysCount > maxAllowedDays ||
+                    !!dateError ||
+                    isExporting
+                  }
+                  onClick={handleExecute}
+                  className="cursor-pointer font-medium gap-1.5"
+                >
+                  {isExporting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : outputFormat === "pdf" ? (
+                    <Printer size={14} />
+                  ) : (
+                    <Download size={14} />
+                  )}
+                  {isExporting
+                    ? outputFormat === "pdf"
+                      ? "A gerar PDF..."
+                      : "A gerar CSV..."
+                    : outputFormat === "pdf"
+                    ? "Imprimir / Guardar PDF"
+                    : "Descarregar CSV / Excel"}
+                </Button>
+              </>
+            )}
+          </div></DialogFooter>
       </DialogContent>
     </Dialog>
   );

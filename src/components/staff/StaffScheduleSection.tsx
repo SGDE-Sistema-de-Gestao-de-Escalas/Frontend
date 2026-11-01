@@ -733,7 +733,7 @@ export function StaffWeekView({
   const startInfo = getDateInfo(offsets[0]);
   const endInfo = getDateInfo(offsets[6]);
 
-  const { data: schedules = [] } = useSchedulesList({
+  const { data: schedules = [], isLoading: isLoadingSchedules } = useSchedulesList({
     start_date: startInfo.isoDate,
     end_date: endInfo.isoDate,
     assistant_id: effectiveAssistantId,
@@ -939,9 +939,18 @@ export function StaffWeekView({
                   >
                     {status.closedLabel || (status.reasonType === "exception" ? "Exceção" : "Encerrada")}
                   </Badge>
+                ) : isLoadingSchedules ? (
+                  <span className="text-[11px] font-medium text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <Loader2 size={11} className="animate-spin text-primary" />
+                    <span>A verificar...</span>
+                  </span>
+                ) : !pubInfo.hasSchedule ? (
+                  <span className="text-[11px] font-medium text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md border border-border">
+                    Não gerada
+                  </span>
                 ) : !pubInfo.isPublished ? (
                   <span className="text-[11px] font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
-                    {pubInfo.status === "draft" ? "Em preparação" : "Não publicada"}
+                    Em preparação
                   </span>
                 ) : hasWork && entryExitStr ? (
                   <div className="flex items-center gap-2">

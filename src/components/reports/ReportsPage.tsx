@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -18,6 +19,7 @@ import {
 } from "recharts";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
+import DateRangePicker, { type DateRange } from "../common/DateRangePicker";
 import {
   REPORTS_COVERAGE,
   REPORTS_ALERTS,
@@ -27,6 +29,10 @@ import {
 } from "../../api/mockData";
 
 export default function ReportsPage() {
+  const [dateRange, setDateRange] = useState<DateRange>({
+    startDate: "2026-01-01",
+    endDate: "2026-01-31",
+  });
   const totalAbsenceDays = REPORTS_ABSENCES.reduce((s, r) => s + r.days, 0);
   const pendingCount = REPORTS_ABSENCES.filter(
     (r) => r.status === "pending"
@@ -102,13 +108,20 @@ export default function ReportsPage() {
             Cobertura, absentismo e exceções — Janeiro 2026
           </p>
         </div>
-        <button
-          type="button"
-          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
-        >
-          <Download size={13} />
-          Exportar PDF
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <DateRangePicker
+            value={dateRange}
+            onChange={setDateRange}
+            className="w-[280px]"
+          />
+          <button
+            type="button"
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          >
+            <Download size={13} />
+            Exportar PDF
+          </button>
+        </div>
       </div>
 
       {/* KPI cards */}
