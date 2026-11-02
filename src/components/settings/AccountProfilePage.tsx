@@ -16,6 +16,11 @@ import ConfirmationModal from "../common/ConfirmationModal";
 import { notify } from "../common/FeedbackNotification";
 import { useAuth } from "../../context/AuthContext";
 import authService from "../../api/services/auth.service";
+import {
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_RULE_HINT,
+  validateNewPassword,
+} from "../../utils/passwordPolicy";
 
 interface AccountProfilePageProps {
   role?: Role;
@@ -278,10 +283,9 @@ export default function AccountProfilePage({
     if (!curr) {
       errors.current_password = "A password atual é obrigatória.";
     }
-    if (!next) {
-      errors.new_password = "A nova password é obrigatória.";
-    } else if (next.length < 8) {
-      errors.new_password = "A nova password deve conter pelo menos 8 caracteres.";
+    const newPasswordError = validateNewPassword(next);
+    if (newPasswordError) {
+      errors.new_password = newPasswordError;
     }
     if (!nextConf) {
       errors.new_password_confirmation = "Confirme a nova password.";
@@ -569,7 +573,7 @@ export default function AccountProfilePage({
                       setPasswordErrors((prev) => ({ ...prev, new_password: undefined }));
                     }
                   }}
-                  placeholder="Mínimo de 8 caracteres"
+                  placeholder={`Mínimo de ${PASSWORD_MIN_LENGTH} caracteres`}
                   className={`w-full px-3 py-2 pr-10 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
                     passwordErrors.new_password
                       ? "border-destructive focus:ring-destructive"
@@ -584,9 +588,13 @@ export default function AccountProfilePage({
                   {showNewPass ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-              {passwordErrors.new_password && (
+              {passwordErrors.new_password ? (
                 <p className="text-[11px] text-destructive mt-1 font-medium">
                   {passwordErrors.new_password}
+                </p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {PASSWORD_RULE_HINT}
                 </p>
               )}
             </div>
