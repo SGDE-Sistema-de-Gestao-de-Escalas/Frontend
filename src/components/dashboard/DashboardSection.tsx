@@ -25,6 +25,7 @@ import {
   getOffsetFromIsoDate,
   getRealMonthsRange,
   getThreeWeeksWindowIso,
+  getCurrentMonthFullWindowIso,
 } from "../../utils/scheduleMatrixUtils";
 
 export type DashViewMode = "day" | "week" | "month";
@@ -96,9 +97,9 @@ export default function DashboardSection({
 
   const monthsList = useMemo(() => getRealMonthsRange(3, 6), []);
 
-  const initial3Weeks = useMemo(() => getThreeWeeksWindowIso(0), []);
-  const defaultStartIso = initial3Weeks.startIso;
-  const defaultEndIso = initial3Weeks.endIso;
+  const initialMonthWindow = useMemo(() => getCurrentMonthFullWindowIso(), []);
+  const defaultStartIso = initialMonthWindow.startIso;
+  const defaultEndIso = initialMonthWindow.endIso;
 
   const [queryStartDate, setQueryStartDate] = useState<string>(defaultStartIso);
   const [queryEndDate, setQueryEndDate] = useState<string>(defaultEndIso);
@@ -136,6 +137,25 @@ export default function DashboardSection({
     }
     return getIsoDateFromOffset(dayOffset);
   }, [viewMode, dayOffset, weekStart]);
+
+  // Se o utilizador navegar nos dias ou semanas para fora do intervalo carregado,
+  // expande automaticamente o intervalo do backend para incluir a nova data
+  useEffect(() => {
+    if (!activeDashboardDate) return;
+    if (activeDashboardDate < queryStartDate) {
+      const d = new Date(activeDashboardDate + "T00:00:00");
+      const dow = (d.getDay() + 6) % 7;
+      d.setDate(d.getDate() - dow - 7);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      setQueryStartDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+    } else if (activeDashboardDate > queryEndDate) {
+      const d = new Date(activeDashboardDate + "T00:00:00");
+      const dow = (d.getDay() + 6) % 7;
+      d.setDate(d.getDate() + (6 - dow) + 7);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      setQueryEndDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+    }
+  }, [activeDashboardDate, queryStartDate, queryEndDate]);
 
   function switchView(mode: DashViewMode) {
     if (mode === "week") setWeekStart(Math.floor(dayOffset / 7) * 7);
@@ -195,7 +215,7 @@ export default function DashboardSection({
     const lastDayMonth = new Date(t.getFullYear(), t.getMonth() + 1, 0);
 
     return [
-      { label: "Padrão (±1 Mês)", start: defaultStartIso, end: defaultEndIso },
+      { label: "Este Mês Completo", start: defaultStartIso, end: defaultEndIso },
       { label: "Hoje", start: toIso(t), end: toIso(t) },
       { label: "Esta Semana", start: toIso(thisMon), end: toIso(thisSun) },
       { label: "Este Mês", start: toIso(firstDayMonth), end: toIso(lastDayMonth) },
@@ -276,11 +296,11 @@ export default function DashboardSection({
               customTriggerLabel={
                 isCustomDateRange
                   ? `${queryStartDate} → ${queryEndDate}`
-                  : "Intervalo: ±1 Mês"
+                  : "Intervalo: Mês Atual"
               }
               customPresets={dashboardPresets}
               onResetDefault={handleResetDateRange}
-              resetDefaultLabel="Repor ±1 Mês"
+              resetDefaultLabel="Repor Mês Atual"
               allowClear={false}
               align="end"
               triggerIcon={
@@ -440,7 +460,15 @@ export default function DashboardSection({
         currentSchoolId={currentSchoolId}
         initialStartDate={recalcDates.start || activeDashboardDate}
         initialEndDate={recalcDates.end || activeDashboardDate}
-        onGenerated={(result) => setLastGenerationResult(result)}
+        onGenerated={(result) => {
+          setLastGenerationResult(result);
+          if (recalcDates.start && recalcDates.start < queryStartDate) {
+            setQueryStartDate(recalcDates.start);
+          }
+          if (recalcDates.end && recalcDates.end > queryEndDate) {
+            setQueryEndDate(recalcDates.end);
+          }
+        }}
       />
     </div>
   );

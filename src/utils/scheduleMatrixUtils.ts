@@ -154,6 +154,45 @@ export function getThreeWeeksWindowIso(dayOffset: number): {
   return { startIso, endIso, mondayOffset };
 }
 
+/**
+ * Devolve o intervalo [startIso, endIso] cobrindo todo o mes atual
+ * alinhado pelas segundas e domingos das semanas respetivas para nao cortar semanas a meio.
+ */
+export function getCurrentMonthFullWindowIso(refDate: Date = new Date()): {
+  startIso: string;
+  endIso: string;
+} {
+  const y = refDate.getFullYear();
+  const m = refDate.getMonth();
+  const pad = (n: number) => String(n).padStart(2, '0');
+
+  const firstDay = new Date(y, m, 1);
+  const dow = (firstDay.getDay() + 6) % 7;
+  const startMonday = new Date(firstDay);
+  startMonday.setDate(startMonday.getDate() - dow);
+
+  const lastDay = new Date(y, m + 1, 0);
+  const endDow = (lastDay.getDay() + 6) % 7;
+  const endSunday = new Date(lastDay);
+  endSunday.setDate(endSunday.getDate() + (6 - endDow));
+
+  if (refDate.getDate() > 20) {
+    const nextLastDay = new Date(y, m + 2, 0);
+    const nextEndDow = (nextLastDay.getDay() + 6) % 7;
+    const nextEndSunday = new Date(nextLastDay);
+    nextEndSunday.setDate(nextEndSunday.getDate() + (6 - nextEndDow));
+    return {
+      startIso: `${startMonday.getFullYear()}-${pad(startMonday.getMonth() + 1)}-${pad(startMonday.getDate())}`,
+      endIso: `${nextEndSunday.getFullYear()}-${pad(nextEndSunday.getMonth() + 1)}-${pad(nextEndSunday.getDate())}`,
+    };
+  }
+
+  return {
+    startIso: `${startMonday.getFullYear()}-${pad(startMonday.getMonth() + 1)}-${pad(startMonday.getDate())}`,
+    endIso: `${endSunday.getFullYear()}-${pad(endSunday.getMonth() + 1)}-${pad(endSunday.getDate())}`,
+  };
+}
+
 export interface DashboardMonthMeta {
   name: string;
   label: string;

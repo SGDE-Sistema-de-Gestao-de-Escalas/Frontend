@@ -270,25 +270,29 @@ const [publishModalState, setPublishModalState] = useState<{
     return getThreeWeeksWindowIso(dayOffset);
   }, [currentWeekMondayOffset]);
 
-  // Se o utilizador tiver definido um intervalo personalizado no filtro do cabeçalho,
-  // esse intervalo tem prioridade. Caso contrário, usa a janela de 3 semanas.
+  // Garante que o intervalo pedido ao servidor cobre sempre pelo menos o intervalo do cabeçalho
+  // e também a semana ativa em visualização, evitando que a grelha fique vazia ao navegar.
   const effectiveRangeStartIso = useMemo(() => {
-    if (queryStartDate && queryEndDate) return queryStartDate;
-    let start = currentWeekWindow.startIso;
+    let start = queryStartDate || currentWeekWindow.startIso;
+    if (currentWeekWindow.startIso && currentWeekWindow.startIso < start) {
+      start = currentWeekWindow.startIso;
+    }
     if (copyPickerIsoDate && copyPickerIsoDate < start) {
       start = copyPickerIsoDate;
     }
     return start;
-  }, [queryStartDate, queryEndDate, currentWeekWindow.startIso, copyPickerIsoDate]);
+  }, [queryStartDate, currentWeekWindow.startIso, copyPickerIsoDate]);
 
   const effectiveRangeEndIso = useMemo(() => {
-    if (queryStartDate && queryEndDate) return queryEndDate;
-    let end = currentWeekWindow.endIso;
+    let end = queryEndDate || currentWeekWindow.endIso;
+    if (currentWeekWindow.endIso && currentWeekWindow.endIso > end) {
+      end = currentWeekWindow.endIso;
+    }
     if (copyPickerIsoDate && copyPickerIsoDate > end) {
       end = copyPickerIsoDate;
     }
     return end;
-  }, [queryStartDate, queryEndDate, currentWeekWindow.endIso, copyPickerIsoDate]);
+  }, [queryEndDate, currentWeekWindow.endIso, copyPickerIsoDate]);
 
   // Carregamento consolidado de arranque: 1 único pedido HTTP que traz todo o estado de uma só vez
   const { data: bootstrapData, isLoading: isBootstrapLoading } = useDashboardBootstrap(
