@@ -11,31 +11,31 @@ export interface NotificationStyle {
   iconBg: string;
 }
 
-/** Aparência de cada categoria (alinhada com o design existente do sino). */
+/** Aparência de cada categoria (alinhada com o design system da plataforma). */
 export const NOTIF_STYLES: Record<NotificationType, NotificationStyle> = {
   alert: {
-    icon: <AlertTriangle size={13} className="text-destructive" />,
+    icon: <AlertTriangle size={15} className="text-destructive" />,
     dot: "bg-destructive",
     label: "Alerta",
-    iconBg: "bg-destructive/10",
+    iconBg: "bg-destructive/10 dark:bg-destructive/20 border-destructive/25 text-destructive",
   },
   absence: {
-    icon: <FileText size={13} className="text-[#D97706]" />,
-    dot: "bg-[#D97706]",
+    icon: <FileText size={15} className="text-amber-600 dark:text-amber-400" />,
+    dot: "bg-amber-500",
     label: "Falta",
-    iconBg: "bg-[#D97706]/10",
+    iconBg: "bg-amber-500/10 dark:bg-amber-500/20 border-amber-500/25 text-amber-600 dark:text-amber-400",
   },
   expiry: {
-    icon: <Clock size={13} className="text-[#7C3AED]" />,
-    dot: "bg-[#7C3AED]",
+    icon: <Clock size={15} className="text-purple-600 dark:text-purple-400" />,
+    dot: "bg-purple-500",
     label: "Vigência",
-    iconBg: "bg-[#7C3AED]/10",
+    iconBg: "bg-purple-500/10 dark:bg-purple-500/20 border-purple-500/25 text-purple-600 dark:text-purple-400",
   },
   info: {
-    icon: <CheckCircle size={13} className="text-[#0E7C59]" />,
-    dot: "bg-[#0E7C59]",
+    icon: <CheckCircle size={15} className="text-emerald-600 dark:text-emerald-400" />,
+    dot: "bg-emerald-500",
     label: "Info",
-    iconBg: "bg-[#0E7C59]/10",
+    iconBg: "bg-emerald-500/10 dark:bg-emerald-500/20 border-emerald-500/25 text-emerald-600 dark:text-emerald-400",
   },
 };
 
