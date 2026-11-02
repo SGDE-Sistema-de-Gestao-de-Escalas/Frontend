@@ -780,7 +780,6 @@ const [publishModalState, setPublishModalState] = useState<{
   // Limites de horário fixos de cada assistente para a data atual (independentemente das tarefas pintadas em rascunho)
   const fixedShiftBoundsByAssistant = useMemo(() => {
     const map: Record<EntityId, ReturnType<typeof resolveAssistantShiftBounds>> = {};
-    const copiedInfo = copiedFromByDay[dayOffset];
 
     activeAssistants.forEach((assistant) => {
       const bounds = resolveAssistantShiftBounds({
@@ -791,7 +790,6 @@ const [publishModalState, setPublishModalState] = useState<{
         viewEndSlot,
         profiles: profilesByAssistant[String(assistant.id)],
         exceptions: exceptionsByAssistant[String(assistant.id)],
-        copiedSourceRow: copiedInfo?.sourcePlannedMatrix?.[assistant.id],
         baseDayRow: baseDayMatrix[assistant.id],
         schedulesList,
         lunchBlocksForDate: lunchBlocksByDate[dayInfo.isoDate],
@@ -809,7 +807,6 @@ const [publishModalState, setPublishModalState] = useState<{
     viewEndSlot,
     profilesByAssistant,
     exceptionsByAssistant,
-    copiedFromByDay,
     dayOffset,
     baseDayMatrix,
     schedulesList,
@@ -1020,140 +1017,7 @@ function paintSlot(aid: EntityId, slot: number) {
   }
 
   // Find next open future day for default picker value
-  function findNextOpenFutureIso(excludeIso: string): string {
-    for (let off = Math.max(0, dayOffset + 1); off <= 120; off++) {
-      const iso = getIsoDateFromOffset(off);
-      if (iso !== excludeIso && getStatusForIsoDate(iso).isOpen) {
-        return iso;
-      }
-    }
-    return getIsoDateFromOffset(1);
-  }
 
-  function findPreviousOpenIso(excludeIso: string): string {
-    for (let off = dayOffset - 1; off >= -90; off--) {
-      const iso = getIsoDateFromOffset(off);
-      if (iso !== excludeIso && getStatusForIsoDate(iso).isOpen) {
-        return iso;
-      }
-    }
-    return getIsoDateFromOffset(-1);
-  }
-
-  function openCopyScheduleModal(preferredDirection?: "to_future" | "from_other") {
-    const dir =
-      preferredDirection ??
-      (isPastDay || !editMode ? "to_future" : "from_other");
-    setCopyDirection(dir);
-    if (dir === "to_future") {
-      setCopyPickerIsoDate(findNextOpenFutureIso(dayInfo.isoDate));
-    } else {
-      setCopyPickerIsoDate(findPreviousOpenIso(dayInfo.isoDate));
-    }
-    setShowCopyModal(true);
-  }
-
-  // Handle copying a schedule between sourceOffset and targetOffset
-  function handleConfirmCopySchedule() {
-    if (!copyPickerIsoDate) return;
-    const pickedOffset = getOffsetFromIsoDate(copyPickerIsoDate);
-
-    const sourceOffset =
-      copyDirection === "to_future" ? dayOffset : pickedOffset;
-    const targetOffset =
-      copyDirection === "to_future" ? pickedOffset : dayOffset;
-
-    const targetInfo = getDateInfo(targetOffset);
-    const targetStatus = getStatusForIsoDate(targetInfo.isoDate);
-
-    if (targetOffset < 0) {
-      notify.error(
-        "Não é possível copiar uma escala para um dia no passado.",
-        "Data de Destino Inválida"
-      );
-      return;
-    }
-
-    if (!targetStatus.isOpen) {
-      notify.error(
-        "A escola encontra-se encerrada na data de destino selecionada.",
-        "Escola Encerrada"
-      );
-      return;
-    }
-
-    const sourceMatrix =
-      draftMatricesByDay[sourceOffset] ??
-      getCommittedMatrixForDay(sourceOffset);
-
-    const sourceFullPlanned: ScheduleMatrix = {};
-    const nextTargetDraft: ScheduleMatrix = {};
-
-    activeAssistants.forEach((a) => {
-      const sourceRow = sourceMatrix[a.id] || Array(96).fill("off");
-      const effectiveSourceTasks = [...sourceRow];
-
-      sourceFullPlanned[a.id] = effectiveSourceTasks;
-
-      const targetAbsent = checkAssistantAbsenceOnDate(
-        a,
-        targetInfo.isoDate,
-        absencesRes?.data || []
-      );
-      const targetFixedBounds = fixedShiftBoundsByAssistant[a.id];
-      const isTargetShiftCovered =
-        targetAbsent.absent &&
-        targetFixedBounds &&
-        targetAbsent.startSlot !== undefined &&
-        targetAbsent.endSlot !== undefined &&
-        targetAbsent.startSlot <= targetFixedBounds.startSlot &&
-        targetAbsent.endSlot >= targetFixedBounds.endSlot;
-
-      if (targetAbsent.absent && (targetAbsent.isFullDay || isTargetShiftCovered)) {
-        const bounds = getShiftBoundsFromRow(
-          effectiveSourceTasks,
-          targetStatus.viewStartSlot,
-          targetStatus.viewEndSlot
-        );
-        const absRow: BlockState[] = Array(96).fill("off");
-        for (let i = bounds.startSlot; i < bounds.endSlot; i++) {
-          absRow[i] = "absent";
-        }
-        nextTargetDraft[a.id] = absRow;
-      } else {
-        nextTargetDraft[a.id] = [...effectiveSourceTasks];
-      }
-    });
-
-    if (!baselineMatricesRef.current[targetOffset]) {
-      baselineMatricesRef.current[targetOffset] = cloneMatrix(getCommittedMatrixForDay(targetOffset));
-    }
-
-    setDraftMatricesByDay((prev) => ({
-      ...prev,
-      [targetOffset]: nextTargetDraft,
-    }));
-    setCopiedFromByDay((prev) => ({
-      ...prev,
-      [targetOffset]: {
-        sourceOffset,
-        sourcePlannedMatrix: sourceFullPlanned,
-      },
-    }));
-    setShowCopyModal(false);
-
-    // Ensure Edit Mode is enabled and navigate to targetOffset if copying to a future day
-    setEditMode(true);
-    if (targetOffset !== dayOffset && onChangeDayOffset) {
-      onChangeDayOffset(targetOffset);
-    }
-
-    const srcInfo = getDateInfo(sourceOffset);
-    notify.success(
-      `Horário de ${srcInfo.dayName} (${srcInfo.dateStr}) copiado para ${targetInfo.dayName} (${targetInfo.dateStr}). Revê e clica em "Concluir Edição" para guardar.`,
-      "Horário Copiado"
-    );
-  }
 
   // Split assistants into Working vs. Absent Today (at the bottom, disabled)
   const { workingAssistants, absentAssistants } = useMemo(() => {
@@ -2767,31 +2631,6 @@ function paintSlot(aid: EntityId, slot: number) {
               schoolStatus.isOpen &&
               (hasScheduleForCurrentDay || canEditCurrentDay) && (
                 <div className="flex items-center rounded-lg border border-border bg-card p-0.5 shadow-2xs">
-                  {/* Botão Copiar Horário */}
-                  <ActionTooltip
-                    content={
-                      isPastDay
-                        ? "Copiar a escala deste dia para um dia futuro"
-                        : "Copiar horário entre dias"
-                    }
-                  >
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openCopyScheduleModal(
-                          isPastDay ? "to_future" : "from_other"
-                        )
-                      }
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
-                    >
-                      <Copy size={12} />
-                      <span>
-                        {isPastDay ? "Copiar para Futuro" : "Copiar Horário"}
-                      </span>
-                    </button>
-                  </ActionTooltip>
-
-                  <div className="h-4 w-[1px] bg-border mx-0.5" />
 
                   {/* Botão Imprimir / Exportar (apenas Administrador) */}
                   {isAdmin && (
@@ -3062,14 +2901,6 @@ function paintSlot(aid: EntityId, slot: number) {
                 )}
                 <button
                   type="button"
-                  onClick={() => openCopyScheduleModal("from_other")}
-                  className="px-3.5 py-2 rounded-lg border border-primary/30 bg-primary/5 text-primary text-xs font-medium hover:bg-primary/15 transition-colors flex items-center gap-1.5"
-                >
-                  <Copy size={13} />
-                  Copiar Horário de Outro Dia
-                </button>
-                <button
-                  type="button"
                   onClick={() => setEditMode(true)}
                   className="px-3.5 py-2 rounded-lg border border-border bg-card text-foreground text-xs font-medium hover:bg-muted transition-colors flex items-center gap-1.5"
                 >
@@ -3127,20 +2958,10 @@ function paintSlot(aid: EntityId, slot: number) {
                   <Eye size={14} />
                   <span>
                     Estás a visualizar um <strong>dia passado</strong> (
-                    {dayInfo.dayName}, {dayInfo.dateStr}). Podes consultar o
-                    horário ou{" "}
-                    <strong>copiá-lo para um dia futuro</strong>.
+                    {dayInfo.dayName}, {dayInfo.dateStr}).
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openCopyScheduleModal("to_future")}
-                    className="px-2.5 py-1 rounded-md border border-[#D97706]/40 bg-card text-[#D97706] text-xs font-medium hover:bg-[#D97706]/10 transition-colors flex items-center gap-1.5"
-                  >
-                    <Copy size={11} />
-                    Copiar para Dia Futuro
-                  </button>
                   {onChangeDayOffset && (
                     <button
                       type="button"
@@ -3881,175 +3702,6 @@ function paintSlot(aid: EntityId, slot: number) {
           </>
         )}
       </Card>
-
-      {/* ===================================================================== */}
-      {/* MODAL 1: COPIAR HORÁRIO ENTRE DIAS (COM DATEPICKER & DIAS FECHADOS)   */}
-      {/* ===================================================================== */}
-      <Dialog open={showCopyModal} onOpenChange={setShowCopyModal}>
-        <DialogContent className="w-full max-w-lg p-0 overflow-visible rounded-xl border border-border bg-card shadow-2xl">
-          <DialogHeader className="px-5 py-4 border-b border-border bg-muted/10">
-            <DialogTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Copy size={15} className="text-primary" />
-              Copiar Horário entre Dias
-            </DialogTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Os dias em que a escola está encerrada (horário fixo, futuras
-              versões em vigor, feriados ou exceções) estão desativados no
-              calendário.
-            </p>
-          </DialogHeader>
-
-          <div className="p-5 space-y-4">
-            {/* Mode Switcher */}
-            {!isPastDay && (
-              <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-muted/40 border border-border">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCopyDirection("to_future");
-                    setCopyPickerIsoDate(findNextOpenFutureIso(dayInfo.isoDate));
-                  }}
-                  className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    copyDirection === "to_future"
-                      ? "bg-card text-foreground shadow-xs font-semibold"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Copiar deste dia para outro
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCopyDirection("from_other");
-                    setCopyPickerIsoDate(findPreviousOpenIso(dayInfo.isoDate));
-                  }}
-                  className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    copyDirection === "from_other"
-                      ? "bg-card text-foreground shadow-xs font-semibold"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Trazer de outro dia para aqui
-                </button>
-              </div>
-            )}
-
-            {/* Visual Origin -> Target summary */}
-            <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-muted/20 border border-border text-xs">
-              <div className="min-w-0 flex-1">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">
-                  Origem
-                </span>
-                <span className="font-mono font-semibold text-foreground truncate block mt-0.5">
-                  {copyDirection === "to_future"
-                    ? `${dayInfo.dayShort}, ${dayInfo.dateStr}`
-                    : copyPickerDateInfo
-                    ? `${copyPickerDateInfo.dayShort}, ${copyPickerDateInfo.dateStr}`
-                    : "Selecionar..."}
-                </span>
-              </div>
-              <ArrowRight size={15} className="text-primary flex-shrink-0" />
-              <div className="min-w-0 flex-1 text-right">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">
-                  Destino
-                </span>
-                <span className="font-mono font-semibold text-primary truncate block mt-0.5">
-                  {copyDirection === "to_future"
-                    ? copyPickerDateInfo
-                      ? `${copyPickerDateInfo.dayShort}, ${copyPickerDateInfo.dateStr}`
-                      : "Selecionar..."
-                    : `${dayInfo.dayShort}, ${dayInfo.dateStr}`}
-                </span>
-              </div>
-            </div>
-
-            {/* DatePicker with closed school days disabled */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground block mb-1.5">
-                {copyDirection === "to_future"
-                  ? "Escolher dia de destino (futuro) no calendário *"
-                  : "Escolher dia de origem (passado ou futuro) no calendário *"}
-              </label>
-              <DatePicker
-                value={copyPickerIsoDate}
-                onChange={(iso) => setCopyPickerIsoDate(iso)}
-                allowClear={false}
-                minDate={copyDirection === "to_future" ? todayIso : undefined}
-                isDateDisabled={(iso) => {
-                  if (iso === dayInfo.isoDate) return true;
-                  if (copyDirection === "to_future" && iso < todayIso) {
-                    return true;
-                  }
-                  const st = getStatusForIsoDate(iso);
-                  return !st.isOpen;
-                }}
-                getDayTooltip={(iso) => {
-                  if (iso === dayInfo.isoDate) {
-                    return "Este é o próprio dia selecionado";
-                  }
-                  if (copyDirection === "to_future" && iso < todayIso) {
-                    return "Não é possível copiar um horário para um dia passado";
-                  }
-                  const st = getStatusForIsoDate(iso);
-                  if (!st.isOpen) {
-                    return st.title || "Estabelecimento Encerrado";
-                  }
-                  return st.openingTime && st.closingTime
-                    ? `Escola aberta (${st.openingTime.slice(
-                        0,
-                        5
-                      )}–${st.closingTime.slice(0, 5)})`
-                    : "Escola aberta";
-                }}
-              />
-              {copyPickerStatus?.isOpen &&
-                copyPickerStatus.openingTime &&
-                copyPickerStatus.closingTime && (
-                  <p className="text-[11px] text-muted-foreground font-mono mt-1.5">
-                    Horário de funcionamento nesse dia:{" "}
-                    <span className="text-foreground font-semibold">
-                      {copyPickerStatus.openingTime.slice(0, 5)} –{" "}
-                      {copyPickerStatus.closingTime.slice(0, 5)}
-                    </span>
-                    {copyPickerStatus.scheduleSourceLabel
-                      ? ` (${copyPickerStatus.scheduleSourceLabel})`
-                      : ""}
-                  </p>
-                )}
-            </div>
-
-            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground leading-relaxed">
-              Os assistentes com <strong>falta registada</strong> no dia de
-              destino continuarão desativados (<em>disabled</em>) no fim da
-              lista, mas mostrarão as tarefas que tinham atribuídas na escala
-              copiada para facilitar a redistribuição.
-            </div>
-          </div>
-
-          <DialogFooter className="px-6 py-4 border-t border-border bg-card flex items-center justify-end gap-2.5">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setShowCopyModal(false)}
-              className="cursor-pointer text-xs"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={!copyPickerIsoDate || !copyPickerStatus?.isOpen}
-              onClick={handleConfirmCopySchedule}
-              className="cursor-pointer text-xs"
-            >
-              {copyDirection === "to_future"
-                ? "Copiar para Dia Selecionado"
-                : "Copiar para Este Dia"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* ===================================================================== */}
       {/* MODAL 2: VALIDAÇÃO E CONFIRMAÇÃO AO CONCLUIR EDIÇÃO                   */}

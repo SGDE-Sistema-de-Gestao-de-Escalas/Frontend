@@ -993,7 +993,6 @@ export function resolveAssistantShiftBounds(params: {
   viewEndSlot: number;
   profiles?: AssistantScheduleProfileApi[];
   exceptions?: AssistantExceptionApi[];
-  copiedSourceRow?: BlockState[];
   baseDayRow?: BlockState[];
   schedulesList?: BackendScheduleResource[];
   lunchBlocksForDate?: Record<string, LunchBlockApi>;
@@ -1007,7 +1006,6 @@ export function resolveAssistantShiftBounds(params: {
     viewEndSlot,
     profiles,
     exceptions,
-    copiedSourceRow,
     baseDayRow,
     schedulesList,
     lunchBlocksForDate,
@@ -1148,29 +1146,7 @@ export function resolveAssistantShiftBounds(params: {
     }
   }
 
-  // 3. Dia copiado de outra data
-  if (startSlot === null && copiedSourceRow && copiedSourceRow.length > 0) {
-    const hasBlocks = copiedSourceRow.some(
-      (st) => st !== "off" && st !== "absent"
-    );
-    if (hasBlocks) {
-      const b = getShiftBoundsFromRow(
-        copiedSourceRow,
-        viewStartSlot,
-        viewEndSlot
-      );
-      if (b.endSlot > b.startSlot) {
-        startSlot = b.startSlot;
-        endSlot = b.endSlot;
-        if (lunchStartSlot === null && b.lunchStart !== null && b.lunchEnd !== null) {
-          lunchStartSlot = b.lunchStart;
-          lunchEndSlot = b.lunchEnd;
-        }
-      }
-    }
-  }
-
-  // 4. Matriz base do dia (já existente antes de entrar em modo de edição)
+  // 3. Matriz base do dia (já existente antes de entrar em modo de edição)
   if (startSlot === null && baseDayRow && baseDayRow.length > 0) {
     const hasBlocks = baseDayRow.some((st) => st !== "off" && st !== "absent");
     if (hasBlocks) {
