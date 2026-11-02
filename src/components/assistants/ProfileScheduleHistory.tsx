@@ -396,8 +396,8 @@ export default function ProfileScheduleHistory({
                 Não gerada
               </span>
             ) : !pubInfo.isPublished ? (
-              <span className="text-[11px] font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
-                Em preparação
+              <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                Em rascunho
               </span>
             ) : hasWork && entryExitStr ? (
               <div className="flex items-center gap-2">
@@ -759,7 +759,7 @@ export default function ProfileScheduleHistory({
                       ) : pubInfo.isPublished && hasWork ? (
                         <span className="w-1.5 h-1.5 rounded-full bg-primary" title="Escala Publicada" />
                       ) : pubInfo.isDraft ? (
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Em Preparação" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Em Rascunho" />
                       ) : null}
                     </div>
                   )}
@@ -801,7 +801,7 @@ export default function ProfileScheduleHistory({
                         {!pubInfo.hasSchedule ? (
                           <Badge variant="outline" className="text-[10px]">Não gerada</Badge>
                         ) : !pubInfo.isPublished ? (
-                          <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-700 bg-amber-500/10">Em preparação</Badge>
+                          <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-700 dark:text-amber-300 bg-amber-500/10">Em rascunho</Badge>
                         ) : (
                           <Badge variant="default" className="text-[10px]">Publicada</Badge>
                         )}

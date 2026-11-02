@@ -482,10 +482,34 @@ function getDayScheduleDetails(
   });
 
   const assistants = Array.from(assistantsMap.values()).sort((a, b) => {
-    // Residentes primeiro, depois transferidos; dentro de cada grupo, por nome
+    // 1. Quem tem tarefas/trabalho ativo antes de quem não tem horário
+    const aHasWork = a.entries && a.entries.length > 0;
+    const bHasWork = b.entries && b.entries.length > 0;
+    if (aHasWork !== bHasWork) {
+      return aHasWork ? -1 : 1;
+    }
+
+    // 2. Não ausentes primeiro, ausentes depois
+    const aAbsent = Boolean(a.absenceReason);
+    const bAbsent = Boolean(b.absenceReason);
+    if (aAbsent !== bAbsent) {
+      return aAbsent ? 1 : -1;
+    }
+
+    // 3. Ordem de entrada ao serviço (hora de início do turno / primeira tarefa)
+    const aStart = a.shiftStart || "99:99";
+    const bStart = b.shiftStart || "99:99";
+    const cmpTime = aStart.localeCompare(bStart);
+    if (cmpTime !== 0) {
+      return cmpTime;
+    }
+
+    // 4. Residentes primeiro, depois transferidos
     if (Boolean(a.isTemporaryTransfer) !== Boolean(b.isTemporaryTransfer)) {
       return a.isTemporaryTransfer ? 1 : -1;
     }
+
+    // 5. Desempate: ordem alfabética pelo nome
     return a.assistantName.localeCompare(b.assistantName);
   });
 

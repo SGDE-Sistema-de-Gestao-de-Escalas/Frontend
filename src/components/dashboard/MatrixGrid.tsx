@@ -1289,6 +1289,15 @@ function paintSlot(aid: EntityId, slot: number) {
       }
     });
 
+    absent.sort((a, b) => {
+      const slotA = a.shiftBounds.startSlot ?? 999;
+      const slotB = b.shiftBounds.startSlot ?? 999;
+      if (slotA !== slotB) {
+        return slotA - slotB;
+      }
+      return a.assistant.name.localeCompare(b.assistant.name);
+    });
+
     return { workingAssistants: working, absentAssistants: absent };
   }, [
     activeAssistants,
@@ -1306,10 +1315,35 @@ function paintSlot(aid: EntityId, slot: number) {
   ]);
 
   const { regularAssistants, transferredAssistants } = useMemo(() => {
-    const regular = workingAssistants.filter((a) => !a.is_temporary_transfer);
-    const transferred = workingAssistants.filter((a) => a.is_temporary_transfer);
+    const sortByEntry = (list: typeof activeAssistants) => {
+      return [...list].sort((a, b) => {
+        const boundsA =
+          fixedShiftBoundsByAssistant[a.id] ||
+          getShiftBoundsFromRow(
+            effectiveMatrix[a.id] || [],
+            viewStartSlot,
+            viewEndSlot
+          );
+        const boundsB =
+          fixedShiftBoundsByAssistant[b.id] ||
+          getShiftBoundsFromRow(
+            effectiveMatrix[b.id] || [],
+            viewStartSlot,
+            viewEndSlot
+          );
+        const slotA = boundsA.startSlot ?? 999;
+        const slotB = boundsB.startSlot ?? 999;
+        if (slotA !== slotB) {
+          return slotA - slotB;
+        }
+        return a.name.localeCompare(b.name);
+      });
+    };
+
+    const regular = sortByEntry(workingAssistants.filter((a) => !a.is_temporary_transfer));
+    const transferred = sortByEntry(workingAssistants.filter((a) => a.is_temporary_transfer));
     return { regularAssistants: regular, transferredAssistants: transferred };
-  }, [workingAssistants]);
+  }, [workingAssistants, fixedShiftBoundsByAssistant, effectiveMatrix, viewStartSlot, viewEndSlot]);
 
   // Evaluate rules & warnings for any given dayOffset + matrix
   function evaluateDaySchedule(targetOffset: number, mat: ScheduleMatrix) {
@@ -1939,7 +1973,8 @@ function paintSlot(aid: EntityId, slot: number) {
   }`;
 
   const printableWorkingAssistants: PrintableAssistantSchedule[] = useMemo(() => {
-    return workingAssistants.map((assistant) => {
+    const allWorkingSorted = [...regularAssistants, ...transferredAssistants];
+    return allWorkingSorted.map((assistant) => {
       const rowSlots = effectiveMatrix[assistant.id] || [];
       const shiftBounds: AssistantResolvedShiftBounds =
         fixedShiftBoundsByAssistant[assistant.id] ||
@@ -1955,7 +1990,7 @@ function paintSlot(aid: EntityId, slot: number) {
         blocks,
       };
     });
-  }, [workingAssistants, fixedShiftBoundsByAssistant, effectiveMatrix, effectiveSlotMetaByAssistant, viewStartSlot, viewEndSlot]);
+  }, [regularAssistants, transferredAssistants, fixedShiftBoundsByAssistant, effectiveMatrix, effectiveSlotMetaByAssistant, viewStartSlot, viewEndSlot]);
 
   const printableAbsentAssistants: PrintableAbsentAssistant[] = useMemo(() => {
     return absentAssistants.map((item) => ({
