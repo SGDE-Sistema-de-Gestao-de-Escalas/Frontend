@@ -118,22 +118,22 @@ export default function NotificationsDropdown() {
           </button>
         </div>
 
-        {/* Mini Segmented Switcher de Escola (Mais Pequeno e Discreto) */}
-        <div className="px-3 py-1.5 border-b border-border bg-muted/10">
-          <div className="inline-flex items-center p-0.5 rounded-md bg-muted/60 border border-border/50 text-[10px] w-full">
+        {/* Seletor de Âmbito da Escola - Idêntico ao da página de notificações */}
+        <div className="px-3 py-1.5 border-b border-border bg-muted/15 flex items-center justify-center">
+          <div className="inline-flex items-center p-0.5 rounded-lg border border-border bg-muted/30 text-xs w-full">
             <button
               type="button"
               onClick={() => setSchoolScope("current")}
               className={cn(
-                "flex-1 py-1 px-2 rounded font-medium flex items-center justify-center gap-1 truncate transition-all cursor-pointer",
+                "flex-1 px-2.5 py-1 rounded-md transition-all font-medium flex items-center justify-center gap-1.5 cursor-pointer text-xs truncate",
                 schoolScope === "current"
-                  ? "bg-card text-foreground shadow-2xs font-semibold"
+                  ? "bg-card text-foreground shadow-2xs font-semibold border border-border/60"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
               <span className="truncate max-w-[120px]">{selectedSchool?.name || "Escola Atual"}</span>
               {currentSchoolUnread > 0 && (
-                <span className="text-[9px] font-mono px-1 py-0.1 rounded-full bg-primary/15 text-primary font-bold shrink-0">
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-primary/15 text-primary font-bold shrink-0">
                   {currentSchoolUnread}
                 </span>
               )}
@@ -142,15 +142,15 @@ export default function NotificationsDropdown() {
               type="button"
               onClick={() => setSchoolScope("all")}
               className={cn(
-                "flex-1 py-1 px-2 rounded font-medium flex items-center justify-center gap-1 truncate transition-all cursor-pointer",
+                "flex-1 px-2.5 py-1 rounded-md transition-all font-medium flex items-center justify-center gap-1.5 cursor-pointer text-xs truncate",
                 schoolScope === "all"
-                  ? "bg-card text-foreground shadow-2xs font-semibold"
+                  ? "bg-card text-foreground shadow-2xs font-semibold border border-border/60"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <span>Todas as escolas</span>
+              <span className="truncate">Todas as Escolas</span>
               {globalUnread > 0 && (
-                <span className="text-[9px] font-mono px-1 py-0.1 rounded-full bg-primary/15 text-primary font-bold shrink-0">
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-primary/15 text-primary font-bold shrink-0">
                   {globalUnread}
                 </span>
               )}
