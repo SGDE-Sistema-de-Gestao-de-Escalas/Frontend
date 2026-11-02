@@ -20,6 +20,7 @@ import {
   Cell,
   PieChart,
   Pie,
+  CartesianGrid,
 } from "recharts";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -49,6 +50,151 @@ const PIE_COLORS = [
   "#0891B2", // Cyan
   "#475569", // Slate
 ];
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    name?: string;
+    value?: any;
+    color?: string;
+    fill?: string;
+    payload?: any;
+    dataKey?: string;
+  }>;
+  label?: string;
+}
+
+function CoverageChartTooltip({ active, payload, label }: CustomTooltipProps) {
+  if (!active || !payload || !payload.length) return null;
+  const data = payload[0]?.payload;
+  const covered = data?.coveredHours ?? 0;
+  const required = data?.requiredHours ?? 0;
+  const gap = data?.gapHours ?? 0;
+  const rate = required > 0 ? Math.round((covered / required) * 100) : 100;
+
+  return (
+    <div className="bg-popover text-popover-foreground border border-border shadow-xl rounded-lg p-3 text-xs min-w-[180px] pointer-events-none backdrop-blur-md">
+      <div className="font-semibold text-foreground mb-2 pb-1.5 border-b border-border/60 flex items-center justify-between gap-2">
+        <span className="truncate">{data?.date || label}</span>
+        <span
+          className={`font-mono text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${
+            rate >= 100
+              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+              : rate >= 80
+              ? "bg-primary/15 text-primary border border-primary/20"
+              : "bg-destructive/15 text-destructive border border-destructive/20"
+          }`}
+        >
+          {rate}%
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="w-2.5 h-2.5 rounded-sm bg-[#2563EB] shrink-0" />
+            <span>Horas Cumpridas:</span>
+          </div>
+          <span className="font-mono font-semibold text-foreground">{covered}h</span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="w-2.5 h-2.5 rounded-sm bg-muted-foreground/30 shrink-0" />
+            <span>Horas Necessárias:</span>
+          </div>
+          <span className="font-mono font-semibold text-foreground">{required}h</span>
+        </div>
+        {gap > 0 && (
+          <div className="flex items-center justify-between gap-3 pt-1.5 border-t border-border/60 text-destructive">
+            <div className="flex items-center gap-1.5 font-medium">
+              <span className="w-2.5 h-2.5 rounded-sm bg-destructive shrink-0" />
+              <span>Défice / Falta:</span>
+            </div>
+            <span className="font-mono font-bold">{gap}h</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AlertsChartTooltip({ active, payload }: CustomTooltipProps) {
+  if (!active || !payload || !payload.length) return null;
+  const data = payload[0]?.payload;
+  if (!data) return null;
+
+  return (
+    <div className="bg-popover text-popover-foreground border border-border shadow-xl rounded-lg p-3 text-xs min-w-[170px] pointer-events-none backdrop-blur-md">
+      <div className="font-semibold text-foreground mb-2 pb-1.5 border-b border-border/60">
+        {data.month}
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <span
+              className="w-2.5 h-2.5 rounded-sm shrink-0"
+              style={{
+                backgroundColor:
+                  data.alerts >= 5 ? "#C8291A" : data.alerts >= 2 ? "#D97706" : "#2563EB",
+              }}
+            />
+            <span>Défices / Vagas:</span>
+          </div>
+          <span className="font-mono font-semibold text-foreground">
+            {data.alerts} {data.alerts === 1 ? "alerta" : "alertas"}
+          </span>
+        </div>
+        {data.hours > 0 && (
+          <div className="flex items-center justify-between gap-3 pt-1.5 border-t border-border/60">
+            <span className="text-muted-foreground">Tempo a descoberto:</span>
+            <span className="font-mono font-bold text-destructive">
+              {data.hours}h
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AbsencePieTooltip({
+  active,
+  payload,
+  totalHours,
+}: CustomTooltipProps & { totalHours: number }) {
+  if (!active || !payload || !payload.length) return null;
+  const data = payload[0]?.payload;
+  if (!data) return null;
+  const hours = data.hours ?? 0;
+  const pct = totalHours > 0 ? Math.round((hours / totalHours) * 100) : 0;
+
+  return (
+    <div className="bg-popover text-popover-foreground border border-border shadow-xl rounded-lg p-3 text-xs min-w-[180px] pointer-events-none backdrop-blur-md">
+      <div className="flex items-center gap-2 font-semibold text-foreground mb-2 pb-1.5 border-b border-border/60">
+        <span
+          className="w-2.5 h-2.5 rounded-full shrink-0"
+          style={{ backgroundColor: data.color }}
+        />
+        <span className="truncate">{data.type}</span>
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-muted-foreground">Horas Ausência:</span>
+          <span className="font-mono font-semibold text-foreground">{hours}h</span>
+        </div>
+        {data.days > 0 && (
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-muted-foreground">Dias de Trabalho:</span>
+            <span className="font-mono text-foreground">{data.days}d</span>
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-3 pt-1.5 border-t border-border/60">
+          <span className="text-muted-foreground">Quota de Ausências:</span>
+          <span className="font-mono font-bold text-foreground">{pct}%</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ReportsPage() {
   const { selectedSchool } = useSchool();
@@ -419,30 +565,30 @@ export default function ReportsPage() {
                           barGap={3}
                           barCategoryGap={coverageChartData.length > 20 ? "15%" : "30%"}
                         >
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="currentColor"
+                            className="text-border opacity-60"
+                            vertical={false}
+                          />
                           <XAxis
                             dataKey="name"
-                            tick={{ fontSize: 9, fill: "#5A6478" }}
+                            tick={{ fontSize: 9, fill: "currentColor" }}
+                            className="text-muted-foreground"
                             axisLine={false}
                             tickLine={false}
                             interval={coverageChartData.length > 20 ? 1 : 0}
                           />
                           <YAxis
-                            tick={{ fontSize: 10, fill: "#5A6478" }}
+                            tick={{ fontSize: 10, fill: "currentColor" }}
+                            className="text-muted-foreground"
                             axisLine={false}
                             tickLine={false}
                             unit="h"
                           />
                           <Tooltip
-                            contentStyle={{
-                              fontSize: 11,
-                              borderRadius: 8,
-                              border: "1px solid #E8EBF2",
-                              boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                            }}
-                            formatter={(v: any, name: any) => [
-                              `${v}h`,
-                              name === "coveredHours" ? "Horas Cumpridas" : "Horas Necessárias",
-                            ]}
+                            content={<CoverageChartTooltip />}
+                            cursor={{ fill: "currentColor", opacity: 0.05 }}
                           />
                           <Bar
                             key="bar-covered"
@@ -460,7 +606,8 @@ export default function ReportsPage() {
                           <Bar
                             key="bar-req"
                             dataKey="requiredHours"
-                            fill="#E2E8F0"
+                            fill="currentColor"
+                            className="text-muted-foreground/20 dark:text-muted-foreground/15"
                             radius={[3, 3, 0, 0]}
                             name="requiredHours"
                           />
@@ -500,25 +647,29 @@ export default function ReportsPage() {
                   <div style={{ height: 210 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={alertsChartData} barCategoryGap="40%">
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="currentColor"
+                          className="text-border opacity-60"
+                          vertical={false}
+                        />
                         <XAxis
                           dataKey="month"
-                          tick={{ fontSize: 10, fill: "#5A6478" }}
+                          tick={{ fontSize: 10, fill: "currentColor" }}
+                          className="text-muted-foreground"
                           axisLine={false}
                           tickLine={false}
                         />
                         <YAxis
-                          tick={{ fontSize: 10, fill: "#5A6478" }}
+                          tick={{ fontSize: 10, fill: "currentColor" }}
+                          className="text-muted-foreground"
                           axisLine={false}
                           tickLine={false}
                           allowDecimals={false}
                         />
                         <Tooltip
-                          contentStyle={{
-                            fontSize: 11,
-                            borderRadius: 8,
-                            border: "1px solid #E8EBF2",
-                          }}
-                          formatter={(v: any) => [`${v} ocorrências`, "Défices"]}
+                          content={<AlertsChartTooltip />}
+                          cursor={{ fill: "currentColor", opacity: 0.05 }}
                         />
                         <Bar key="bar-alerts" dataKey="alerts" radius={[4, 4, 0, 0]}>
                           {alertsChartData.map((e, i) => (
@@ -594,12 +745,7 @@ export default function ReportsPage() {
                             ))}
                           </Pie>
                           <Tooltip
-                            contentStyle={{
-                              fontSize: 11,
-                              borderRadius: 8,
-                              border: "1px solid #E8EBF2",
-                            }}
-                            formatter={(v: any, name: any) => [`${v}h`, name]}
+                            content={<AbsencePieTooltip totalHours={totalAbsencePieHours} />}
                           />
                         </PieChart>
                       </ResponsiveContainer>

@@ -24,3 +24,4 @@ export function useReports(startDate?: string, endDate?: string) {
     staleTime: 60 * 1000,
   });
 }
+
