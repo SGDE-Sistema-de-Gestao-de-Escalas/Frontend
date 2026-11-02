@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Bell, Loader2 } from "lucide-react";
+import { Bell, CheckCheck, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { Notification } from "../../types";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
@@ -12,19 +12,14 @@ import {
 import { useSchool } from "../../context/SchoolContext";
 import { cn } from "../ui/utils";
 import {
-  NOTIF_FILTERS,
   NOTIF_STYLES,
   formatRelativeTime,
-  type NotifFilterId,
 } from "../notifications/notificationMeta";
-
-const DROPDOWN_PAGE_SIZE = 15;
 
 export default function NotificationsDropdown() {
   const navigate = useNavigate();
   const { selectedSchool, selectedSchoolId, setSchoolId } = useSchool();
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState<NotifFilterId>("all");
   const [schoolScope, setSchoolScope] = useState<"current" | "all">("current");
 
   const effectiveSchoolId =
@@ -33,9 +28,8 @@ export default function NotificationsDropdown() {
       : "all";
 
   const { data, isLoading, isError } = useNotificationsList({
-    type: filter,
     school_id: effectiveSchoolId,
-    per_page: DROPDOWN_PAGE_SIZE,
+    per_page: 15,
   });
 
   const markRead = useMarkNotificationRead();
@@ -64,7 +58,7 @@ export default function NotificationsDropdown() {
   }
 
   function handleMarkAll() {
-    markAllRead.mutate(filter === "all" ? undefined : filter);
+    markAllRead.mutate();
   }
 
   return (
@@ -78,11 +72,11 @@ export default function NotificationsDropdown() {
                 ? `Notificações (${globalUnread} por ler)`
                 : "Notificações"
             }
-            className="relative w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors focus:outline-none cursor-pointer"
+            className="relative w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors focus:outline-none cursor-pointer"
           >
             <Bell size={16} />
             {globalUnread > 0 && (
-              <span className="absolute top-1 right-1 min-w-[15px] h-[15px] rounded-full bg-destructive text-destructive-foreground text-[8px] font-mono flex items-center justify-center px-0.5 ring-2 ring-card font-semibold animate-in zoom-in-50">
+              <span className="absolute top-0.5 right-0.5 min-w-[15px] h-[15px] rounded-full bg-destructive text-destructive-foreground text-[8px] font-mono flex items-center justify-center px-0.5 ring-2 ring-card font-semibold animate-in zoom-in-50">
                 {badge}
               </span>
             )}
@@ -93,10 +87,10 @@ export default function NotificationsDropdown() {
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-[370px] max-w-[calc(100vw-2rem)] p-0 rounded-xl border border-border bg-card shadow-xl overflow-hidden"
+        className="w-[330px] p-0 rounded-xl border border-border bg-card shadow-xl overflow-hidden"
       >
         {/* Top Header */}
-        <div className="px-3.5 py-2.5 border-b border-border flex items-center justify-between bg-muted/20">
+        <div className="px-3 py-2 border-b border-border flex items-center justify-between bg-muted/20">
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-semibold text-foreground">
               Notificações
@@ -111,91 +105,63 @@ export default function NotificationsDropdown() {
             type="button"
             onClick={handleMarkAll}
             disabled={globalUnread === 0 || markAllRead.isPending}
-            className="text-[11px] text-primary hover:text-primary/80 transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            className="text-[11px] text-primary hover:text-primary/80 transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1"
           >
+            <CheckCheck size={12} />
             Marcar lidas
           </button>
         </div>
 
-        {/* Compact Segmented School Switcher */}
-        <div className="px-3 py-1.5 border-b border-border bg-muted/10">
-          <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/40 text-[11px] w-full">
-            <button
-              type="button"
-              onClick={() => setSchoolScope("current")}
-              className={cn(
-                "flex-1 px-2 py-1 rounded-md transition-all font-medium flex items-center justify-center gap-1.5 truncate cursor-pointer",
-                schoolScope === "current"
-                  ? "bg-card text-foreground shadow-2xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <span className="truncate max-w-[120px]">{selectedSchool?.name || "Escola Atual"}</span>
-              {currentSchoolUnread > 0 && (
-                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-primary/15 text-primary font-bold shrink-0">
-                  {currentSchoolUnread}
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setSchoolScope("all")}
-              className={cn(
-                "flex-1 px-2 py-1 rounded-md transition-all font-medium flex items-center justify-center gap-1.5 truncate cursor-pointer",
-                schoolScope === "all"
-                  ? "bg-card text-foreground shadow-2xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <span>Todas as escolas</span>
-              {globalUnread > 0 && (
-                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-primary/15 text-primary font-bold shrink-0">
-                  {globalUnread}
-                </span>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Categories Bar */}
-        <div className="flex gap-1 px-3 py-1.5 border-b border-border overflow-x-auto bg-card scrollbar-none">
-          {NOTIF_FILTERS.map((f) => {
-            const count = counts?.[f.id] ?? 0;
-            return (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setFilter(f.id)}
-                className={cn(
-                  "flex-shrink-0 px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer",
-                  filter === f.id
-                    ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                )}
-              >
-                {f.label}
-                {count > 0 && (
-                  <span className="ml-1 font-mono text-[9px] opacity-80">
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        {/* 2 Sleek Tabs: Escola Atual | Todas as escolas */}
+        <div className="grid grid-cols-2 border-b border-border bg-muted/10 text-xs">
+          <button
+            type="button"
+            onClick={() => setSchoolScope("current")}
+            className={cn(
+              "py-1.5 px-2 text-center transition-all border-b-2 font-medium flex items-center justify-center gap-1 cursor-pointer truncate text-[11px]",
+              schoolScope === "current"
+                ? "border-primary text-primary font-semibold bg-background"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <span className="truncate max-w-[100px]">{selectedSchool?.name || "Escola Atual"}</span>
+            {currentSchoolUnread > 0 && (
+              <span className="text-[9px] font-mono px-1 py-0.1 rounded-full bg-primary/15 text-primary font-bold shrink-0">
+                {currentSchoolUnread}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSchoolScope("all")}
+            className={cn(
+              "py-1.5 px-2 text-center transition-all border-b-2 font-medium flex items-center justify-center gap-1 cursor-pointer truncate text-[11px]",
+              schoolScope === "all"
+                ? "border-primary text-primary font-semibold bg-background"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <span>Todas as escolas</span>
+            {globalUnread > 0 && (
+              <span className="text-[9px] font-mono px-1 py-0.1 rounded-full bg-primary/15 text-primary font-bold shrink-0">
+                {globalUnread}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Notifications List */}
-        <div className="overflow-y-auto max-h-[340px] divide-y divide-border/40">
+        <div className="overflow-y-auto max-h-[290px] divide-y divide-border/40">
           {isLoading ? (
-            <div className="py-8 flex justify-center text-muted-foreground">
+            <div className="py-6 flex justify-center text-muted-foreground">
               <Loader2 size={16} className="animate-spin text-primary" />
             </div>
           ) : isError ? (
-            <div className="py-8 text-center text-xs text-muted-foreground">
+            <div className="py-6 text-center text-xs text-muted-foreground">
               Não foi possível carregar as notificações
             </div>
           ) : notifications.length === 0 ? (
-            <div className="py-8 text-center text-xs text-muted-foreground">
+            <div className="py-6 text-center text-xs text-muted-foreground">
               Sem notificações nesta seleção
             </div>
           ) : (
@@ -205,21 +171,23 @@ export default function NotificationsDropdown() {
                 type="button"
                 onClick={() => handleClick(n)}
                 className={cn(
-                  "w-full text-left px-3.5 py-2.5 hover:bg-muted/40 transition-colors flex gap-2.5 cursor-pointer group",
+                  "w-full text-left px-3 py-2 hover:bg-muted/40 transition-colors flex gap-2.5 cursor-pointer group",
                   !n.read ? "bg-primary/5" : ""
                 )}
               >
                 <div
-                  className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
                     NOTIF_STYLES[n.type].iconBg
                   }`}
                 >
-                  {NOTIF_STYLES[n.type].icon}
+                  <span className="scale-75 flex items-center justify-center">
+                    {NOTIF_STYLES[n.type].icon}
+                  </span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1.5">
                     <span
-                      className={`text-xs truncate ${
+                      className={`text-[11px] truncate ${
                         !n.read
                           ? "font-semibold text-foreground"
                           : "font-medium text-muted-foreground"
@@ -227,24 +195,23 @@ export default function NotificationsDropdown() {
                     >
                       {n.title}
                     </span>
-                    <span className="text-[10px] text-muted-foreground/80 font-mono shrink-0">
+                    <span className="text-[9px] text-muted-foreground font-mono shrink-0">
                       {formatRelativeTime(n.createdAt)}
                     </span>
                   </div>
 
-                  {/* School name tag when in 'all' view or from another school */}
+                  {n.body && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight line-clamp-1">
+                      {n.body}
+                    </p>
+                  )}
+
                   {(schoolScope === "all" || (n.schoolId && String(n.schoolId) !== String(selectedSchoolId))) && n.schoolName && (
-                    <div className="mt-0.5">
-                      <span className="text-[9px] font-medium text-muted-foreground/90 bg-muted px-1.5 py-0.2 rounded border border-border/40 inline-block truncate max-w-[180px]">
+                    <div className="mt-1">
+                      <span className="text-[9px] font-medium text-muted-foreground/80 bg-muted px-1.5 py-0.2 rounded border border-border/40 inline-block truncate max-w-[170px]">
                         {n.schoolName}
                       </span>
                     </div>
-                  )}
-
-                  {n.body && (
-                    <p className="text-[11px] text-muted-foreground/90 mt-0.5 leading-snug line-clamp-2">
-                      {n.body}
-                    </p>
                   )}
                 </div>
                 {!n.read && (
@@ -260,7 +227,7 @@ export default function NotificationsDropdown() {
         </div>
 
         {/* Footer */}
-        <div className="px-3.5 py-2 border-t border-border bg-muted/20 text-center">
+        <div className="px-3 py-1.5 border-t border-border bg-muted/15 text-center">
           <button
             type="button"
             onClick={() => {
@@ -269,7 +236,7 @@ export default function NotificationsDropdown() {
             }}
             className="text-[11px] text-primary hover:text-primary/80 transition-colors font-medium cursor-pointer"
           >
-            Ver todas as notificações
+            Ver todas as notificações →
           </button>
         </div>
       </PopoverContent>
