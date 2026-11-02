@@ -10,6 +10,7 @@ import {
   DialogFooter,
 } from "../ui/dialog";
 import DatePicker from "../common/DatePicker";
+import DateRangePicker from "../common/DateRangePicker";
 import TimePicker from "../common/TimePicker";
 import SearchableSelect from "../common/SearchableSelect";
 import { Checkbox } from "../ui/checkbox";
@@ -165,68 +166,55 @@ export default function QuickAbsenceModal({
           </div>
 
           {/* Datas e Horas */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-3">
             <div className="space-y-1.5">
               <label className="text-xs text-muted-foreground block font-medium">
-                Data de início *
+                Período da ausência *
               </label>
-              <DatePicker
-                value={start}
-                hasError={!!dateErrors.start}
-                onChange={(v) => {
-                  setStart(v);
-                  if (dateErrors.start) {
-                    setDateErrors((p) => ({ ...p, start: undefined }));
-                  }
-                  if (v && end && end < v) {
-                    setEnd(v);
+              <DateRangePicker
+                value={{ startDate: start, endDate: end }}
+                hasError={!!dateErrors.start || !!dateErrors.end}
+                allowClear={false}
+                onChange={(range) => {
+                  setStart(range.startDate);
+                  setEnd(range.endDate);
+                  if (dateErrors.start || dateErrors.end) {
+                    setDateErrors((p) => ({ ...p, start: undefined, end: undefined }));
                   }
                 }}
                 className="w-full"
               />
-              {dateErrors.start && (
+              {(dateErrors.start || dateErrors.end) && (
                 <p className="text-[11px] text-destructive mt-1 font-medium">
-                  {dateErrors.start}
+                  {dateErrors.start || dateErrors.end}
                 </p>
-              )}
-              {!isFullDay && (
-                <TimePicker
-                  value={startTime}
-                  onChange={setStartTime}
-                  className="w-full"
-                />
               )}
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground block font-medium">
-                Data de fim *
-              </label>
-              <DatePicker
-                value={end}
-                hasError={!!dateErrors.end}
-                minDate={start || undefined}
-                onChange={(v) => {
-                  setEnd(v);
-                  if (dateErrors.end) {
-                    setDateErrors((p) => ({ ...p, end: undefined }));
-                  }
-                }}
-                className="w-full"
-              />
-              {dateErrors.end && (
-                <p className="text-[11px] text-destructive mt-1 font-medium">
-                  {dateErrors.end}
-                </p>
-              )}
-              {!isFullDay && (
-                <TimePicker
-                  value={endTime}
-                  onChange={setEndTime}
-                  className="w-full"
-                />
-              )}
-            </div>
+            {!isFullDay && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1 font-medium">
+                    Hora Início
+                  </label>
+                  <TimePicker
+                    value={startTime}
+                    onChange={setStartTime}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1 font-medium">
+                    Hora Fim
+                  </label>
+                  <TimePicker
+                    value={endTime}
+                    onChange={setEndTime}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Motivo */}

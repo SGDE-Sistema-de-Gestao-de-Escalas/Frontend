@@ -44,6 +44,8 @@ import PrintScheduleModal, {
   PrintableAssistantSchedule,
   PrintableAbsentAssistant,
 } from "./PrintScheduleModal";
+import { useAuth } from "../../context/AuthContext";
+import schedulesService from "../../api/services/schedules.service";
 import type { Assistant, BlockState, EntityId, ScheduleMatrix } from "../../types";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -164,6 +166,8 @@ export default function MatrixGrid({
   onRequestRecalculate,
 }: MatrixGridProps) {
   const { selectedSchoolId, selectedSchool, agrupamento } = useSchool();
+  const { role } = useAuth();
+  const isAdmin = role === "admin";
   const [editMode, setEditMode] = useState(false);
   // Persisted/confirmed schedules per dayOffset
   const [savedMatricesByDay, setSavedMatricesByDay] = useState<
@@ -2750,20 +2754,22 @@ function paintSlot(aid: EntityId, slot: number) {
 
                   <div className="h-4 w-[1px] bg-border mx-0.5" />
 
-                  {/* Botão Imprimir / Exportar */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPrintModalState({
-                        open: true,
-                        initialDocModel: "wall",
-                      })
-                    }
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
-                  >
-                    <Printer size={12} />
-                    <span>Imprimir / Exportar</span>
-                  </button>
+                  {/* Botão Imprimir / Exportar (apenas Administrador) */}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPrintModalState({
+                          open: true,
+                          initialDocModel: "wall",
+                        })
+                      }
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
+                    >
+                      <Printer size={12} />
+                      <span>Imprimir / Exportar</span>
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -4231,7 +4237,8 @@ function paintSlot(aid: EntityId, slot: number) {
       </Dialog>
 
       {/* Modal de Publicação de Escalas (Rascunho -> Publicada) */}
-      <PrintScheduleModal
+      {isAdmin && (
+        <PrintScheduleModal
         open={printModalState.open}
         onClose={() => setPrintModalState((prev) => ({ ...prev, open: false }))}
         initialDocModel={printModalState.initialDocModel}
@@ -4253,6 +4260,7 @@ function paintSlot(aid: EntityId, slot: number) {
         exceptionsByAssistant={exceptionsByAssistant}
         lunchBlocksByDate={lunchBlocksByDate}
       />
+      )}
 
       <PublishSchedulesModal
         open={publishModalState.open}

@@ -22,6 +22,33 @@ import type { EntityId } from "../../types";
 import DatePicker from "../common/DatePicker";
 import CustomSelect from "../common/CustomSelect";
 
+function SimulatorChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload || !payload.length) return null;
+  return (
+    <div className="bg-popover text-popover-foreground border border-border shadow-xl rounded-lg p-2.5 text-xs min-w-[150px] pointer-events-none backdrop-blur-md">
+      <div className="font-semibold text-foreground mb-1.5 pb-1 border-b border-border/50">
+        {label}
+      </div>
+      <div className="space-y-1">
+        {payload.map((p: any, i: number) => (
+          <div key={i} className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: p.color || p.fill }}
+              />
+              <span>{p.name}:</span>
+            </div>
+            <span className="font-mono font-semibold text-foreground">
+              {p.value}h
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function SimulatorPage() {
   const { data: assistantsData = [] } = useAssistantsList();
   const [selectedAssistant, setSelectedAssistant] = useState<EntityId | null>(
@@ -249,13 +276,7 @@ export default function SimulatorPage() {
                         tickLine={false}
                         domain={[0, 12]}
                       />
-                      <Tooltip
-                        contentStyle={{
-                          fontSize: 11,
-                          borderRadius: 8,
-                          border: "1px solid #E8EBF2",
-                        }}
-                      />
+                      <Tooltip content={<SimulatorChartTooltip />} cursor={{ fill: 'currentColor', opacity: 0.05 }} />
                       <Bar
                         key="bar-before"
                         dataKey="before"

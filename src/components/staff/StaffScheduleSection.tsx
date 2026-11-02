@@ -10,7 +10,7 @@ import {
   Loader2,
   Sparkles,
 } from "lucide-react";
-import type { BlockState, StaffViewMode } from "../../types";
+import type { BlockState, EntityId, StaffViewMode } from "../../types";
 import {
   BLOCK_STYLES,
   formatDurationSlots,
@@ -91,10 +91,21 @@ export function getBlockDisplayColor(block: {
  * Hook com pré-carregamento por intervalo (-7 a +21 dias, idêntico ao Admin)
  * para transições de dia instantâneas e sem qualquer efeito de ecrã em branco/flicker.
  */
-function useStaffScheduleData(dayOffset: number) {
+function useStaffScheduleData(
+  dayOffset: number,
+  targetAssistantId?: EntityId,
+  targetAssistantName?: string,
+  targetSchoolId?: EntityId
+) {
   const { user } = useAuth();
   const info = getDateInfo(dayOffset);
-  const assistantId = user.assistant_id ?? user.id ?? "staff";
+  const effectiveAssistantId = targetAssistantId ?? user.assistant_id ?? user.id ?? "staff";
+  const effectiveSchoolId = targetSchoolId ?? user.school_id;
+  const effectiveName = targetAssistantName ?? user.name ?? "Assistente";
+  const effectiveInitials = targetAssistantName
+    ? targetAssistantName.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
+    : user.initials || "AO";
+  const assistantId = effectiveAssistantId;
 
   // Intervalo em cache: 1 semana para trás e 3 semanas para a frente (como no Admin)
   const [loadedRange, setLoadedRange] = useState(() => {
@@ -133,14 +144,14 @@ function useStaffScheduleData(dayOffset: number) {
     useSchedulesList({
       start_date: loadedRange.start,
       end_date: loadedRange.end,
-      assistant_id: user.assistant_id ?? undefined,
+      assistant_id: effectiveAssistantId !== "staff" ? effectiveAssistantId : undefined,
       per_page: 250,
     });
 
   const { data: absencesRes } = useAbsencesList({
     start_date: loadedRange.start,
     end_date: loadedRange.end,
-    assistant_id: user.assistant_id ?? undefined,
+    assistant_id: effectiveAssistantId !== "staff" ? effectiveAssistantId : undefined,
     per_page: 100,
   });
 
@@ -178,11 +189,11 @@ function useStaffScheduleData(dayOffset: number) {
   const dayData = useMemo(() => {
     const dummyAssistant = {
       id: assistantId,
-      name: user.name || "Assistente",
-      initials: user.initials || "AO",
+      name: effectiveName,
+      initials: effectiveInitials,
     };
 
-    const targetId = user.assistant_id ?? dummyAssistant.id;
+    const targetId = assistantId;
 
     const dayStatus = resolveSchoolDayStatusByIsoDate(info.isoDate, {
       calendarDays,
@@ -255,10 +266,20 @@ function useStaffScheduleData(dayOffset: number) {
 /**
  * Vista Diária do Horário do Assistente
  */
-export function StaffDayView({ dayOffset }: { dayOffset: number }) {
+export function StaffDayView({
+  dayOffset,
+  targetAssistantId,
+  targetAssistantName,
+  targetSchoolId,
+}: {
+  dayOffset: number;
+  targetAssistantId?: EntityId;
+  targetAssistantName?: string;
+  targetSchoolId?: EntityId;
+}) {
   const info = getDateInfo(dayOffset);
   const { slots, blocks, shiftBounds, dayStatus, schedules, isLoading } =
-    useStaffScheduleData(dayOffset);
+    useStaffScheduleData(dayOffset, targetAssistantId, targetAssistantName, targetSchoolId);
 
   const activeBlocks = blocks.filter((b) => b.state !== "off");
 
@@ -431,6 +452,7 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
     activeWorkSlots > 0 ? formatDurationSlots(activeWorkSlots) : "—";
 
   const { user } = useAuth();
+  const effectiveSchoolId = targetSchoolId ?? user?.school_id;
   const daySchedule = schedules.find((sc) => {
     if (sc.entries && sc.entries.length > 0) {
       return sc.entries.some((entry) => entry.date?.slice(0, 10) === info.isoDate);
@@ -442,7 +464,7 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
 
   const isTemporaryTransfer = Boolean(
     daySchedule?.is_temporary_transfer ||
-    (daySchedule?.school_id && user?.school_id && String(daySchedule.school_id) !== String(user.school_id))
+    (daySchedule?.school_id && effectiveSchoolId && String(daySchedule.school_id) !== String(effectiveSchoolId))
   );
 
   return (
@@ -687,11 +709,23 @@ export function StaffDayView({ dayOffset }: { dayOffset: number }) {
 export function StaffWeekView({
   weekStart,
   onSelectDay,
+  targetAssistantId,
+  targetAssistantName,
+  targetSchoolId,
 }: {
   weekStart: number;
   onSelectDay: (o: number) => void;
+  targetAssistantId?: EntityId;
+  targetAssistantName?: string;
+  targetSchoolId?: EntityId;
 }) {
   const { user } = useAuth();
+  const effectiveAssistantId = targetAssistantId ?? user.assistant_id ?? undefined;
+  const effectiveSchoolId = targetSchoolId ?? user.school_id;
+  const effectiveName = targetAssistantName ?? user.name ?? "Assistente";
+  const effectiveInitials = targetAssistantName
+    ? targetAssistantName.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
+    : user.initials || "AO";
   const offsets = useMemo(
     () => Array.from({ length: 7 }, (_, i) => weekStart + i),
     [weekStart]
@@ -699,16 +733,16 @@ export function StaffWeekView({
   const startInfo = getDateInfo(offsets[0]);
   const endInfo = getDateInfo(offsets[6]);
 
-  const { data: schedules = [] } = useSchedulesList({
+  const { data: schedules = [], isLoading: isLoadingSchedules } = useSchedulesList({
     start_date: startInfo.isoDate,
     end_date: endInfo.isoDate,
-    assistant_id: user.assistant_id ?? undefined,
+    assistant_id: effectiveAssistantId,
     per_page: 200,
   });
   const { data: absencesRes } = useAbsencesList({
     start_date: startInfo.isoDate,
     end_date: endInfo.isoDate,
-    assistant_id: user.assistant_id ?? undefined,
+    assistant_id: effectiveAssistantId,
     per_page: 50,
   });
   const { data: calendarDays } = useOperatingCalendar(
@@ -721,7 +755,7 @@ export function StaffWeekView({
   const { data: allAssistantSchedules = [] } = useAllAssistantSchedules();
   const { data: allAssistantExceptions = [] } = useAllAssistantExceptions();
 
-  const targetId = user.assistant_id ?? "staff";
+  const targetId = (effectiveAssistantId as string) ?? "staff";
 
   const profilesByAssistant = useMemo(() => {
     const map: Record<string, AssistantScheduleProfileApi[]> = {};
@@ -875,7 +909,7 @@ export function StaffWeekView({
                   });
                   const isDayTransfer = Boolean(
                     daySchedule?.is_temporary_transfer ||
-                    (daySchedule?.school_id && user?.school_id && String(daySchedule.school_id) !== String(user.school_id))
+                    (daySchedule?.school_id && effectiveSchoolId && String(daySchedule.school_id) !== String(effectiveSchoolId))
                   );
                   if (!isDayTransfer) return null;
                   return (
@@ -905,9 +939,18 @@ export function StaffWeekView({
                   >
                     {status.closedLabel || (status.reasonType === "exception" ? "Exceção" : "Encerrada")}
                   </Badge>
+                ) : isLoadingSchedules ? (
+                  <span className="text-[11px] font-medium text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <Loader2 size={11} className="animate-spin text-primary" />
+                    <span>A verificar...</span>
+                  </span>
+                ) : !pubInfo.hasSchedule ? (
+                  <span className="text-[11px] font-medium text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md border border-border">
+                    Não gerada
+                  </span>
                 ) : !pubInfo.isPublished ? (
                   <span className="text-[11px] font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
-                    {pubInfo.status === "draft" ? "Em preparação" : "Não publicada"}
+                    Em preparação
                   </span>
                 ) : hasWork && entryExitStr ? (
                   <div className="flex items-center gap-2">
@@ -1056,12 +1099,24 @@ export function StaffMonthView({
   monthOffset,
   onSelectDay,
   onChangeMonth,
+  targetAssistantId,
+  targetAssistantName,
+  targetSchoolId,
 }: {
   monthOffset: number;
   onSelectDay: (o: number) => void;
   onChangeMonth: (d: number) => void;
+  targetAssistantId?: EntityId;
+  targetAssistantName?: string;
+  targetSchoolId?: EntityId;
 }) {
   const { user } = useAuth();
+  const effectiveAssistantId = targetAssistantId ?? user.assistant_id ?? undefined;
+  const effectiveSchoolId = targetSchoolId ?? user.school_id;
+  const effectiveName = targetAssistantName ?? user.name ?? "Assistente";
+  const effectiveInitials = targetAssistantName
+    ? targetAssistantName.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
+    : user.initials || "AO";
   const monthsList = useMemo(() => getRealMonthsRange(1, 2), []);
   const clampedIdx = Math.max(0, Math.min(monthOffset, monthsList.length - 1));
   const month = monthsList[clampedIdx];
@@ -1073,13 +1128,13 @@ export function StaffMonthView({
   const { data: schedules = [] } = useSchedulesList({
     start_date: month.startIso,
     end_date: month.endIso,
-    assistant_id: user.assistant_id ?? undefined,
+    assistant_id: effectiveAssistantId,
     per_page: 250,
   });
   const { data: absencesRes } = useAbsencesList({
     start_date: month.startIso,
     end_date: month.endIso,
-    assistant_id: user.assistant_id ?? undefined,
+    assistant_id: effectiveAssistantId,
     per_page: 100,
   });
 
@@ -1093,7 +1148,7 @@ export function StaffMonthView({
   const { data: operatingExceptions } = useOperatingExceptions("all");
   const { data: operatingRules } = useOperatingRules("all");
 
-  const targetId = user.assistant_id ?? "staff";
+  const targetId = (effectiveAssistantId as string) ?? "staff";
 
   const profilesByAssistant = useMemo(() => {
     const map: Record<string, AssistantScheduleProfileApi[]> = {};
@@ -1459,7 +1514,7 @@ export function StaffMonthView({
             });
             const isPreviewTransfer = Boolean(
               previewDaySchedule?.is_temporary_transfer ||
-              (previewDaySchedule?.school_id && user?.school_id && String(previewDaySchedule.school_id) !== String(user.school_id))
+              (previewDaySchedule?.school_id && effectiveSchoolId && String(previewDaySchedule.school_id) !== String(effectiveSchoolId))
             );
             if (!isPreviewTransfer) return null;
             return (
@@ -1551,7 +1606,17 @@ export function StaffMonthView({
 /**
  * Componente Principal de Horários do Assistente
  */
-export default function StaffScheduleSection() {
+export interface StaffScheduleSectionProps {
+  targetAssistantId?: EntityId;
+  targetAssistantName?: string;
+  targetSchoolId?: EntityId;
+}
+
+export default function StaffScheduleSection({
+  targetAssistantId,
+  targetAssistantName,
+  targetSchoolId,
+}: StaffScheduleSectionProps = {}) {
   const monthsList = useMemo(() => getRealMonthsRange(1, 2), []);
   const [viewMode, setViewMode] = useState<StaffViewMode>("day");
   const [dayOffset, setDayOffset] = useState(0);

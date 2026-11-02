@@ -89,7 +89,7 @@ export function useCreateOperatingRule() {
       queryClient.invalidateQueries({ queryKey: OPERATING_RULES_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({ queryKey: OPERATING_CALENDAR_QUERY_KEY });
-      notify.success(res?.message || "Nova versão de horário criada com sucesso.", undefined, "Horário Fixo");
+      notify.success(res?.message || "Nova versão de horário criada com sucesso.", "Horário Fixo");
 
     },
     onError: (error: any) => {
@@ -119,7 +119,7 @@ export function useUpdateOperatingRule() {
       queryClient.invalidateQueries({ queryKey: OPERATING_RULES_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({ queryKey: OPERATING_CALENDAR_QUERY_KEY });
-      notify.success(res?.message || "Versão de horário atualizada com sucesso.", undefined, "Horário Fixo");
+      notify.success(res?.message || "Versão de horário atualizada com sucesso.", "Horário Fixo");
 
     },
     onError: (error: any) => {
@@ -149,7 +149,7 @@ export function useDeleteOperatingRule() {
       queryClient.invalidateQueries({ queryKey: OPERATING_RULES_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({ queryKey: OPERATING_CALENDAR_QUERY_KEY });
-      notify.success(res?.message || "Versão eliminada com sucesso.", undefined, "Horário Fixo");
+      notify.success(res?.message || "Versão eliminada com sucesso.", "Horário Fixo");
 
     },
     onError: (error: any) => {
@@ -238,7 +238,7 @@ export function useCreateOperatingException() {
       queryClient.invalidateQueries({ queryKey: OPERATING_EXCEPTIONS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({ queryKey: OPERATING_CALENDAR_QUERY_KEY });
-      notify.success(res?.message || "Exceção criada com sucesso.", undefined, "Exceção de Horário");
+      notify.success(res?.message || "Exceção criada com sucesso.", "Exceção de Horário");
 
     },
     onError: (error: any) => {
@@ -268,7 +268,7 @@ export function useUpdateOperatingException() {
       queryClient.invalidateQueries({ queryKey: OPERATING_EXCEPTIONS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({ queryKey: OPERATING_CALENDAR_QUERY_KEY });
-      notify.success(res?.message || "Exceção atualizada com sucesso.", undefined, "Exceção de Horário");
+      notify.success(res?.message || "Exceção atualizada com sucesso.", "Exceção de Horário");
 
     },
     onError: (error: any) => {
@@ -298,7 +298,7 @@ export function useDeleteOperatingException() {
       queryClient.invalidateQueries({ queryKey: OPERATING_EXCEPTIONS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       queryClient.invalidateQueries({ queryKey: OPERATING_CALENDAR_QUERY_KEY });
-      notify.success(res?.message || "Exceção eliminada com sucesso.", undefined, "Exceção Removida");
+      notify.success(res?.message || "Exceção eliminada com sucesso.", "Exceção Removida");
 
     },
     onError: (error: any) => {

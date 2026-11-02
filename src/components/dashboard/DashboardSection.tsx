@@ -5,12 +5,10 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
-  RotateCcw,
 } from "lucide-react";
 import { useSchool } from "../../context/SchoolContext";
 import { Badge } from "../ui/badge";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import DatePicker from "../common/DatePicker";
+import DateRangePicker, { type DateRange } from "../common/DateRangePicker";
 import ActionTooltip from "../common/ActionTooltip";
 import AlertBanner from "./AlertBanner";
 import MatrixGrid from "./MatrixGrid";
@@ -104,7 +102,6 @@ export default function DashboardSection({
 
   const [queryStartDate, setQueryStartDate] = useState<string>(defaultStartIso);
   const [queryEndDate, setQueryEndDate] = useState<string>(defaultEndIso);
-  const [rangePopoverOpen, setRangePopoverOpen] = useState(false);
 
   const [viewMode, setViewMode] = useState<DashViewMode>("day");
   const [dayOffset, setDayOffset] = useState(0);
@@ -183,29 +180,36 @@ export default function DashboardSection({
       setMonthOffset((m) => Math.min(m + 1, monthsList.length - 1));
   }
 
-  function handleApplyStartDate(nextStart: string) {
-    if (!nextStart) return;
-    setQueryStartDate(nextStart);
-    if (queryEndDate && nextStart > queryEndDate) {
-      setQueryEndDate(nextStart);
-    }
-    const currentIso = getIsoDateFromOffset(dayOffset);
-    if (currentIso < nextStart || (queryEndDate && currentIso > queryEndDate)) {
-      const nextOffset = getOffsetFromIsoDate(nextStart);
-      setDayOffset(nextOffset);
-      setWeekStart(Math.floor(nextOffset / 7) * 7);
-    }
-  }
+  const dashboardPresets = useMemo(() => {
+    const t = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const toIso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-  function handleApplyEndDate(nextEnd: string) {
-    if (!nextEnd) return;
-    setQueryEndDate(nextEnd);
-    if (queryStartDate && nextEnd < queryStartDate) {
-      setQueryStartDate(nextEnd);
-    }
+    const dow = (t.getDay() + 6) % 7;
+    const thisMon = new Date(t);
+    thisMon.setDate(t.getDate() - dow);
+    const thisSun = new Date(thisMon);
+    thisSun.setDate(thisMon.getDate() + 6);
+
+    const firstDayMonth = new Date(t.getFullYear(), t.getMonth(), 1);
+    const lastDayMonth = new Date(t.getFullYear(), t.getMonth() + 1, 0);
+
+    return [
+      { label: "Padrão (±1 Mês)", start: defaultStartIso, end: defaultEndIso },
+      { label: "Hoje", start: toIso(t), end: toIso(t) },
+      { label: "Esta Semana", start: toIso(thisMon), end: toIso(thisSun) },
+      { label: "Este Mês", start: toIso(firstDayMonth), end: toIso(lastDayMonth) },
+    ];
+  }, [defaultStartIso, defaultEndIso]);
+
+  function handleDateRangeChange(range: DateRange) {
+    if (!range.startDate || !range.endDate) return;
+    setQueryStartDate(range.startDate);
+    setQueryEndDate(range.endDate);
+
     const currentIso = getIsoDateFromOffset(dayOffset);
-    if (currentIso > nextEnd || (queryStartDate && currentIso < queryStartDate)) {
-      const nextOffset = getOffsetFromIsoDate(queryStartDate || nextEnd);
+    if (currentIso < range.startDate || currentIso > range.endDate) {
+      const nextOffset = getOffsetFromIsoDate(range.startDate);
       setDayOffset(nextOffset);
       setWeekStart(Math.floor(nextOffset / 7) * 7);
     }
@@ -214,6 +218,11 @@ export default function DashboardSection({
   function handleResetDateRange() {
     setQueryStartDate(defaultStartIso);
     setQueryEndDate(defaultEndIso);
+    const currentIso = getIsoDateFromOffset(dayOffset);
+    if (currentIso < defaultStartIso || currentIso > defaultEndIso) {
+      setDayOffset(0);
+      setWeekStart(0);
+    }
   }
 
   const label = navLabel();
@@ -260,91 +269,33 @@ export default function DashboardSection({
           />
 
           {/* Date Range Filter (Pedir ao Backend Entre Datas) */}
-          <Popover open={rangePopoverOpen} onOpenChange={setRangePopoverOpen}>
-            <ActionTooltip content="Definir intervalo de datas a consultar no servidor (padrão: ±1 mês)">
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                    isCustomDateRange
-                      ? "border-primary/40 bg-primary/8 text-primary"
-                      : "border-border bg-card text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <CalendarRange size={13} />
-                  <span>
-                    {isCustomDateRange
-                      ? `${queryStartDate} → ${queryEndDate}`
-                      : "Intervalo: ±1 Mês"}
-                  </span>
-                </button>
-              </PopoverTrigger>
-            </ActionTooltip>
-            <PopoverContent
+          <ActionTooltip content="Definir intervalo de datas a consultar no servidor (padrão: ±1 mês)">
+            <DateRangePicker
+              value={{ startDate: queryStartDate, endDate: queryEndDate }}
+              onChange={handleDateRangeChange}
+              customTriggerLabel={
+                isCustomDateRange
+                  ? `${queryStartDate} → ${queryEndDate}`
+                  : "Intervalo: ±1 Mês"
+              }
+              customPresets={dashboardPresets}
+              onResetDefault={handleResetDateRange}
+              resetDefaultLabel="Repor ±1 Mês"
+              allowClear={false}
               align="end"
-              sideOffset={6}
-              className="w-80 p-4 rounded-xl border border-border bg-card shadow-2xl space-y-3 z-50"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-semibold text-foreground">
-                    Consultar Escalas Entre Datas
-                  </h4>
-                  <p className="text-[11px] text-muted-foreground">
-                    Por defeito são carregadas as escalas de 1 mês para trás até
-                    1 mês para a frente.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2.5 pt-1">
-                <div>
-                  <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                    Data de Início
-                  </label>
-                  <DatePicker
-                    value={queryStartDate}
-                    onChange={handleApplyStartDate}
-                    allowClear={false}
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                    Data de Fim
-                  </label>
-                  <DatePicker
-                    value={queryEndDate}
-                    onChange={handleApplyEndDate}
-                    minDate={queryStartDate}
-                    allowClear={false}
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-border flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={handleResetDateRange}
-                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-                >
-                  <RotateCcw size={11} />
-                  Repor ±1 Mês
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const targetOffset = getOffsetFromIsoDate(queryStartDate);
-                    setDayOffset(targetOffset);
-                    setWeekStart(Math.floor(targetOffset / 7) * 7);
-                    setRangePopoverOpen(false);
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
-                >
-                  Ir para Data Inicial
-                </button>
-              </div>
-            </PopoverContent>
-          </Popover>
+              triggerIcon={
+                <CalendarRange
+                  size={13}
+                  className={isCustomDateRange ? "text-primary" : "text-muted-foreground"}
+                />
+              }
+              className={
+                isCustomDateRange
+                  ? "border-primary/40 bg-primary/8 text-primary font-medium"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground font-medium"
+              }
+            />
+          </ActionTooltip>
 
           {/* View mode toggle */}
           <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">

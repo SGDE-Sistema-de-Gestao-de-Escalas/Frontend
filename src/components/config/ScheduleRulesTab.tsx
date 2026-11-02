@@ -341,10 +341,6 @@ export default function ScheduleRulesTab() {
                     (a) => a.id === rule.activity_type_id
                   );
                   const daysOfWeek = rule.days_of_week ?? [];
-                  const isAllDays = daysOfWeek.length === 7;
-                  const isWeekdays =
-                    daysOfWeek.length === 5 &&
-                    [0, 1, 2, 3, 4].every((d) => daysOfWeek.includes(d));
 
                   const ruleAssistants = [...(rule.assistants || [])].sort(
                     (a, b) => a.priority - b.priority
@@ -372,29 +368,23 @@ export default function ScheduleRulesTab() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-0.5">
-                          {isAllDays ? (
-                            <span className="text-xs text-muted-foreground font-medium">Todos</span>
-                          ) : isWeekdays ? (
-                            <span className="text-xs text-muted-foreground font-medium">Seg – Sex</span>
-                          ) : (
-                            DAYS.map((d, idx) => {
-                              const isActive = daysOfWeek.includes(idx);
-                              return (
-                                <span
-                                  key={d}
-                                  className={`text-[10px] w-5 h-5 flex items-center justify-center rounded font-mono ${
-                                    isActive
-                                      ? "bg-primary/10 text-primary font-bold"
-                                      : "text-muted-foreground/30"
-                                  }`}
-                                  title={d}
-                                >
-                                  {d[0]}
-                                </span>
-                              );
-                            })
-                          )}
+                        <div className="flex items-center gap-1">
+                          {DAYS.map((d, idx) => {
+                            const isActive = daysOfWeek.includes(idx);
+                            return (
+                              <span
+                                key={d}
+                                className={`text-[10px] w-5 h-5 flex items-center justify-center rounded font-medium transition-colors ${
+                                  isActive
+                                    ? "bg-primary/15 text-primary font-bold border border-primary/25"
+                                    : "bg-muted/40 text-muted-foreground/30 border border-transparent"
+                                }`}
+                                title={`${d}${isActive ? " (Ativo)" : " (Inativo)"}`}
+                              >
+                                {d[0]}
+                              </span>
+                            );
+                          })}
                         </div>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">
