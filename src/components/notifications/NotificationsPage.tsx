@@ -182,6 +182,50 @@ export default function NotificationsPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Seletor de Âmbito da Escola discreto */}
+          <div className="inline-flex items-center p-0.5 rounded-lg border border-border bg-muted/30 text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                setSchoolScope("current");
+                setPage(1);
+              }}
+              className={cn(
+                "px-2.5 py-1 rounded-md transition-all font-medium flex items-center gap-1.5 cursor-pointer text-xs",
+                schoolScope === "current"
+                  ? "bg-card text-foreground shadow-2xs font-semibold border border-border/60"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span className="truncate max-w-[140px]">{selectedSchool?.name || "Escola Atual"}</span>
+              {currentSchoolUnread > 0 && (
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-primary/15 text-primary font-bold">
+                  {currentSchoolUnread}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSchoolScope("all");
+                setPage(1);
+              }}
+              className={cn(
+                "px-2.5 py-1 rounded-md transition-all font-medium flex items-center gap-1.5 cursor-pointer text-xs",
+                schoolScope === "all"
+                  ? "bg-card text-foreground shadow-2xs font-semibold border border-border/60"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span>Todas as Escolas</span>
+              {globalUnreadTotal > 0 && (
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-primary/15 text-primary font-bold">
+                  {globalUnreadTotal}
+                </span>
+              )}
+            </button>
+          </div>
+
           <Button
             type="button"
             variant="outline"
@@ -190,7 +234,7 @@ export default function NotificationsPage() {
               markAllRead.mutate(filter === "all" ? undefined : filter)
             }
             disabled={unreadTotal === 0 || markAllRead.isPending}
-            className="text-xs"
+            className="text-xs h-8"
           >
             {markAllRead.isPending ? (
               <Loader2 size={13} className="mr-1.5 animate-spin" />
@@ -205,44 +249,7 @@ export default function NotificationsPage() {
       </div>
 
       {/* Barra de Filtros e Controlos */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-card p-2 rounded-xl border border-border shadow-2xs">
-        {/* Seletor Escola Atual vs Todas */}
-        <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-lg border border-border/50 text-xs shrink-0">
-          <button
-            type="button"
-            onClick={() => setSchoolScope("current")}
-            className={cn(
-              "px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 cursor-pointer",
-              schoolScope === "current"
-                ? "bg-card text-foreground shadow-xs font-semibold border border-border"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <span className="truncate max-w-[150px]">{selectedSchool?.name || "Escola Atual"}</span>
-            {currentSchoolUnread > 0 && (
-              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-primary/20 text-primary font-bold">
-                {currentSchoolUnread}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setSchoolScope("all")}
-            className={cn(
-              "px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 cursor-pointer",
-              schoolScope === "all"
-                ? "bg-card text-foreground shadow-xs font-semibold border border-border"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <span>Todas as Escolas</span>
-            {globalUnreadTotal > 0 && (
-              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-primary/20 text-primary font-bold">
-                {globalUnreadTotal}
-              </span>
-            )}
-          </button>
-        </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-1.5 rounded-xl border border-border shadow-2xs">
         {/* Pills de Categoria */}
         <div className="flex items-center gap-1 overflow-x-auto scrollbar-none p-0.5">
           {NOTIF_FILTERS.map((f) => {

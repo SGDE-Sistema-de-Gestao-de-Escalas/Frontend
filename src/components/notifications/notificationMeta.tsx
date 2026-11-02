@@ -53,7 +53,12 @@ export type NotifFilterId = (typeof NOTIF_FILTERS)[number]["id"];
 /** "há 5 minutos", "há 2 dias"... */
 export function formatRelativeTime(iso: string): string {
   try {
-    return formatDistanceToNow(parseISO(iso), { addSuffix: true, locale: pt });
+    const raw = formatDistanceToNow(parseISO(iso), { addSuffix: true, locale: pt });
+    return raw
+      .replace(/aproximadamente\s+/gi, "")
+      .replace(/cerca de\s+/gi, "")
+      .replace(/menos de um minuto/gi, "agora")
+      .replace(/^há\s+agora$/i, "agora");
   } catch {
     return "";
   }

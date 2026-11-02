@@ -75,7 +75,7 @@ export default function NotificationsDropdown() {
             type="button"
             aria-label={
               globalUnread > 0
-                ? `Notificações (${globalUnread} por ler em todas as escolas)`
+                ? `Notificações (${globalUnread} por ler)`
                 : "Notificações"
             }
             className="relative w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors focus:outline-none cursor-pointer"
@@ -93,17 +93,16 @@ export default function NotificationsDropdown() {
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-[420px] max-w-[calc(100vw-2rem)] p-0 rounded-xl border border-border bg-card shadow-xl overflow-hidden"
+        className="w-[370px] max-w-[calc(100vw-2rem)] p-0 rounded-xl border border-border bg-card shadow-xl overflow-hidden"
       >
-        {/* Header */}
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-muted/20">
-          <div className="flex items-center gap-2">
-            <Bell size={15} className="text-foreground" />
-            <span className="text-sm font-semibold text-foreground">
+        {/* Top Header */}
+        <div className="px-3.5 py-2.5 border-b border-border flex items-center justify-between bg-muted/20">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-foreground">
               Notificações
             </span>
             {globalUnread > 0 && (
-              <span className="bg-destructive text-destructive-foreground text-[9px] font-mono rounded-full px-1.5 py-0.5 font-bold">
+              <span className="bg-destructive text-destructive-foreground text-[9px] font-mono rounded-full px-1.5 py-0.2 font-bold">
                 {badge}
               </span>
             )}
@@ -112,53 +111,54 @@ export default function NotificationsDropdown() {
             type="button"
             onClick={handleMarkAll}
             disabled={globalUnread === 0 || markAllRead.isPending}
-            className="text-xs text-primary hover:text-primary/80 transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            className="text-[11px] text-primary hover:text-primary/80 transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
-            Marcar todas lidas
+            Marcar lidas
           </button>
         </div>
 
-        {/* Seletor de Âmbito da Escola (Escola Atual vs Todas) */}
-        <div className="flex gap-1 p-2 border-b border-border bg-muted/25 text-xs">
-          <button
-            type="button"
-            onClick={() => setSchoolScope("current")}
-            className={cn(
-              "flex-1 px-2.5 py-1.5 rounded-lg font-medium transition-all flex items-center justify-center gap-1.5 text-center cursor-pointer truncate",
-              schoolScope === "current"
-                ? "bg-card text-foreground shadow-xs font-semibold border border-border"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-            )}
-          >
-            <span className="truncate">{selectedSchool?.name || "Escola Atual"}</span>
-            {currentSchoolUnread > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-mono bg-primary/15 text-primary font-bold shrink-0">
-                {currentSchoolUnread}
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSchoolScope("all")}
-            className={cn(
-              "flex-1 px-2.5 py-1.5 rounded-lg font-medium transition-all flex items-center justify-center gap-1.5 text-center cursor-pointer shrink-0",
-              schoolScope === "all"
-                ? "bg-card text-foreground shadow-xs font-semibold border border-border"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-            )}
-          >
-            <span>Todas as escolas</span>
-            {globalUnread > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-mono bg-primary/15 text-primary font-bold shrink-0">
-                {globalUnread}
-              </span>
-            )}
-          </button>
+        {/* Compact Segmented School Switcher */}
+        <div className="px-3 py-1.5 border-b border-border bg-muted/10">
+          <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/40 text-[11px] w-full">
+            <button
+              type="button"
+              onClick={() => setSchoolScope("current")}
+              className={cn(
+                "flex-1 px-2 py-1 rounded-md transition-all font-medium flex items-center justify-center gap-1.5 truncate cursor-pointer",
+                schoolScope === "current"
+                  ? "bg-card text-foreground shadow-2xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span className="truncate max-w-[120px]">{selectedSchool?.name || "Escola Atual"}</span>
+              {currentSchoolUnread > 0 && (
+                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-primary/15 text-primary font-bold shrink-0">
+                  {currentSchoolUnread}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSchoolScope("all")}
+              className={cn(
+                "flex-1 px-2 py-1 rounded-md transition-all font-medium flex items-center justify-center gap-1.5 truncate cursor-pointer",
+                schoolScope === "all"
+                  ? "bg-card text-foreground shadow-2xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span>Todas as escolas</span>
+              {globalUnread > 0 && (
+                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-primary/15 text-primary font-bold shrink-0">
+                  {globalUnread}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Filtros de Categoria */}
-        <div className="flex gap-1 px-3 py-2 border-b border-border overflow-x-auto bg-muted/10 scrollbar-none">
+        {/* Categories Bar */}
+        <div className="flex gap-1 px-3 py-1.5 border-b border-border overflow-x-auto bg-card scrollbar-none">
           {NOTIF_FILTERS.map((f) => {
             const count = counts?.[f.id] ?? 0;
             return (
@@ -167,7 +167,7 @@ export default function NotificationsDropdown() {
                 type="button"
                 onClick={() => setFilter(f.id)}
                 className={cn(
-                  "flex-shrink-0 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
+                  "flex-shrink-0 px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer",
                   filter === f.id
                     ? "bg-primary text-primary-foreground font-semibold shadow-xs"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -175,7 +175,7 @@ export default function NotificationsDropdown() {
               >
                 {f.label}
                 {count > 0 && (
-                  <span className="ml-1 font-mono text-[10px] opacity-80">
+                  <span className="ml-1 font-mono text-[9px] opacity-80">
                     {count}
                   </span>
                 )}
@@ -184,18 +184,18 @@ export default function NotificationsDropdown() {
           })}
         </div>
 
-        {/* Lista */}
-        <div className="overflow-y-auto max-h-[380px] divide-y divide-border/50">
+        {/* Notifications List */}
+        <div className="overflow-y-auto max-h-[340px] divide-y divide-border/40">
           {isLoading ? (
             <div className="py-8 flex justify-center text-muted-foreground">
-              <Loader2 size={18} className="animate-spin" />
+              <Loader2 size={16} className="animate-spin text-primary" />
             </div>
           ) : isError ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
+            <div className="py-8 text-center text-xs text-muted-foreground">
               Não foi possível carregar as notificações
             </div>
           ) : notifications.length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
+            <div className="py-8 text-center text-xs text-muted-foreground">
               Sem notificações nesta seleção
             </div>
           ) : (
@@ -205,21 +205,21 @@ export default function NotificationsDropdown() {
                 type="button"
                 onClick={() => handleClick(n)}
                 className={cn(
-                  "w-full text-left px-4 py-3 hover:bg-muted/30 transition-colors flex gap-3 cursor-pointer",
+                  "w-full text-left px-3.5 py-2.5 hover:bg-muted/40 transition-colors flex gap-2.5 cursor-pointer group",
                   !n.read ? "bg-primary/5" : ""
                 )}
               >
                 <div
-                  className={`mt-0.5 w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
                     NOTIF_STYLES[n.type].iconBg
                   }`}
                 >
                   {NOTIF_STYLES[n.type].icon}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between gap-1.5">
                     <span
-                      className={`text-xs ${
+                      className={`text-xs truncate ${
                         !n.read
                           ? "font-semibold text-foreground"
                           : "font-medium text-muted-foreground"
@@ -227,22 +227,22 @@ export default function NotificationsDropdown() {
                     >
                       {n.title}
                     </span>
-                    <span className="text-[10px] text-muted-foreground font-mono flex-shrink-0">
+                    <span className="text-[10px] text-muted-foreground/80 font-mono shrink-0">
                       {formatRelativeTime(n.createdAt)}
                     </span>
                   </div>
 
-                  {/* Nome da escola (se no modo 'all' ou de outra escola) */}
+                  {/* School name tag when in 'all' view or from another school */}
                   {(schoolScope === "all" || (n.schoolId && String(n.schoolId) !== String(selectedSchoolId))) && n.schoolName && (
                     <div className="mt-0.5">
-                      <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-muted text-muted-foreground border border-border/50 truncate inline-block max-w-[200px]">
+                      <span className="text-[9px] font-medium text-muted-foreground/90 bg-muted px-1.5 py-0.2 rounded border border-border/40 inline-block truncate max-w-[180px]">
                         {n.schoolName}
                       </span>
                     </div>
                   )}
 
                   {n.body && (
-                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">
+                    <p className="text-[11px] text-muted-foreground/90 mt-0.5 leading-snug line-clamp-2">
                       {n.body}
                     </p>
                   )}
@@ -260,14 +260,14 @@ export default function NotificationsDropdown() {
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-2.5 border-t border-border bg-muted/20 text-center">
+        <div className="px-3.5 py-2 border-t border-border bg-muted/20 text-center">
           <button
             type="button"
             onClick={() => {
               setOpen(false);
               navigate("/notifications");
             }}
-            className="text-xs text-primary hover:text-primary/80 transition-colors font-medium cursor-pointer"
+            className="text-[11px] text-primary hover:text-primary/80 transition-colors font-medium cursor-pointer"
           >
             Ver todas as notificações
           </button>
