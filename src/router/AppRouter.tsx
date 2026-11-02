@@ -5,6 +5,7 @@ import { useSchool } from "../context/SchoolContext";
 import MainLayout from "../components/layout/MainLayout";
 import Login from "../pages/Login";
 import OAuthCallback from "../pages/OAuthCallback";
+import ResetPassword from "../pages/ResetPassword";
 import Dashboard from "../pages/Dashboard";
 import Assistants from "../pages/Assistants";
 import Absences from "../pages/Absences";
@@ -77,6 +78,8 @@ export default function AppRouter() {
       {/* Auth */}
       <Route path="/login" element={<Login />} />
       <Route path="/auth/callback" element={<OAuthCallback />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/setup-password" element={<ResetPassword />} />
 
       {/* Main app layout routes */}
       <Route element={<ProtectedLayout />}>

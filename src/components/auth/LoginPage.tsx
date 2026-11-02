@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { notify } from "../common/FeedbackNotification";
 import {
   AlertCircle,
@@ -16,6 +16,10 @@ import {
 import type { Role } from "../../types";
 import { useAuth } from "../../context/AuthContext";
 import authService from "../../api/services/auth.service";
+import {
+  PASSWORD_RULE_HINT,
+  validateNewPassword,
+} from "../../utils/passwordPolicy";
 import appIcon from "../../assets/icon.svg";
 
 interface LoginPageProps {
@@ -24,10 +28,27 @@ interface LoginPageProps {
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
   const auth = useAuth();
-  const [view, setView] = useState<"login" | "forgot" | "forgot-sent">(
-    "login"
-  );
+  const location = useLocation();
   const [searchParams] = useSearchParams();
+  const isSetupLink = location.pathname === "/setup-password";
+  const isResetLink = isSetupLink || location.pathname === "/reset-password";
+  const [resetLink] = useState(() => ({
+    token: searchParams.get("token") ?? "",
+    email: searchParams.get("email") ?? "",
+  }));
+  const [view, setView] = useState<
+    "login" | "forgot" | "forgot-sent" | "reset" | "reset-done" | "reset-invalid"
+  >(
+    isResetLink
+      ? resetLink.token && resetLink.email
+        ? "reset"
+        : "reset-invalid"
+      : "login"
+  );
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirmation, setNewPasswordConfirmation] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [resetError, setResetError] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -84,6 +105,51 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           "Não foi possível contactar o servidor em http://localhost:8000/api.";
         setError(fallback);
       }
+      setLoading(false);
+    }
+  }
+
+  async function handleResetSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setResetError("");
+
+    const passwordError = validateNewPassword(newPassword);
+    if (passwordError) {
+      setResetError(passwordError);
+      return;
+    }
+    if (newPassword !== newPasswordConfirmation) {
+      setResetError("As passwords não coincidem.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await authService.resetPassword({
+        token: resetLink.token,
+        email: resetLink.email,
+        password: newPassword,
+        password_confirmation: newPasswordConfirmation,
+      });
+      window.history.replaceState({}, "", "/login");
+      setNewPassword("");
+      setNewPasswordConfirmation("");
+      setView("reset-done");
+    } catch (err: any) {
+      const errors = err?.response?.data?.errors;
+      if (errors?.password?.[0]) {
+        setResetError(errors.password[0]);
+      } else if (errors?.email?.[0] || errors?.token?.[0]) {
+        setView("reset-invalid");
+      } else if (err?.response?.status === 429) {
+        setResetError("Demasiadas tentativas. Aguarde um minuto e tente novamente.");
+      } else {
+        setResetError(
+          err?.response?.data?.message ||
+            "Não foi possível definir a password. Tente novamente."
+        );
+      }
+    } finally {
       setLoading(false);
     }
   }
@@ -192,9 +258,13 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           {/* Logo mark com o icon oficial da marca */}
           <div className="mb-8">
             {/* Top icon: SGDE brand icon for login/forgot, or success check badge for forgot-sent */}
-            {view === "forgot-sent" ? (
+            {view === "forgot-sent" || view === "reset-done" ? (
               <div className="w-14 h-14 rounded-2xl bg-[#2baf82]/10 border border-[#2baf82]/25 shadow-xs flex items-center justify-center mb-6 text-[#2baf82]">
                 <CheckCircle size={28} className="stroke-[2.2]" />
+              </div>
+            ) : view === "reset-invalid" ? (
+              <div className="w-14 h-14 rounded-2xl bg-destructive/10 border border-destructive/25 shadow-xs flex items-center justify-center mb-6 text-destructive">
+                <AlertCircle size={28} className="stroke-[2.2]" />
               </div>
             ) : (
               <div className="w-14 h-14 rounded-2xl bg-muted/40 border border-border/80 shadow-xs flex items-center justify-center mb-6 p-2.5">
@@ -250,6 +320,41 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                   <Mail size={13} className="text-[#2baf82]" />
                   <span className="truncate max-w-[260px]">{resetEmail || "o seu email"}</span>
                 </div>
+              </>
+            )}
+            {view === "reset" && (
+              <>
+                <h1 className="text-2xl font-bold text-foreground leading-tight mb-1">
+                  {isSetupLink ? "Ative a sua conta" : "Definir nova password"}
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Escolha a password que vai usar para iniciar sessão.
+                </p>
+                <div className="mt-2.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/60 border border-border text-xs font-semibold text-foreground">
+                  <Mail size={13} className="text-[#2baf82]" />
+                  <span className="truncate max-w-[260px]">{resetLink.email}</span>
+                </div>
+              </>
+            )}
+            {view === "reset-done" && (
+              <>
+                <h1 className="text-2xl font-bold text-foreground leading-tight mb-2">
+                  Password definida
+                </h1>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Já pode iniciar sessão com a sua nova password.
+                </p>
+              </>
+            )}
+            {view === "reset-invalid" && (
+              <>
+                <h1 className="text-2xl font-bold text-foreground leading-tight mb-2">
+                  Link inválido ou expirado
+                </h1>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Este link já foi utilizado ou deixou de ser válido. Peça um novo
+                  link para continuar.
+                </p>
               </>
             )}
           </div>
@@ -474,6 +579,124 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 administrador.
               </p>
             </>
+          )}
+
+          {view === "reset" && (
+            <form onSubmit={handleResetSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1.5">
+                  Nova password <span className="text-destructive ml-0.5">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      setResetError("");
+                    }}
+                    placeholder="••••••••••"
+                    autoComplete="new-password"
+                    className={inputCls(!!resetError) + " pr-10"}
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setShowNewPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Eye
+                      size={15}
+                      className={showNewPassword ? "opacity-100" : "opacity-40"}
+                    />
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1.5">
+                  {PASSWORD_RULE_HINT}
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1.5">
+                  Confirmar password <span className="text-destructive ml-0.5">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={newPasswordConfirmation}
+                  onChange={(e) => {
+                    setNewPasswordConfirmation(e.target.value);
+                    setResetError("");
+                  }}
+                  placeholder="Repita a password"
+                  autoComplete="new-password"
+                  className={inputCls(!!resetError)}
+                />
+              </div>
+
+              {resetError && (
+                <div className="flex items-start gap-2.5 text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-2.5">
+                  <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                  <span className="leading-relaxed break-words">{resetError}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={!newPassword || !newPasswordConfirmation || loading}
+                className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-xs"
+              >
+                {loading ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    A guardar...
+                  </>
+                ) : isSetupLink ? (
+                  "Ativar conta"
+                ) : (
+                  "Definir password"
+                )}
+              </button>
+            </form>
+          )}
+
+          {view === "reset-done" && (
+            <button
+              type="button"
+              onClick={() => {
+                setEmail(resetLink.email);
+                setPassword("");
+                setError("");
+                setView("login");
+              }}
+              className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors shadow-xs"
+            >
+              Ir para o login
+            </button>
+          )}
+
+          {view === "reset-invalid" && (
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setResetEmail(resetLink.email);
+                  setView("forgot");
+                }}
+                className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors shadow-xs"
+              >
+                Pedir novo link
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setError("");
+                  setView("login");
+                }}
+                className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Voltar ao login
+              </button>
+            </div>
           )}
 
           {/* ── FORGOT SENT actions ── */}

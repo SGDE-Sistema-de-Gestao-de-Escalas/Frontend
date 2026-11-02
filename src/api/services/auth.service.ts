@@ -85,7 +85,7 @@ export const authService = {
 
   async forgotPassword(email: string): Promise<{ message: string }> {
     const response = await apiClient.post<{ message: string }>(
-      "/forgot-password",
+      "/password/forgot",
       { email }
     );
     return response.data;
@@ -98,7 +98,7 @@ export const authService = {
     password_confirmation: string;
   }): Promise<{ message: string }> {
     const response = await apiClient.post<{ message: string }>(
-      "/reset-password",
+      "/password/reset",
       data
     );
     return response.data;
