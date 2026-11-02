@@ -260,7 +260,7 @@ export default function ImportHolidaysModal({
                     value={String(selectedYear)}
                     onValueChange={(val) => setSelectedYear(parseInt(val, 10))}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="w-full h-9">
                       <SelectValue placeholder="Selecione o ano" />
                     </SelectTrigger>
                     <SelectContent>
@@ -277,17 +277,20 @@ export default function ImportHolidaysModal({
                 </div>
 
                 {/* Carnival Option with standard Checkbox */}
-                <div className="flex flex-col justify-center pt-2">
+                <div>
                   <label className="text-xs font-semibold text-foreground block mb-1.5">
                     Carnaval
                   </label>
-                  <label className="flex items-center gap-2.5 cursor-pointer text-xs text-foreground select-none p-2.5 rounded-lg border border-border bg-muted/20 hover:bg-muted/30 transition-colors">
+                  <label className="flex items-center gap-2.5 cursor-pointer text-xs sm:text-sm text-foreground select-none h-9 px-3 rounded-lg border border-border bg-input-background hover:bg-muted/30 transition-colors shadow-xs">
                     <Checkbox
                       checked={includeCarnival}
                       onCheckedChange={(checked) => setIncludeCarnival(Boolean(checked))}
                     />
-                    <span>Incluir Terça-feira de Carnaval</span>
+                    <span className="truncate">Incluir Terça-feira de Carnaval</span>
                   </label>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Tolerância de ponto facultativa
+                  </p>
                 </div>
               </div>
 
