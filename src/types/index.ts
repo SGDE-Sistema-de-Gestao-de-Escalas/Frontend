@@ -213,6 +213,7 @@ export interface Notification {
   /** Rota interna para onde a notificação deve levar o utilizador. */
   link: string | null;
   schoolId: string | null;
+  schoolName?: string | null;
   read: boolean;
   readAt: string | null;
   /** ISO 8601 */

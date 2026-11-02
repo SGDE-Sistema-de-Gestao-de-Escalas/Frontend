@@ -37,7 +37,8 @@ const PAGE_SIZE = 20;
 
 export default function NotificationsPage() {
   const navigate = useNavigate();
-  const { selectedSchool } = useSchool();
+  const { selectedSchool, selectedSchoolId, setSchoolId } = useSchool();
+  const [schoolScope, setSchoolScope] = useState<"current" | "all">("current");
   const [filter, setFilter] = useState<NotifFilterId>("all");
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [page, setPage] = useState(1);
@@ -48,15 +49,21 @@ export default function NotificationsPage() {
   useEffect(() => {
     setPage(1);
     setSelectedIds([]);
-  }, [filter, onlyUnread]);
+  }, [filter, onlyUnread, schoolScope]);
 
   // Limpar seleções ao mudar de página
   useEffect(() => {
     setSelectedIds([]);
   }, [page]);
 
+  const effectiveSchoolId =
+    schoolScope === "current"
+      ? (selectedSchoolId ? String(selectedSchoolId) : undefined)
+      : "all";
+
   const { data, isLoading, isError, isFetching } = useNotificationsList({
     type: filter,
+    school_id: effectiveSchoolId,
     unread: onlyUnread,
     page,
     per_page: PAGE_SIZE,
@@ -68,8 +75,14 @@ export default function NotificationsPage() {
 
   const items: Notification[] = data?.items ?? [];
   const counts = data?.unreadCounts;
+  const globalCounts = data?.globalUnreadCounts;
   const meta = data?.meta;
-  const unreadTotal = counts?.all ?? 0;
+  const unreadTotal = (schoolScope === "all" ? globalCounts?.all : counts?.all) ?? counts?.all ?? 0;
+  const globalUnreadTotal = globalCounts?.all ?? counts?.all ?? 0;
+  const currentSchoolUnread =
+    selectedSchoolId && data?.unreadBySchool
+      ? (data.unreadBySchool[String(selectedSchoolId)] ?? 0)
+      : 0;
 
   const isAllCurrentPageSelected =
     items.length > 0 && items.every((n) => selectedIds.includes(n.id));
@@ -127,6 +140,9 @@ export default function NotificationsPage() {
 
   function open(n: Notification) {
     if (!n.read) markRead.mutate(n.id);
+    if (n.schoolId && String(n.schoolId) !== String(selectedSchoolId)) {
+      setSchoolId(n.schoolId);
+    }
     if (n.link) navigate(n.link);
   }
 
@@ -156,7 +172,7 @@ export default function NotificationsPage() {
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Alertas operacionais e avisos do sistema para a escola{" "}
+              Alertas operacionais e avisos do sistema para{" "}
               <span className="font-medium text-foreground">
                 {selectedSchool?.name || "selecionada"}
               </span>
@@ -189,7 +205,44 @@ export default function NotificationsPage() {
       </div>
 
       {/* Barra de Filtros e Controlos */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-1.5 rounded-xl border border-border shadow-2xs">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-card p-2 rounded-xl border border-border shadow-2xs">
+        {/* Seletor Escola Atual vs Todas */}
+        <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-lg border border-border/50 text-xs shrink-0">
+          <button
+            type="button"
+            onClick={() => setSchoolScope("current")}
+            className={cn(
+              "px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 cursor-pointer",
+              schoolScope === "current"
+                ? "bg-card text-foreground shadow-xs font-semibold border border-border"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <span className="truncate max-w-[150px]">{selectedSchool?.name || "Escola Atual"}</span>
+            {currentSchoolUnread > 0 && (
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-primary/20 text-primary font-bold">
+                {currentSchoolUnread}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSchoolScope("all")}
+            className={cn(
+              "px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 cursor-pointer",
+              schoolScope === "all"
+                ? "bg-card text-foreground shadow-xs font-semibold border border-border"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <span>Todas as Escolas</span>
+            {globalUnreadTotal > 0 && (
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-primary/20 text-primary font-bold">
+                {globalUnreadTotal}
+              </span>
+            )}
+          </button>
+        </div>
         {/* Pills de Categoria */}
         <div className="flex items-center gap-1 overflow-x-auto scrollbar-none p-0.5">
           {NOTIF_FILTERS.map((f) => {
@@ -421,6 +474,14 @@ export default function NotificationsPage() {
                       >
                         {style.label}
                       </Badge>
+                      {n.schoolName && (
+                        <Badge
+                          variant="secondary"
+                          className="text-[10px] font-normal py-0 px-1.5 text-muted-foreground border-border/60 max-w-[160px] truncate"
+                        >
+                          {n.schoolName}
+                        </Badge>
+                      )}
                       {!n.read && (
                         <span
                           className={cn(

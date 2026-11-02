@@ -16,6 +16,7 @@ export interface BackendNotificationResource {
   data: Record<string, unknown> | null;
   link: string | null;
   school_id: string | null;
+  school_name?: string | null;
   read: boolean;
   read_at: string | null;
   created_at: string;
@@ -23,6 +24,7 @@ export interface BackendNotificationResource {
 
 export interface NotificationFilterParams {
   type?: NotificationType | "all";
+  school_id?: string | "all";
   /** true = só não lidas */
   unread?: boolean;
   page?: number;
@@ -38,6 +40,8 @@ export interface PaginatedNotificationsResult {
     total: number;
   };
   unreadCounts: NotificationUnreadCounts;
+  globalUnreadCounts: NotificationUnreadCounts;
+  unreadBySchool: Record<string, number>;
 }
 
 const EMPTY_COUNTS: NotificationUnreadCounts = {
@@ -57,6 +61,7 @@ export function mapNotification(n: BackendNotificationResource): Notification {
     body: n.body ?? null,
     link: n.link ?? null,
     schoolId: n.school_id ?? null,
+    schoolName: n.school_name ?? null,
     read: !!n.read,
     readAt: n.read_at ?? null,
     createdAt: n.created_at,
@@ -75,6 +80,7 @@ export const notificationsService = {
     const params: Record<string, unknown> = {};
     if (filters.type && filters.type !== "all") params.type = filters.type;
     if (filters.unread) params.unread = 1;
+    if (filters.school_id !== undefined) params.school_id = filters.school_id;
     if (filters.page) params.page = filters.page;
     if (filters.per_page) params.per_page = filters.per_page;
 
@@ -82,10 +88,15 @@ export const notificationsService = {
       data: BackendNotificationResource[];
       meta?: Partial<PaginationMeta> & {
         unread_counts?: Partial<NotificationUnreadCounts>;
+        global_unread_counts?: Partial<NotificationUnreadCounts>;
+        unread_by_school?: Record<string, number>;
       };
     }>("/notifications", { params });
 
     const meta = data.meta ?? {};
+    const unreadCounts = { ...EMPTY_COUNTS, ...(meta.unread_counts ?? {}) };
+    const globalUnreadCounts = { ...EMPTY_COUNTS, ...(meta.global_unread_counts ?? unreadCounts) };
+
     return {
       items: (data.data ?? []).map(mapNotification),
       meta: {
@@ -94,7 +105,9 @@ export const notificationsService = {
         perPage: meta.per_page ?? (data.data ?? []).length,
         total: meta.total ?? (data.data ?? []).length,
       },
-      unreadCounts: { ...EMPTY_COUNTS, ...(meta.unread_counts ?? {}) },
+      unreadCounts,
+      globalUnreadCounts,
+      unreadBySchool: meta.unread_by_school ?? {},
     };
   },
 
