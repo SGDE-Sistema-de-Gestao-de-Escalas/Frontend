@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notify } from "../../components/common/FeedbackNotification";
 import assistantExceptionsService from "../../api/services/assistantExceptions.service";
 import {
+  AssistantExceptionMutationResponse,
   CreateAssistantExceptionPayload,
   UpdateAssistantExceptionPayload,
 } from "../../types/assistantSchedule.types";
@@ -10,6 +11,23 @@ import { useSchool } from "../../context/SchoolContext";
 import { schoolScopedKey } from "../../lib/queryClient";
 
 export const ASSISTANT_EXCEPTIONS_KEY = ["assistant-exceptions"];
+
+function notifyExceptionSuccessOrWarning(
+  res: AssistantExceptionMutationResponse | undefined,
+  defaultMessage: string,
+  defaultTitle: string
+) {
+  if (res?.warning) {
+    notify.warning(res.warning, "Recálculo de Escala Necessário");
+  } else if (res?.impact?.requires_recalculation) {
+    notify.warning(
+      `Esta alteração na exceção afeta a escala gerada em ${res.impact.affected_dates.length} dia(s). É necessário recalcular o horário.`,
+      "Recálculo de Escala Necessário"
+    );
+  } else {
+    notify.success(defaultMessage, defaultTitle);
+  }
+}
 
 export function useAssistantExceptions(assistantId?: EntityId) {
   const { selectedSchoolId } = useSchool();
@@ -38,11 +56,17 @@ export function useCreateAssistantException() {
   return useMutation({
     mutationFn: (payload: CreateAssistantExceptionPayload) =>
       assistantExceptionsService.create(payload),
-    onSuccess: () => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ASSISTANT_EXCEPTIONS_KEY });
+      queryClient.invalidateQueries({ queryKey: ["assistants"] });
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-recalculations"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
-      notify.success("Regra de exceção registada com sucesso.", "Exceção Criada");
+      notifyExceptionSuccessOrWarning(
+        res,
+        "Regra de exceção registada com sucesso.",
+        "Exceção Criada"
+      );
     },
     onError: (error: any) => {
       const message =
@@ -64,11 +88,17 @@ export function useUpdateAssistantException() {
       data: UpdateAssistantExceptionPayload;
       assistantId: string;
     }) => assistantExceptionsService.update(id, data),
-    onSuccess: () => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ASSISTANT_EXCEPTIONS_KEY });
+      queryClient.invalidateQueries({ queryKey: ["assistants"] });
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-recalculations"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
-      notify.success("Regra de exceção atualizada com sucesso.", "Exceção Atualizada");
+      notifyExceptionSuccessOrWarning(
+        res,
+        "Regra de exceção atualizada com sucesso.",
+        "Exceção Atualizada"
+      );
     },
     onError: (error: any) => {
       const message =
@@ -88,17 +118,24 @@ export function useDeleteAssistantException() {
       id: string | number;
       assistantId: string;
     }) => assistantExceptionsService.delete(id),
-    onSuccess: () => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ASSISTANT_EXCEPTIONS_KEY });
+      queryClient.invalidateQueries({ queryKey: ["assistants"] });
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-recalculations"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
-      notify.success("Regra de exceção eliminada com sucesso.", "Exceção Eliminada");
+      notifyExceptionSuccessOrWarning(
+        res,
+        "Regra de exceção eliminada com sucesso.",
+        "Exceção Eliminada"
+      );
     },
     onError: (error: any) => {
       const message =
-        error?.response?.data?.message || "Não foi possível eliminar a regra de exceção.";
+        error?.response?.data?.errors?.exception?.[0] ||
+        error?.response?.data?.message ||
+        "Não foi possível eliminar a regra de exceção.";
       notify.error(message, "Erro ao Eliminar");
     },
   });
 }
-

@@ -40,6 +40,7 @@ export function useCreateAssistantSchedule() {
       assistantSchedulesService.create(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ASSISTANT_SCHEDULES_KEY });
+      queryClient.invalidateQueries({ queryKey: ["assistants"] });
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("Horário padrão configurado com sucesso.", "Horário Guardado");
@@ -66,6 +67,7 @@ export function useUpdateAssistantSchedule() {
     }) => assistantSchedulesService.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ASSISTANT_SCHEDULES_KEY });
+      queryClient.invalidateQueries({ queryKey: ["assistants"] });
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("Vigência do horário atualizada com sucesso.", "Horário Atualizado");
@@ -90,6 +92,7 @@ export function useDeleteAssistantSchedule() {
     }) => assistantSchedulesService.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ASSISTANT_SCHEDULES_KEY });
+      queryClient.invalidateQueries({ queryKey: ["assistants"] });
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
       notify.success("Horário eliminado com sucesso.", "Horário Eliminado");
@@ -101,4 +104,3 @@ export function useDeleteAssistantSchedule() {
     },
   });
 }
-

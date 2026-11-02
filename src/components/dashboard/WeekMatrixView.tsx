@@ -89,6 +89,22 @@ export default function WeekMatrixView({
     [assistants]
   );
 
+  const profilesByAssistant = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    activeAssistants.forEach((a) => {
+      map[String(a.id)] = (a as any).schedule_profiles || [];
+    });
+    return map;
+  }, [activeAssistants]);
+
+  const exceptionsByAssistant = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    activeAssistants.forEach((a) => {
+      map[String(a.id)] = (a as any).assistant_exceptions || [];
+    });
+    return map;
+  }, [activeAssistants]);
+
   const dayDataByOffset = useMemo(() => {
     const map: Record<
       number,
@@ -109,11 +125,21 @@ export default function WeekMatrixView({
         assistants: activeAssistants,
         schedules,
         absences: absencesRes?.data || [],
+        profilesByAssistant,
+        exceptionsByAssistant,
       });
       map[offset] = res;
     });
     return map;
-  }, [weekOffsets, operatingSources, activeAssistants, schedules, absencesRes]);
+  }, [
+    weekOffsets,
+    operatingSources,
+    activeAssistants,
+    schedules,
+    absencesRes,
+    profilesByAssistant,
+    exceptionsByAssistant,
+  ]);
 
   return (
     <TooltipProvider delayDuration={60}>
