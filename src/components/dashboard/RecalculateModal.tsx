@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
+import ModalStepHeader from "../common/ModalStepHeader";
 import { Checkbox } from "../ui/checkbox";
 import DateRangePicker from "../common/DateRangePicker";
 import TimePicker from "../common/TimePicker";
@@ -69,6 +70,12 @@ function toMinutes(timeStr: string): number {
   const [h, m] = timeStr.split(":").map(Number);
   return (h || 0) * 60 + (m || 0);
 }
+
+const RECALCULATE_STEPS = [
+  { id: "form", label: "1. Período e Parâmetros" },
+  { id: "gap", label: "2. Défice e Cobertura" },
+  { id: "done", label: "3. Conclusão" },
+];
 
 export default function RecalculateModal({
   open,
@@ -621,79 +628,34 @@ export default function RecalculateModal({
       <Dialog open={open} onOpenChange={(val) => !val && handleClose()}>
         <DialogContent className={`${step === "gap" ? "max-w-2xl" : "max-w-xl"} max-h-[90vh] flex flex-col p-0 overflow-hidden sm:rounded-xl transition-all duration-200`}>
         {/* Header com Stepper por baixo dos títulos (idêntico à modal de CSV) */}
-        <DialogHeader className="px-6 pt-5 pb-4 border-b border-border bg-card">
-          <div className="flex items-center gap-3 pr-8">
-            <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
-              <Sparkles size={18} />
-            </div>
-            <div>
-              <DialogTitle className="text-base sm:text-lg font-semibold text-foreground">
-                {step === "form" && "Gerar Escala de Assistentes"}
-                {step === "gap" && "Défice de Cobertura e Transferências"}
-                {step === "done" && (isPublished ? "Escala Publicada com Sucesso" : "Escala Gerada em Rascunho")}
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                {step === "form" && "Configure o período e os parâmetros para a geração automática da escala."}
-                {step === "gap" &&
-                  (conflicts.length > 1
-                    ? `Défice ${currentConflictIdx + 1} de ${conflicts.length} · Analise as sugestões de mobilidade inter-escolar.`
-                    : "Analise as sugestões de mobilidade inter-escolar para colmatar o défice detetado.")}
-                {step === "done" &&
-                  (isPublished
-                    ? "A escala foi publicada e comunicada às equipas com sucesso."
-                    : "Validação concluída. Pode rever os indicadores ou publicar a escala agora.")}
-              </DialogDescription>
-            </div>
-          </div>
-
-          {/* Stepper por baixo dos títulos - Centralizado e com espaçamento simétrico em relação ao divisor */}
-          {step !== "done" && (
-            <div className="!mt-4 pt-4 border-t border-border/60 flex items-center justify-center gap-3 text-xs">
-              {/* Passo 1 */}
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
-                    step === "form"
-                      ? "bg-primary text-primary-foreground shadow-xs"
-                      : "bg-emerald-500 text-white"
-                  }`}
-                >
-                  {step !== "form" ? <Check size={11} strokeWidth={3} /> : "1"}
-                </div>
-                <span
-                  className={`text-xs ${
-                    step === "form" ? "font-semibold text-foreground" : "text-muted-foreground font-medium"
-                  }`}
-                >
-                  Período e Parâmetros
-                </span>
-              </div>
-
-              {/* Separador */}
-              <div className="w-10 sm:w-14 h-px bg-border" />
-
-              {/* Passo 2 */}
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
-                    step === "gap"
-                      ? "bg-primary text-primary-foreground shadow-xs"
-                      : "bg-muted text-muted-foreground border border-border"
-                  }`}
-                >
-                  2
-                </div>
-                <span
-                  className={`text-xs ${
-                    step === "gap" ? "font-semibold text-foreground" : "text-muted-foreground font-medium"
-                  }`}
-                >
-                  Transferências e Cobertura
-                </span>
-              </div>
-            </div>
-          )}
-        </DialogHeader>
+        <ModalStepHeader
+          icon={<Sparkles size={18} />}
+          title={
+            step === "form"
+              ? "Gerar Escala de Assistentes"
+              : step === "gap"
+              ? "Défice de Cobertura e Transferências"
+              : isPublished
+              ? "Escala Publicada com Sucesso"
+              : "Escala Gerada em Rascunho"
+          }
+          description={
+            step === "form"
+              ? "Configure o período e os parâmetros para a geração automática da escala."
+              : step === "gap"
+              ? conflicts.length > 1
+                ? `Défice ${currentConflictIdx + 1} de ${conflicts.length} · Analise as sugestões de mobilidade inter-escolar.`
+                : "Analise as sugestões de mobilidade inter-escolar para colmatar o défice detetado."
+              : isPublished
+              ? "A escala foi publicada e comunicada às equipas com sucesso."
+              : "Validação concluída. Pode rever os indicadores ou publicar a escala agora."
+          }
+          steps={RECALCULATE_STEPS}
+          currentStep={step}
+          onStepClick={(s) => {
+            if (s === "form" && step === "gap") setStep("form");
+          }}
+        />
 
         {/* Body Content com overflow controlado */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">

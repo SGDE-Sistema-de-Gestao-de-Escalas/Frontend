@@ -4,23 +4,26 @@ import {
   ArrowLeft,
   ArrowRight,
   Calendar,
-  Check,
   CheckCircle2,
-  Filter,
   Loader2,
-  MapPin,
   Sparkles,
-  X,
 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
+import SearchableSelect from "../common/SearchableSelect";
+import ModalStepHeader from "../common/ModalStepHeader";
 import {
   useMunicipalities,
   useHolidayPreview,
@@ -61,6 +64,12 @@ function formatDisplayDate(dateStr: string) {
   return `${day} ${months[month]} ${year}`;
 }
 
+const MODAL_STEPS = [
+  { id: "config", label: "1. Parâmetros" },
+  { id: "preview", label: "2. Pré-visualização" },
+  { id: "result", label: "3. Conclusão" },
+];
+
 export default function ImportHolidaysModal({
   open,
   onOpenChange,
@@ -75,7 +84,6 @@ export default function ImportHolidaysModal({
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [selectedMunicipality, setSelectedMunicipality] = useState<string>("");
   const [includeCarnival, setIncludeCarnival] = useState<boolean>(true);
-  const [municipalitySearch, setMunicipalitySearch] = useState<string>("");
 
   // Step 2 Selection state
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
@@ -98,17 +106,26 @@ export default function ImportHolidaysModal({
 
   const importMutation = useImportHolidays();
 
-  // Filtered municipalities for combobox/search
-  const filteredMunicipalities = useMemo(() => {
-    if (!municipalitySearch.trim()) return municipalities;
-    const q = municipalitySearch.toLowerCase().trim();
-    return municipalities.filter(
-      (m) =>
-        m.name.toLowerCase().includes(q) ||
-        m.district.toLowerCase().includes(q) ||
-        m.holiday_name.toLowerCase().includes(q)
-    );
-  }, [municipalities, municipalitySearch]);
+  // Searchable select options for municipalities
+  const municipalityOptions = useMemo(() => {
+    const list = [
+      {
+        value: "",
+        label: "Apenas Feriados Nacionais",
+        description: "Sem feriado municipal",
+      },
+    ];
+
+    municipalities.forEach((m) => {
+      list.push({
+        value: m.slug,
+        label: `${m.name} (${m.district})`,
+        description: m.holiday_name ? `Feriado: ${m.holiday_name}` : undefined,
+      });
+    });
+
+    return list;
+  }, [municipalities]);
 
   const selectedMunicipalityObj = useMemo(() => {
     return municipalities.find((m) => m.slug === selectedMunicipality);
@@ -176,7 +193,6 @@ export default function ImportHolidaysModal({
     setSelectedYear(currentYear);
     setSelectedMunicipality("");
     setIncludeCarnival(true);
-    setMunicipalitySearch("");
     setSelectedDates(new Set());
     setImportResult(null);
   };
@@ -192,90 +208,30 @@ export default function ImportHolidaysModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-        {/* Header */}
-        <DialogHeader className="px-6 py-5 border-b border-border bg-muted/10 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
-              <Calendar className="w-5 h-5" />
-            </div>
-            <div>
-              <DialogTitle className="text-base font-semibold text-foreground flex items-center gap-2">
-                Importação Automática de Feriados
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                  Portugal
-                </span>
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                Obtém os feriados nacionais oficiais e o feriado municipal com base na biblioteca oficial
-              </DialogDescription>
-            </div>
-          </div>
-
-          {/* Stepper Indicator */}
-          <div className="flex items-center gap-2 mt-4 pt-3 border-t border-border/50 text-xs">
-            <div
-              className={`flex items-center gap-1.5 font-medium ${
-                step === "config"
-                  ? "text-primary"
-                  : "text-muted-foreground"
-              }`}
-            >
-              <span
-                className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${
-                  step === "config"
-                    ? "bg-primary text-primary-foreground font-bold"
-                    : "bg-muted text-muted-foreground"
-                }`}
-              >
-                1
-              </span>
-              <span>Parâmetros</span>
-            </div>
-
-            <div className="w-6 h-px bg-border" />
-
-            <div
-              className={`flex items-center gap-1.5 font-medium ${
-                step === "preview"
-                  ? "text-primary"
-                  : "text-muted-foreground"
-              }`}
-            >
-              <span
-                className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${
-                  step === "preview"
-                    ? "bg-primary text-primary-foreground font-bold"
-                    : "bg-muted text-muted-foreground"
-                }`}
-              >
-                2
-              </span>
-              <span>Pré-visualização</span>
-            </div>
-
-            <div className="w-6 h-px bg-border" />
-
-            <div
-              className={`flex items-center gap-1.5 font-medium ${
-                step === "result"
-                  ? "text-primary"
-                  : "text-muted-foreground"
-              }`}
-            >
-              <span
-                className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${
-                  step === "result"
-                    ? "bg-primary text-primary-foreground font-bold"
-                    : "bg-muted text-muted-foreground"
-                }`}
-              >
-                3
-              </span>
-              <span>Conclusão</span>
-            </div>
-          </div>
-        </DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+        {/* Header com Stepper centrado idêntico à exportação */}
+        <ModalStepHeader
+          icon={<Calendar size={18} />}
+          title={
+            step === "config"
+              ? "Importar Calendário de Feriados"
+              : step === "preview"
+              ? "Pré-visualização dos Feriados"
+              : "Importação Concluída"
+          }
+          description={
+            step === "config"
+              ? "Selecione o ano civil e o concelho para obter os feriados nacionais e municipais."
+              : step === "preview"
+              ? "Reveja e selecione os feriados a registar na base de dados global."
+              : "Relatório final do processamento da importação."
+          }
+          steps={MODAL_STEPS}
+          currentStep={step}
+          onStepClick={(s) => {
+            if (s === "config" && step === "preview") setStep("config");
+          }}
+        />
 
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
@@ -289,158 +245,70 @@ export default function ImportHolidaysModal({
                     Importação com Feriados Nacionais e Municipais
                   </p>
                   <p className="mt-1">
-                    Seleciona o ano civil e o concelho onde o agrupamento escolar se localiza. O sistema importará automaticamente todos os feriados nacionais obrigatórios e o feriado municipal correspondente.
+                    Selecione o ano civil e o concelho onde o agrupamento escolar se localiza. O sistema importará automaticamente todos os feriados nacionais obrigatórios e o respetivo feriado municipal.
                   </p>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Year Selection */}
+                {/* Year Selection via standard Select component */}
                 <div>
                   <label className="text-xs font-semibold text-foreground block mb-1.5">
                     Ano Civil *
                   </label>
-                  <select
-                    value={selectedYear}
-                    onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  <Select
+                    value={String(selectedYear)}
+                    onValueChange={(val) => setSelectedYear(parseInt(val, 10))}
                   >
-                    {[currentYear - 1, currentYear, currentYear + 1, currentYear + 2].map((y) => (
-                      <option key={y} value={y}>
-                        {y} {y === currentYear ? "(Ano Atual)" : ""}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Selecione o ano" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[currentYear - 1, currentYear, currentYear + 1, currentYear + 2].map((y) => (
+                        <SelectItem key={y} value={String(y)}>
+                          {y} {y === currentYear ? "(Ano Atual)" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <p className="text-[11px] text-muted-foreground mt-1">
                     Ano do calendário a importar
                   </p>
                 </div>
 
-                {/* Carnival Option */}
+                {/* Carnival Option with standard Checkbox */}
                 <div className="flex flex-col justify-center pt-2">
                   <label className="text-xs font-semibold text-foreground block mb-1.5">
                     Carnaval
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-xs text-foreground select-none p-2 rounded-lg border border-border bg-muted/20 hover:bg-muted/30 transition-colors">
-                    <input
-                      type="checkbox"
+                  <label className="flex items-center gap-2.5 cursor-pointer text-xs text-foreground select-none p-2.5 rounded-lg border border-border bg-muted/20 hover:bg-muted/30 transition-colors">
+                    <Checkbox
                       checked={includeCarnival}
-                      onChange={(e) => setIncludeCarnival(e.target.checked)}
-                      className="rounded border-border text-primary focus:ring-primary w-4 h-4"
+                      onCheckedChange={(checked) => setIncludeCarnival(Boolean(checked))}
                     />
-                    <span>Incluir Terça-feira de Carnaval (Tolerância de Ponto)</span>
+                    <span>Incluir Terça-feira de Carnaval</span>
                   </label>
                 </div>
               </div>
 
-              {/* Municipality Selection */}
+              {/* Municipality Selection with SearchableSelect */}
               <div>
                 <label className="text-xs font-semibold text-foreground block mb-1.5">
                   Concelho / Município (Feriado Municipal)
                 </label>
 
-                {/* Search / Filter Input */}
-                <div className="relative mb-2">
-                  <Filter className="absolute left-3 top-2.5 w-3.5 h-3.5 text-muted-foreground" />
-                  <input
-                    type="text"
-                    value={municipalitySearch}
-                    onChange={(e) => setMunicipalitySearch(e.target.value)}
-                    placeholder="Pesquisar entre os 308 concelhos (ex: Sintra, Lisboa, Porto, Braga)..."
-                    className="w-full pl-9 pr-8 py-2 text-xs rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
-                  {municipalitySearch && (
-                    <button
-                      type="button"
-                      onClick={() => setMunicipalitySearch("")}
-                      className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                {/* Selection list */}
-                <div className="border border-border rounded-lg max-h-48 overflow-y-auto divide-y divide-border/50 bg-card">
-                  {/* Option: National only */}
-                  <div
-                    onClick={() => setSelectedMunicipality("")}
-                    className={`px-3 py-2.5 text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                      selectedMunicipality === ""
-                        ? "bg-primary/10 text-primary font-medium"
-                        : "hover:bg-muted/30 text-foreground"
-                    }`}
-                  >
-                    <div>
-                      <span className="font-semibold">Apenas Feriados Nacionais</span>
-                      <p className="text-[11px] text-muted-foreground">
-                        Não incluir nenhum feriado municipal
-                      </p>
-                    </div>
-                    {selectedMunicipality === "" && (
-                      <Check className="w-4 h-4 text-primary shrink-0" />
-                    )}
-                  </div>
-
-                  {isLoadingMunicipalities ? (
-                    <div className="p-4 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                      A carregar concelhos...
-                    </div>
-                  ) : filteredMunicipalities.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-muted-foreground">
-                      Nenhum concelho encontrado para "{municipalitySearch}".
-                    </div>
-                  ) : (
-                    filteredMunicipalities.map((m) => {
-                      const isSelected = selectedMunicipality === m.slug;
-                      return (
-                        <div
-                          key={m.slug}
-                          onClick={() => setSelectedMunicipality(m.slug)}
-                          className={`px-3 py-2 text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                            isSelected
-                              ? "bg-primary/10 text-primary font-medium"
-                              : "hover:bg-muted/30 text-foreground"
-                          }`}
-                        >
-                          <div className="truncate pr-2">
-                            <span className="font-medium text-foreground">
-                              {m.name}
-                            </span>
-                            <span className="text-muted-foreground ml-1.5 text-[11px]">
-                              ({m.district})
-                            </span>
-                            {m.holiday_name && (
-                              <p className="text-[11px] text-muted-foreground truncate">
-                                Feriado: {m.holiday_name}
-                              </p>
-                            )}
-                          </div>
-                          {isSelected && (
-                            <Check className="w-4 h-4 text-primary shrink-0" />
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {selectedMunicipalityObj && (
-                  <div className="mt-2 p-2.5 rounded-lg border border-purple-500/20 bg-purple-500/5 text-xs flex items-center gap-2">
-                    <MapPin className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-                    <span className="text-muted-foreground">
-                      Concelho selecionado:{" "}
-                      <strong className="text-foreground">
-                        {selectedMunicipalityObj.name}
-                      </strong>{" "}
-                      — Feriado:{" "}
-                      <strong className="text-foreground">
-                        {selectedMunicipalityObj.holiday_name || "Feriado Municipal"}
-                      </strong>
-                    </span>
-                  </div>
-                )}
+                <SearchableSelect
+                  value={selectedMunicipality}
+                  onChange={(val) => setSelectedMunicipality(val)}
+                  options={municipalityOptions}
+                  placeholder="Selecionar concelho..."
+                  searchPlaceholder="Pesquisar entre os 308 concelhos..."
+                  emptyMessage="Nenhum concelho encontrado."
+                  disabled={isLoadingMunicipalities}
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Selecione o município para incluir o respetivo feriado municipal ou opte por apenas nacionais.
+                </p>
               </div>
             </div>
           )}
@@ -493,18 +361,18 @@ export default function ImportHolidaysModal({
               ) : (
                 <div className="border border-border rounded-xl overflow-hidden bg-card">
                   <div className="p-2.5 bg-muted/20 border-b border-border flex items-center justify-between text-xs font-semibold text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
+                    <div className="flex items-center gap-2.5">
+                      <Checkbox
                         checked={
                           newItemsCount > 0 &&
                           selectedDates.size === newItemsCount
                         }
-                        onChange={handleToggleAll}
+                        onCheckedChange={handleToggleAll}
                         disabled={newItemsCount === 0}
-                        className="rounded border-border text-primary focus:ring-primary w-4 h-4 cursor-pointer disabled:opacity-40"
                       />
-                      <span>Selecionar Todos os Novos ({newItemsCount})</span>
+                      <span className="cursor-pointer" onClick={handleToggleAll}>
+                        Selecionar Todos os Novos ({newItemsCount})
+                      </span>
                     </div>
                     <span>{selectedDates.size} selecionado(s)</span>
                   </div>
@@ -529,12 +397,10 @@ export default function ImportHolidaysModal({
                           }`}
                         >
                           <div className="flex items-center gap-3 min-w-0">
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={isSelected}
-                              onChange={() => handleToggleDate(item.date)}
+                              onCheckedChange={() => handleToggleDate(item.date)}
                               disabled={item.already_exists}
-                              className="rounded border-border text-primary focus:ring-primary w-4 h-4 cursor-pointer disabled:opacity-40"
                             />
                             <div className="min-w-0">
                               <p className="font-semibold text-foreground truncate">
