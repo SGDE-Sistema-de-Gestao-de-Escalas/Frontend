@@ -100,7 +100,7 @@ export default function SearchableSelect({
                     {selectedOption.label}
                   </span>
                   {selectedOption.description && (
-                    <span className="text-xs text-muted-foreground truncate">
+                    <span className="text-xs text-muted-foreground truncate hidden sm:inline">
                       ({selectedOption.description})
                     </span>
                   )}
@@ -122,7 +122,7 @@ export default function SearchableSelect({
         <PopoverContent
           align="start"
           sideOffset={4}
-          className="w-[calc(var(--radix-popover-trigger-width))] min-w-[240px] max-w-[420px] p-0 rounded-xl border border-border bg-popover shadow-xl overflow-hidden z-50"
+          className="w-[calc(var(--radix-popover-trigger-width))] min-w-[260px] max-w-[480px] p-0 rounded-xl border border-border bg-popover shadow-xl overflow-hidden z-50"
         >
           {/* Campo de Pesquisa */}
           <div className="p-2 border-b border-border bg-muted/10 flex items-center gap-2">
@@ -147,8 +147,8 @@ export default function SearchableSelect({
             )}
           </div>
 
-          {/* Lista de Opções (Sem grupos) */}
-          <div className="max-h-60 overflow-y-auto py-1 divide-y divide-border/20">
+          {/* Lista de Opções */}
+          <div className="max-h-64 overflow-y-auto py-1 divide-y divide-border/20">
             {filteredOptions.length === 0 ? (
               <div className="py-6 px-3 text-center text-xs text-muted-foreground">
                 {emptyMessage}
@@ -171,17 +171,19 @@ export default function SearchableSelect({
                         : "text-foreground"
                     )}
                   >
-                    <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
-                      {opt.color && (
-                        <span
-                          className="size-3 rounded-xs shrink-0"
-                          style={{ backgroundColor: opt.color }}
-                        />
-                      )}
-                      <span className="truncate">{opt.label}</span>
+                    <div className="flex flex-col min-w-0 flex-1 py-0.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {opt.color && (
+                          <span
+                            className="size-2.5 rounded-xs shrink-0"
+                            style={{ backgroundColor: opt.color }}
+                          />
+                        )}
+                        <span className="truncate font-medium">{opt.label}</span>
+                      </div>
                       {opt.description && (
-                        <span className="text-[11px] text-muted-foreground truncate">
-                          ({opt.description})
+                        <span className="text-[11px] text-muted-foreground truncate mt-0.5">
+                          {opt.description}
                         </span>
                       )}
                     </div>
@@ -199,4 +201,3 @@ export default function SearchableSelect({
     </div>
   );
 }
-

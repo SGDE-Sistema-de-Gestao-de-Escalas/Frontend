@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
+import ModalStepHeader from "../common/ModalStepHeader";
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import { useImportAssistantsCsv } from "../../hooks/api/useAssistants";
 import assistantsService, {
@@ -111,6 +112,12 @@ function normalizeHeader(name: string): string {
     .toLowerCase()
     .replace(/[\s-]+/g, "_");
 }
+
+const ASSISTANT_IMPORT_STEPS = [
+  { id: "upload", label: "1. Ficheiro e Opções" },
+  { id: "preview", label: "2. Pré-visualização" },
+  { id: "result", label: "3. Conclusão" },
+];
 
 export default function ImportAssistantsModal({
   open,
@@ -275,71 +282,22 @@ export default function ImportAssistantsModal({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden sm:rounded-xl">
         {/* Header com Stepper por baixo dos títulos */}
-        <DialogHeader className="px-6 pt-5 pb-4 border-b border-border bg-card">
-          <div className="flex items-center gap-3 pr-8">
-            <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
-              <FileSpreadsheet size={18} />
-            </div>
-            <div>
-              <DialogTitle className="text-base sm:text-lg font-semibold text-foreground">
-                Importar Assistentes por CSV
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                {step === "upload" && "Carregue o ficheiro CSV e selecione as opções de importação."}
-                {step === "preview" && "Verifique a estrutura e os primeiros registos antes de importar."}
-                {step === "result" && "Relatório final do processamento da importação."}
-              </DialogDescription>
-            </div>
-          </div>
-
-          {/* Stepper por baixo dos títulos - Centralizado e com espaçamento simétrico em relação ao divisor */}
-          {step !== "result" && (
-            <div className="!mt-4 pt-4 border-t border-border/60 flex items-center justify-center gap-3 text-xs">
-              {/* Passo 1 */}
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
-                    step === "upload"
-                      ? "bg-primary text-primary-foreground shadow-xs"
-                      : "bg-emerald-500 text-white"
-                  }`}
-                >
-                  {step === "preview" ? <Check size={11} strokeWidth={3} /> : "1"}
-                </div>
-                <span
-                  className={`text-xs ${
-                    step === "upload" ? "font-semibold text-foreground" : "text-muted-foreground font-medium"
-                  }`}
-                >
-                  Ficheiro e Opções
-                </span>
-              </div>
-
-              {/* Separador */}
-              <div className="w-10 sm:w-14 h-px bg-border" />
-
-              {/* Passo 2 */}
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
-                    step === "preview"
-                      ? "bg-primary text-primary-foreground shadow-xs"
-                      : "bg-muted text-muted-foreground border border-border"
-                  }`}
-                >
-                  2
-                </div>
-                <span
-                  className={`text-xs ${
-                    step === "preview" ? "font-semibold text-foreground" : "text-muted-foreground font-medium"
-                  }`}
-                >
-                  Pré-visualização
-                </span>
-              </div>
-            </div>
-          )}
-        </DialogHeader>
+        <ModalStepHeader
+          icon={<FileSpreadsheet size={18} />}
+          title="Importar Assistentes por CSV"
+          description={
+            step === "upload"
+              ? "Carregue o ficheiro CSV e selecione as opções de importação."
+              : step === "preview"
+              ? "Verifique a estrutura e os primeiros registos antes de importar."
+              : "Relatório final do processamento da importação."
+          }
+          steps={ASSISTANT_IMPORT_STEPS}
+          currentStep={step}
+          onStepClick={(s) => {
+            if (s === "upload" && step === "preview") setStep("upload");
+          }}
+        />
 
         {/* Body Content */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">

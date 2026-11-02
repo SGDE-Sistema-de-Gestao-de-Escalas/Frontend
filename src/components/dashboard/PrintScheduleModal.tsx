@@ -27,6 +27,7 @@ import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import DatePicker from "../common/DatePicker";
 import DateRangePicker from "../common/DateRangePicker";
 import AssistantSelect from "../common/AssistantSelect";
+import ModalStepHeader from "../common/ModalStepHeader";
 import { notify } from "../common/FeedbackNotification";
 import type { Assistant } from "../../types";
 import type { MergedScheduleBlock } from "./blockStyles";
@@ -79,6 +80,12 @@ interface PrintScheduleModalProps {
   exceptionsByAssistant?: Record<string, AssistantExceptionApi[]>;
   lunchBlocksByDate?: Record<string, Record<string, LunchBlockApi>>;
 }
+
+const PRINT_STEPS = [
+  { id: 1, label: "1. Modelo" },
+  { id: 2, label: "2. Datas e Seleção" },
+  { id: 3, label: "3. Exportação" },
+];
 
 export default function PrintScheduleModal({
   open,
@@ -356,112 +363,26 @@ export default function PrintScheduleModal({
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
       <DialogContent className="w-full max-w-2xl p-0 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl flex flex-col">
         {/* Header do Modal */}
-        <DialogHeader className="px-6 pt-5 pb-4 border-b border-border bg-card">
-          <div className="flex items-center gap-3 pr-8">
-            <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
-              <Printer size={18} />
-            </div>
-            <div>
-              <DialogTitle className="text-base sm:text-lg font-semibold text-foreground">
-                {step === 1 && "Modelo de Escala"}
-                {step === 2 && "Período e Assistentes"}
-                {step === 3 && "Formato e Emissão"}
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                {step === 1 && "Escolha o tipo de mapa de trabalho pretendido para o estabelecimento."}
-                {step === 2 && "Defina o intervalo de datas e a seleção de assistentes para a emissão."}
-                {step === 3 && "Reveja os parâmetros e selecione o formato final de exportação."}
-              </DialogDescription>
-            </div>
-          </div>
-
-          {/* Stepper por baixo dos títulos - 3 colunas centradas com espaçamento simétrico */}
-          <div className="!mt-4 pt-4 border-t border-border/60">
-            <div className="max-w-md mx-auto grid grid-cols-3 relative">
-              {/* Linha de ligação horizontal em fundo */}
-              <div className="absolute top-2.5 left-[16.6%] right-[16.6%] h-px bg-border">
-                <div
-                  className="h-full bg-emerald-500 transition-all duration-300"
-                  style={{
-                    width: step === 1 ? "0%" : step === 2 ? "50%" : "100%",
-                  }}
-                />
-              </div>
-
-              {/* Passo 1 */}
-              <div
-                className="flex flex-col items-center text-center cursor-pointer relative z-10"
-                onClick={() => setStep(1)}
-              >
-                <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
-                    step === 1
-                      ? "bg-primary text-primary-foreground shadow-xs ring-4 ring-card"
-                      : step > 1
-                      ? "bg-emerald-500 text-white ring-4 ring-card"
-                      : "bg-muted text-muted-foreground border border-border ring-4 ring-card"
-                  }`}
-                >
-                  {step > 1 ? <Check size={11} strokeWidth={3} /> : "1"}
-                </div>
-                <span
-                  className={`text-xs mt-1.5 transition-colors ${
-                    step === 1 ? "font-semibold text-foreground" : "text-muted-foreground font-medium"
-                  }`}
-                >
-                  1. Modelo
-                </span>
-              </div>
-
-              {/* Passo 2 */}
-              <div
-                className={`flex flex-col items-center text-center relative z-10 ${
-                  step >= 2 ? "cursor-pointer" : "opacity-60"
-                }`}
-                onClick={() => step > 2 && setStep(2)}
-              >
-                <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
-                    step === 2
-                      ? "bg-primary text-primary-foreground shadow-xs ring-4 ring-card"
-                      : step > 2
-                      ? "bg-emerald-500 text-white ring-4 ring-card"
-                      : "bg-muted text-muted-foreground border border-border ring-4 ring-card"
-                  }`}
-                >
-                  {step > 2 ? <Check size={11} strokeWidth={3} /> : "2"}
-                </div>
-                <span
-                  className={`text-xs mt-1.5 transition-colors ${
-                    step === 2 ? "font-semibold text-foreground" : "text-muted-foreground font-medium"
-                  }`}
-                >
-                  2. Datas e Seleção
-                </span>
-              </div>
-
-              {/* Passo 3 */}
-              <div className={`flex flex-col items-center text-center relative z-10 ${step === 3 ? "" : "opacity-60"}`}>
-                <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
-                    step === 3
-                      ? "bg-primary text-primary-foreground shadow-xs ring-4 ring-card"
-                      : "bg-muted text-muted-foreground border border-border ring-4 ring-card"
-                  }`}
-                >
-                  3
-                </div>
-                <span
-                  className={`text-xs mt-1.5 transition-colors ${
-                    step === 3 ? "font-semibold text-foreground" : "text-muted-foreground font-medium"
-                  }`}
-                >
-                  3. Exportação
-                </span>
-              </div>
-            </div>
-          </div>
-        </DialogHeader>
+        <ModalStepHeader
+          icon={<Printer size={18} />}
+          title={
+            step === 1
+              ? "Modelo de Escala"
+              : step === 2
+              ? "Período e Assistentes"
+              : "Formato e Emissão"
+          }
+          description={
+            step === 1
+              ? "Escolha o tipo de mapa de trabalho pretendido para o estabelecimento."
+              : step === 2
+              ? "Defina o intervalo de datas e a seleção de assistentes para a emissão."
+              : "Reveja os parâmetros e selecione o formato final de exportação."
+          }
+          steps={PRINT_STEPS}
+          currentStep={step}
+          onStepClick={(s) => setStep(s as 1 | 2 | 3)}
+        />
 
         {/* Corpo do Modal com Transição entre Passos */}
         <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">

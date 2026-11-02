@@ -1,12 +1,29 @@
 import { useState } from "react";
-import { AlertTriangle, Pencil, Plus, Trash2, Loader2, Calendar } from "lucide-react";
+import {
+  AlertTriangle,
+  Pencil,
+  Plus,
+  Trash2,
+  Loader2,
+  Calendar,
+  Sparkles,
+} from "lucide-react";
 import type { EntityId } from "../../types";
 import { Card } from "../ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../ui/dialog";
 import DatePicker, { formatToIsoDate, parseFlexibleDate } from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import { ActionTooltip } from "../common/ActionTooltip";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
+import { useAuth } from "../../context/AuthContext";
+import ImportHolidaysModal from "../holidays/ImportHolidaysModal";
 import {
   useHolidaysList,
   useCreateHoliday,
@@ -26,12 +43,16 @@ function formatDisplayDate(dateStr: string) {
 export default function HolidaysPage() {
   useDocumentTitle("Feriados");
 
+  const { role } = useAuth();
+  const isAdmin = role === "admin";
+
   const { data: holidays = [], isLoading, isError, refetch } = useHolidaysList({ per_page: 100 });
   const createMutation = useCreateHoliday();
   const updateMutation = useUpdateHoliday();
   const deleteMutation = useDeleteHoliday();
 
   const [showAdd, setShowAdd] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editingHolidayId, setEditingHolidayId] = useState<EntityId | null>(null);
   const [newName, setNewName] = useState("");
   const [newDate, setNewDate] = useState("");
@@ -39,16 +60,19 @@ export default function HolidaysPage() {
   const [holidayDeleteTarget, setHolidayDeleteTarget] = useState<BackendHolidayResource | null>(null);
   const [formErrors, setFormErrors] = useState<{ name?: string; date?: string }>({});
 
+  const todayStr = new Date().toISOString().split("T")[0];
+
   function openAdd() {
     setEditingHolidayId(null);
     setNewName("");
-    setNewDate(new Date().toISOString().split("T")[0]);
+    setNewDate(todayStr);
     setNewDescription("");
     setFormErrors({});
     setShowAdd(true);
   }
 
   function openEdit(h: BackendHolidayResource) {
+    if (h.date < todayStr) return; // Não permitir editar feriados passados
     const clean = (val: string | null | undefined) => (!val || val.trim() === "—" || val.trim() === "-" ? "" : val);
     setEditingHolidayId(h.id);
     setNewName(clean(h.name));
@@ -65,6 +89,8 @@ export default function HolidaysPage() {
     }
     if (!newDate) {
       errs.date = "A data do feriado é obrigatória.";
+    } else if (newDate < todayStr && editingHolidayId === null) {
+      errs.date = "A data do feriado não pode ser uma data passada.";
     }
 
     if (Object.keys(errs).length > 0) {
@@ -74,29 +100,33 @@ export default function HolidaysPage() {
 
     setFormErrors({});
 
-    if (editingHolidayId !== null) {
-      await updateMutation.mutateAsync({
-        id: editingHolidayId,
-        data: {
+    try {
+      if (editingHolidayId !== null) {
+        await updateMutation.mutateAsync({
+          id: editingHolidayId,
+          data: {
+            name: newName.trim(),
+            date: newDate,
+            description: newDescription.trim() || null,
+          },
+        });
+      } else {
+        await createMutation.mutateAsync({
           name: newName.trim(),
           date: newDate,
           description: newDescription.trim() || null,
-        },
-      });
-    } else {
-      await createMutation.mutateAsync({
-        name: newName.trim(),
-        date: newDate,
-        description: newDescription.trim() || null,
-      });
-    }
+        });
+      }
 
-    setShowAdd(false);
-    setEditingHolidayId(null);
-    setNewName("");
-    setNewDate("");
-    setNewDescription("");
-    setFormErrors({});
+      setShowAdd(false);
+      setEditingHolidayId(null);
+      setNewName("");
+      setNewDate("");
+      setNewDescription("");
+      setFormErrors({});
+    } catch {
+      // Notificado via onError do hook
+    }
   }
 
   async function handleDeleteConfirm() {
@@ -112,7 +142,6 @@ export default function HolidaysPage() {
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   // Próximos feriados ordenados por data futura
-  const todayStr = new Date().toISOString().split("T")[0];
   const upcomingHolidays = [...holidays]
     .filter((h) => h.date >= todayStr)
     .slice(0, 5);
@@ -129,19 +158,32 @@ export default function HolidaysPage() {
             Gestão de feriados e dias não úteis aplicados às escalas do agrupamento
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openAdd}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors flex-shrink-0 shadow-xs ml-auto"
-        >
-          <Plus size={12} />
-          Adicionar
-        </button>
+
+        {isAdmin && (
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              type="button"
+              onClick={() => setShowImport(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-foreground text-xs font-medium transition-colors shadow-xs"
+            >
+              <Sparkles size={13} className="text-primary" />
+              Importar Feriados
+            </button>
+
+            <button
+              type="button"
+              onClick={openAdd}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors flex-shrink-0 shadow-xs"
+            >
+              <Plus size={12} />
+              Adicionar
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
-
           {/* Loading */}
           {isLoading && (
             <Card className="p-12 border-border bg-card flex flex-col items-center justify-center text-muted-foreground gap-3">
@@ -172,8 +214,18 @@ export default function HolidaysPage() {
               <Calendar size={28} className="mx-auto text-muted-foreground/50 mb-2" />
               <p className="text-sm font-medium text-foreground">Nenhum feriado registado</p>
               <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-                Ainda não existem feriados configurados no sistema. Adicione feriados para que sejam considerados no cálculo de escalas.
+                Ainda não existem feriados configurados no sistema. Adicione feriados manualmente ou utilize a importação automática de Portugal.
               </p>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setShowImport(true)}
+                  className="mt-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+                >
+                  <Sparkles size={12} />
+                  Importar Feriados Nacionais e Municipais
+                </button>
+              )}
             </div>
           )}
 
@@ -195,45 +247,76 @@ export default function HolidaysPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {holidays.map((h) => (
-                      <tr
-                        key={h.id}
-                        className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors"
-                      >
-                        <td className="px-4 py-3 font-medium text-foreground">
-                          {h.name}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                          {formatDisplayDate(h.date)}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground max-w-xs truncate">
-                          {h.description || "—"}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center gap-1 justify-end">
-                            <ActionTooltip content="Editar feriado">
-                              <button
-                                type="button"
-                                onClick={() => openEdit(h)}
-                                className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                              >
-                                <Pencil size={13} />
-                              </button>
-                            </ActionTooltip>
+                    {holidays.map((h) => {
+                      const isPast = h.date < todayStr;
+                      return (
+                        <tr
+                          key={h.id}
+                          className={`border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors ${
+                            isPast ? "opacity-70 bg-muted/5" : ""
+                          }`}
+                        >
+                          <td className="px-4 py-3 font-medium text-foreground">
+                            <div className="flex items-center gap-2">
+                              <span>{h.name}</span>
+                              {isPast && (
+                                <span className="px-1.5 py-0.2 rounded text-[10px] font-medium bg-muted text-muted-foreground border border-border/80">
+                                  Passado
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                            {formatDisplayDate(h.date)}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground max-w-xs truncate">
+                            {h.description || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {isAdmin && (
+                              <div className="flex items-center gap-1 justify-end">
+                                {isPast ? (
+                                  <>
+                                    <ActionTooltip content="Feriados passados não podem ser alterados">
+                                      <span className="p-1.5 text-muted-foreground/30 cursor-not-allowed">
+                                        <Pencil size={13} />
+                                      </span>
+                                    </ActionTooltip>
+                                    <ActionTooltip content="Feriados passados não podem ser eliminados">
+                                      <span className="p-1.5 text-muted-foreground/30 cursor-not-allowed">
+                                        <Trash2 size={13} />
+                                      </span>
+                                    </ActionTooltip>
+                                  </>
+                                ) : (
+                                  <>
+                                    <ActionTooltip content="Editar feriado">
+                                      <button
+                                        type="button"
+                                        onClick={() => openEdit(h)}
+                                        className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                      >
+                                        <Pencil size={13} />
+                                      </button>
+                                    </ActionTooltip>
 
-                            <ActionTooltip content="Eliminar feriado">
-                              <button
-                                type="button"
-                                onClick={() => setHolidayDeleteTarget(h)}
-                                className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </ActionTooltip>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                                    <ActionTooltip content="Eliminar feriado">
+                                      <button
+                                        type="button"
+                                        onClick={() => setHolidayDeleteTarget(h)}
+                                        className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </ActionTooltip>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -247,11 +330,11 @@ export default function HolidaysPage() {
                 <DialogTitle className="font-semibold text-foreground text-sm">
                   {editingHolidayId !== null ? "Editar Feriado" : "Novo Feriado"}
                 </DialogTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                   {editingHolidayId !== null
-                    ? "Alterar dados do feriado no calendário"
-                    : "Adicionar feriado ao calendário global"}
-                </p>
+                    ? "Alterar dados do feriado no calendário global"
+                    : "Adicionar feriado ao calendário global do agrupamento"}
+                </DialogDescription>
               </DialogHeader>
 
               <div className="p-5 space-y-4">
@@ -368,9 +451,9 @@ export default function HolidaysPage() {
                 className="text-[#D97706] mt-0.5 flex-shrink-0"
               />
               <div>
-                <p className="text-xs font-semibold text-foreground">Atenção</p>
+                <p className="text-xs font-semibold text-foreground">Atenção às Escalas</p>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  Os feriados registados aplicam-se a todas as escolas do agrupamento e são considerados automaticamente no cálculo de escalas e assiduidade.
+                  Os feriados aplicam-se a todas as escolas do agrupamento. Se adicionar, alterar ou eliminar um feriado para uma data com escalas já geradas, o sistema alertará para a necessidade de recálculo da escala.
                 </p>
               </div>
             </div>
@@ -397,6 +480,13 @@ export default function HolidaysPage() {
         confirmLabel="Eliminar Feriado"
         cancelLabel="Cancelar"
         variant="danger"
+      />
+
+      {/* Import Holidays Modal */}
+      <ImportHolidaysModal
+        open={showImport}
+        onOpenChange={setShowImport}
+        onSuccess={() => refetch()}
       />
     </div>
   );
