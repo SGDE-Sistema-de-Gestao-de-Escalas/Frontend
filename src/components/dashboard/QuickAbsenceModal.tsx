@@ -1,64 +1,124 @@
-import React, { useState } from "react";
-import { Building2, Check, ChevronDown } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Check, Clock, Loader2, X } from "lucide-react";
+import { Button } from "../ui/button";
 import {
-  assistants as ASSISTANTS,
-  generateMatrix,
-  schools as SCHOOLS,
-} from "../../api/mockData";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
-import { BLOCK_STYLES } from "./blockStyles";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../ui/dialog";
 import DatePicker from "../common/DatePicker";
+import DateRangePicker from "../common/DateRangePicker";
 import TimePicker from "../common/TimePicker";
+import SearchableSelect from "../common/SearchableSelect";
+import { Checkbox } from "../ui/checkbox";
+import { useAssistantsList } from "../../hooks/api/useAssistants";
+import { useAbsenceTypesList } from "../../hooks/api/useAbsenceTypes";
+import { useCreateAbsence } from "../../hooks/api/useAbsences";
+import { useSchool } from "../../context/SchoolContext";
 import type { EntityId } from "../../types";
 
 interface QuickAbsenceModalProps {
   assistantName: string | null;
+  initialDate?: string;
   onClose: () => void;
   currentSchoolId?: EntityId;
 }
 
 export default function QuickAbsenceModal({
   assistantName,
+  initialDate,
   onClose,
   currentSchoolId = 1,
 }: QuickAbsenceModalProps) {
-  const [start, setStart] = useState("2026-01-27");
+  const { selectedSchool } = useSchool();
+  const { data: assistants = [] } = useAssistantsList();
+  const { data: absenceTypes = [] } = useAbsenceTypesList();
+  const createAbsenceMutation = useCreateAbsence();
+
+  const todayIso = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const defaultDate = initialDate || todayIso;
+  const [start, setStart] = useState(defaultDate);
   const [startTime, setStartTime] = useState("08:00");
-  const [end, setEnd] = useState("2026-01-27");
+  const [end, setEnd] = useState(defaultDate);
   const [endTime, setEndTime] = useState("17:00");
-  const [reason, setReason] = useState("Doença");
+  const [isFullDay, setIsFullDay] = useState(true);
+  const [status, setStatus] = useState<"pending" | "justified" | "unjustified">("pending");
+  const [selectedTypeId, setSelectedTypeId] = useState<string>("");
   const [note, setNote] = useState("");
-  const [done, setDone] = useState(false);
-  const [showCoverage, setShowCoverage] = useState(false);
-  const [coverageSchool, setCoverageSchool] = useState<number | "">("");
-  const [coverageAssistantId, setCoverageAssistantId] = useState<number | "">("");
+  const [dateErrors, setDateErrors] = useState<{
+    start?: string;
+    end?: string;
+    type?: string;
+  }>({});
+
+  useEffect(() => {
+    if (assistantName) {
+      const d = initialDate || todayIso;
+      setStart(d);
+      setEnd(d);
+      setIsFullDay(true);
+      setDateErrors({});
+    }
+  }, [assistantName, initialDate, todayIso]);
 
   if (!assistantName) return null;
 
-  const assistant = ASSISTANTS.find((a) => a.name === assistantName);
-  const otherSchools = SCHOOLS.filter(
-    (s) => s.id !== currentSchoolId && s.active
+  const assistant = assistants.find((a) => a.name === assistantName);
+  const effectiveTypeId =
+    selectedTypeId || (absenceTypes[0] ? String(absenceTypes[0].id) : "");
+  const selectedType = absenceTypes.find(
+    (t) => String(t.id) === String(effectiveTypeId)
   );
 
-  const covMatrix = generateMatrix();
-  const coverageSubstitutes = ASSISTANTS.filter((a) => {
-    if (coverageSchool === "" || a.schoolId !== coverageSchool) return false;
-    if (!a.availableForTransfer) return false;
-    if (a.exception === "Licença Parentalidade") return false;
-    const row = covMatrix[a.id] ?? [];
-    return !row.some((s) => BLOCK_STYLES[s]?.locked);
-  });
+  async function submit() {
+    const errors: { start?: string; end?: string; type?: string } = {};
+    if (!start) {
+      errors.start = "A data de início é obrigatória.";
+    }
+    if (!end) {
+      errors.end = "A data de fim é obrigatória.";
+    } else if (start && end < start) {
+      errors.end = "A data de fim não pode ser anterior à data de início.";
+    }
+    if (!isFullDay && start === end && startTime && endTime && endTime <= startTime) {
+      errors.end = "A hora de fim deve ser posterior à hora de início.";
+    }
+    if (!effectiveTypeId) {
+      errors.type = "Selecione o tipo de ausência.";
+    }
 
-  const selectedCovSub = ASSISTANTS.find(
-    (a) => a.id === Number(coverageAssistantId)
-  );
+    if (Object.keys(errors).length > 0) {
+      setDateErrors(errors);
+      return;
+    }
 
-  function submit() {
-    if (!start || !end) return;
-    setDone(true);
+    if (!assistant?.id) {
+      onClose();
+      return;
+    }
+
+    setDateErrors({});
+
+    try {
+      await createAbsenceMutation.mutateAsync({
+        assistant_id: assistant.id,
+        absence_type_id: effectiveTypeId,
+        valid_from: start,
+        valid_until: end,
+        start_time: isFullDay ? null : startTime,
+        end_time: isFullDay ? null : endTime,
+        status: status,
+        justification: selectedType?.name || null,
+        notes: note.trim() || null,
+      });
+      onClose();
+    } catch {
+      // Erro tratado pelo hook useCreateAbsence
+    }
   }
-
-  const hasDates = Boolean(start && end);
 
   return (
     <Dialog open={assistantName !== null} onOpenChange={(open) => !open && onClose()}>
@@ -67,281 +127,210 @@ export default function QuickAbsenceModal({
           <DialogTitle className="font-semibold text-foreground text-sm">
             Registar Ausência
           </DialogTitle>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <DialogDescription className="text-xs text-muted-foreground mt-0.5">
             Marcar falta a um assistente
-          </p>
+          </DialogDescription>
         </DialogHeader>
 
-        {done ? (
-          <div className="p-8 text-center">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
-              <Check size={22} className="text-primary" />
+        <div className="p-5 space-y-4">
+          {/* Assistant summary header */}
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-muted/50 border border-border">
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-bold text-primary font-mono">
+                {assistant?.initials ?? "?"}
+              </span>
             </div>
-            <p className="text-sm font-semibold text-foreground">
-              Ausência registada
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              A falta de <span className="font-medium text-foreground">{assistantName}</span> foi registada com sucesso.
-            </p>
-            <div className="mt-2 px-3 py-2 rounded-lg bg-muted/40 border border-border text-xs font-mono text-muted-foreground">
-              {start} {startTime} → {end} {endTime}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">
+                {assistantName}
+              </p>
+              <p className="text-[10px] text-muted-foreground truncate">
+                {assistant?.school?.name ?? selectedSchool?.name ?? "Assistente"}
+              </p>
             </div>
-            {selectedCovSub && (
-              <div className="mt-3 px-4 py-2.5 rounded-xl bg-primary/5 border border-primary/20 text-xs text-left">
-                <p className="font-medium text-primary mb-0.5">
-                  Cobertura inter-escolar agendada
-                </p>
-                <p className="text-muted-foreground">
-                  {selectedCovSub.name} (
-                  {
-                    SCHOOLS.find((s) => s.id === selectedCovSub.schoolId)
-                      ?.name
-                  }
-                  ) cobre de {start} {startTime} a {end} {endTime}.
-                </p>
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="mt-5 px-6 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-            >
-              Fechar
-            </button>
           </div>
-        ) : (
-          <div className="p-5 space-y-4">
-            {/* Assistant summary header */}
-            <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-muted/50 border border-border">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <span className="text-xs font-bold text-primary font-mono">
-                  {assistant?.initials ?? "?"}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">
-                  {assistantName}
-                </p>
-                <p className="text-[10px] text-muted-foreground truncate">
-                  {SCHOOLS.find((s) => s.id === assistant?.schoolId)?.name ??
-                    "Assistente"}
-                </p>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground block font-medium">
-                  Data de início *
-                </label>
-                <DatePicker
-                  value={start}
-                  onChange={setStart}
-                  className="w-full"
-                />
-                <TimePicker
-                  value={startTime}
-                  onChange={setStartTime}
-                  className="w-full"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground block font-medium">
-                  Data de fim *
-                </label>
-                <DatePicker
-                  value={end}
-                  onChange={setEnd}
-                  className="w-full"
-                />
-                <TimePicker
-                  value={endTime}
-                  onChange={setEndTime}
-                  className="w-full"
-                />
-              </div>
-            </div>
+          {/* Opção Dia Inteiro */}
+          <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/20">
+            <label htmlFor="quick-absence-full-day" className="cursor-pointer select-none">
+              <span className="text-xs font-semibold text-foreground block">Dia Inteiro</span>
+              <span className="text-[11px] text-muted-foreground">
+                Cobre todo o horário de trabalho do assistente
+              </span>
+            </label>
+            <Checkbox
+              id="quick-absence-full-day"
+              checked={isFullDay}
+              onCheckedChange={(val) => setIsFullDay(Boolean(val))}
+            />
+          </div>
 
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                Motivo
+          {/* Datas e Horas */}
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground block font-medium">
+                Período da ausência *
               </label>
-              <select
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                {[
-                  "Doença",
-                  "Baixa Médica",
-                  "Consulta Médica",
-                  "Motivo Pessoal",
-                  "Acidente",
-                  "Luto",
-                  "Outro",
-                ].map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                Notas
-              </label>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={2}
-                placeholder="Observações opcionais..."
-                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring resize-none placeholder:text-muted-foreground/50"
+              <DateRangePicker
+                value={{ startDate: start, endDate: end }}
+                hasError={!!dateErrors.start || !!dateErrors.end}
+                allowClear={false}
+                onChange={(range) => {
+                  setStart(range.startDate);
+                  setEnd(range.endDate);
+                  if (dateErrors.start || dateErrors.end) {
+                    setDateErrors((p) => ({ ...p, start: undefined, end: undefined }));
+                  }
+                }}
+                className="w-full"
               />
-            </div>
-
-            {/* Inter-school coverage */}
-            <div
-              className={`rounded-xl border transition-colors ${
-                showCoverage
-                  ? "border-primary/30 bg-primary/5"
-                  : "border-border"
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => setShowCoverage((v) => !v)}
-                disabled={!hasDates}
-                className="w-full flex items-center justify-between px-3.5 py-3 text-left disabled:opacity-40"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div
-                    className={`w-6 h-6 rounded-md flex items-center justify-center ${
-                      showCoverage ? "bg-primary/15" : "bg-muted"
-                    }`}
-                  >
-                    <Building2
-                      size={12}
-                      className={
-                        showCoverage ? "text-primary" : "text-muted-foreground"
-                      }
-                    />
-                  </div>
-                  <div>
-                    <p
-                      className={`text-xs font-semibold ${
-                        showCoverage ? "text-primary" : "text-foreground"
-                      }`}
-                    >
-                      Designar cobertura de outra escola
-                    </p>
-                    {!hasDates && (
-                      <p className="text-[10px] text-muted-foreground">
-                        Preenche as datas primeiro
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <ChevronDown
-                  size={13}
-                  className={`text-muted-foreground transition-transform ${
-                    showCoverage ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-
-              {showCoverage && (
-                <div className="px-3.5 pb-3.5 space-y-3 border-t border-border/50 pt-3">
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1.5">
-                      Escola de origem
-                    </label>
-                    <select
-                      value={coverageSchool}
-                      onChange={(e) => {
-                        setCoverageSchool(
-                          e.target.value === "" ? "" : Number(e.target.value)
-                        );
-                        setCoverageAssistantId("");
-                      }}
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-                    >
-                      <option value="">Selecionar escola...</option>
-                      {otherSchools.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {coverageSchool !== "" && (
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1.5">
-                        Assistente disponível ({coverageSubstitutes.length})
-                      </label>
-                      {coverageSubstitutes.length === 0 ? (
-                        <p className="text-xs text-muted-foreground bg-muted/40 px-3 py-2 rounded-lg">
-                          Nenhum assistente marcado como disponível nesta escola.
-                        </p>
-                      ) : (
-                        <select
-                          value={coverageAssistantId}
-                          onChange={(e) =>
-                            setCoverageAssistantId(
-                              e.target.value === ""
-                                ? ""
-                                : Number(e.target.value)
-                            )
-                          }
-                          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-                        >
-                          <option value="">Selecionar assistente...</option>
-                          {coverageSubstitutes.map((a) => (
-                            <option key={a.id} value={a.id}>
-                              {a.name}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-                  )}
-
-                  {selectedCovSub && (
-                    <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-2 text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">
-                        {selectedCovSub.name}
-                      </span>{" "}
-                      ficará designado nesta escola de{" "}
-                      <span className="font-mono text-foreground">{start}</span> a{" "}
-                      <span className="font-mono text-foreground">{end}</span>.
-                    </div>
-                  )}
-                </div>
+              {(dateErrors.start || dateErrors.end) && (
+                <p className="text-[11px] text-destructive mt-1 font-medium">
+                  {dateErrors.start || dateErrors.end}
+                </p>
               )}
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={submit}
-                disabled={!hasDates}
-                className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors"
-              >
-                Registar Ausência
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Cancelar
-              </button>
+            {!isFullDay && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1 font-medium">
+                    Hora Início
+                  </label>
+                  <TimePicker
+                    value={startTime}
+                    onChange={setStartTime}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1 font-medium">
+                    Hora Fim
+                  </label>
+                  <TimePicker
+                    value={endTime}
+                    onChange={setEndTime}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Motivo */}
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+              Motivo *
+            </label>
+            <SearchableSelect
+              value={effectiveTypeId}
+              onChange={(val) => {
+                setSelectedTypeId(val);
+                if (dateErrors.type) {
+                  setDateErrors((p) => ({ ...p, type: undefined }));
+                }
+              }}
+              placeholder="Selecionar motivo..."
+              searchPlaceholder="Pesquisar motivo da falta..."
+              emptyMessage="Nenhum motivo de falta encontrado."
+              options={absenceTypes.map((t) => ({
+                value: String(t.id),
+                label: t.name,
+              }))}
+              hasError={!!dateErrors.type}
+            />
+            {dateErrors.type && (
+              <p className="text-[11px] text-destructive mt-1 font-medium">
+                {dateErrors.type}
+              </p>
+            )}
+          </div>
+
+          {/* Classificação da Falta */}
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+              Classificação da Falta
+            </label>
+            <div className="flex gap-2">
+              {[
+                { value: "pending" as const, label: "Pendente" },
+                { value: "justified" as const, label: "Justificada" },
+                { value: "unjustified" as const, label: "Injustificada" },
+              ].map((opt) => {
+                const isSelected = status === opt.value;
+                let colorClasses = "";
+
+                if (opt.value === "pending") {
+                  colorClasses = isSelected
+                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/50 ring-1 ring-amber-500/30 font-semibold shadow-xs"
+                    : "border-border/80 bg-card text-muted-foreground hover:bg-amber-500/10 hover:text-amber-600 hover:border-amber-500/30";
+                } else if (opt.value === "justified") {
+                  colorClasses = isSelected
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/50 ring-1 ring-emerald-500/30 font-semibold shadow-xs"
+                    : "border-border/80 bg-card text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-600 hover:border-emerald-500/30";
+                } else if (opt.value === "unjustified") {
+                  colorClasses = isSelected
+                    ? "bg-destructive/15 text-destructive border-destructive/50 ring-1 ring-destructive/30 font-semibold shadow-xs"
+                    : "border-border/80 bg-card text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30";
+                }
+
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setStatus(opt.value)}
+                    className={`flex-1 py-2 px-3 rounded-lg border text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${colorClasses}`}
+                  >
+                    {opt.value === "pending" && <Clock size={13} />}
+                    {opt.value === "justified" && <Check size={13} />}
+                    {opt.value === "unjustified" && <X size={13} />}
+                    <span>{opt.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
-        )}
+
+          {/* Notas */}
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+              Notas
+            </label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              placeholder="Observações opcionais..."
+              className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring resize-none placeholder:text-muted-foreground/50"
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="px-6 py-4 border-t border-border bg-card flex items-center justify-end gap-2.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            disabled={createAbsenceMutation.isPending}
+            className="cursor-pointer text-xs"
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={submit}
+            disabled={createAbsenceMutation.isPending}
+            className="cursor-pointer text-xs"
+          >
+            {createAbsenceMutation.isPending && (
+              <Loader2 size={13} className="animate-spin mr-1.5" />
+            )}
+            Registar Ausência
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-

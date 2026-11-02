@@ -1,7 +1,6 @@
 import React, { useState } from "react";
-import { Clock, Layers, Shield, Umbrella } from "lucide-react";
+import { Clock, Layers, Shield } from "lucide-react";
 import type { ConfigTab } from "../../types";
-import HolidaysPage from "../settings/HolidaysPage";
 import ActivityTypesTab from "./ActivityTypesTab";
 import ScheduleRulesTab from "./ScheduleRulesTab";
 import WindowsTab from "./WindowsTab";
@@ -16,7 +15,6 @@ export default function ConfigEngine() {
       icon: <Shield size={14} />,
     },
     { id: "windows", label: "Funcionamento", icon: <Clock size={14} /> },
-    { id: "holidays", label: "Feriados", icon: <Umbrella size={14} /> },
     {
       id: "activity-types",
       label: "Tipos de Atividade",
@@ -31,7 +29,7 @@ export default function ConfigEngine() {
           Motor de Configurações
         </h2>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Gestão de regras com histórico de vigências e parametrização dinâmica
+          Gestão de regras com histórico de vigências e parametrização dinâmica da escola
         </p>
       </div>
 
@@ -55,7 +53,6 @@ export default function ConfigEngine() {
 
       {activeTab === "security" && <ScheduleRulesTab />}
       {activeTab === "windows" && <WindowsTab />}
-      {activeTab === "holidays" && <HolidaysPage />}
       {activeTab === "activity-types" && <ActivityTypesTab />}
     </div>
   );

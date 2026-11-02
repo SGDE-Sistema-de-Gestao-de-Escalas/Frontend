@@ -1,7 +1,9 @@
-import React, { useState } from "react";
-import { Building2, ChevronDown, Check, MapPin, Settings, Plus } from "lucide-react";
+import { useState } from "react";
+import { Building2, ChevronDown, Check, MapPin, Settings, Plus, Loader2 } from "lucide-react";
 import { useSchool } from "../../context/SchoolContext";
+import { useAuth } from "../../context/AuthContext";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import ActionTooltip from "../common/ActionTooltip";
 
 interface SchoolSwitcherProps {
   onPlatformSettings?: () => void;
@@ -9,24 +11,31 @@ interface SchoolSwitcherProps {
 
 export default function SchoolSwitcher({ onPlatformSettings }: SchoolSwitcherProps) {
   const [open, setOpen] = useState(false);
-  const { selectedSchool, schools, setSchoolId, canSwitchSchool } = useSchool();
+  const { selectedSchool, schools, setSchoolId, canSwitchSchool, isLoading } = useSchool();
+  const { user } = useAuth();
   const activeSchools = schools.filter((s) => s.active);
   const inactiveSchools = schools.filter((s) => !s.active);
 
   // Assistentes pertencem a uma escola atribuída e visualizam apenas o badge sem dropdown de seleção
   if (!canSwitchSchool) {
+    const schoolName =
+      selectedSchool?.name ||
+      user?.school_name ||
+      schools.find((s) => String(s.id) === String(user?.school_id))?.name ||
+      (schools.length > 0 ? (schools.find((s) => s.active) || schools[0]).name : "") ||
+      "Escola";
+
     return (
-      <div
-        className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-full border border-border bg-card max-w-[220px] select-none cursor-default"
-        title={selectedSchool ? `Escola atribuída: ${selectedSchool.name}` : undefined}
-      >
-        <span className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 bg-primary/12 text-primary">
-          <Building2 size={13} />
-        </span>
-        <span className="text-xs font-medium text-foreground truncate hidden sm:block">
-          {selectedSchool ? selectedSchool.name : "A sua escola"}
-        </span>
-      </div>
+      <ActionTooltip content={schoolName ? `Escola atribuída: ${schoolName}` : null}>
+        <div className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-full border border-border bg-card max-w-[220px] select-none cursor-default">
+          <span className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 bg-primary/12 text-primary">
+            <Building2 size={13} />
+          </span>
+          <span className="text-xs font-medium text-foreground truncate block">
+            {schoolName}
+          </span>
+        </div>
+      </ActionTooltip>
     );
   }
 
@@ -96,10 +105,18 @@ export default function SchoolSwitcher({ onPlatformSettings }: SchoolSwitcherPro
           <span className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
             selectedSchool ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground"
           }`}>
-            <Building2 size={13} />
+            {isLoading ? (
+              <Loader2 size={13} className="animate-spin text-primary" />
+            ) : (
+              <Building2 size={13} />
+            )}
           </span>
           <span className="text-xs font-medium text-foreground truncate hidden sm:block">
-            {selectedSchool ? selectedSchool.name : "Nenhuma escola"}
+            {isLoading
+              ? "A carregar escola..."
+              : selectedSchool
+              ? selectedSchool.name
+              : "Nenhuma escola"}
           </span>
           <ChevronDown
             size={13}
@@ -120,12 +137,19 @@ export default function SchoolSwitcher({ onPlatformSettings }: SchoolSwitcherPro
             Selecionar Escola
           </p>
           <span className="text-[10px] text-muted-foreground font-mono">
-            {schools.length} {schools.length === 1 ? "escola" : "escolas"}
+            {isLoading
+              ? "A carregar..."
+              : `${schools.length} ${schools.length === 1 ? "escola" : "escolas"}`}
           </span>
         </div>
 
         <div className="py-1 max-h-72 overflow-y-auto">
-          {schools.length === 0 ? (
+          {isLoading ? (
+            <div className="p-6 text-center flex flex-col items-center justify-center text-muted-foreground gap-2">
+              <Loader2 size={18} className="animate-spin text-primary" />
+              <p className="text-xs">A carregar escolas...</p>
+            </div>
+          ) : schools.length === 0 ? (
             <div className="p-4 text-center">
               <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center mx-auto mb-2 text-muted-foreground">
                 <Building2 size={16} />
@@ -187,4 +211,5 @@ export default function SchoolSwitcher({ onPlatformSettings }: SchoolSwitcherPro
     </Popover>
   );
 }
+
 

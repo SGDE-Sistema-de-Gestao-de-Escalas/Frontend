@@ -1,0 +1,1549 @@
+import React, { useState } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Loader2,
+  Lock,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import { Card } from "../ui/card";
+import { Badge } from "../ui/badge";
+import { Switch } from "../ui/switch";
+import Modal from "../common/Modal";
+import ConfirmationModal from "../common/ConfirmationModal";
+import DatePicker from "../common/DatePicker";
+import TimePicker from "../common/TimePicker";
+import ActionTooltip from "../common/ActionTooltip";
+import { notify } from "../common/FeedbackNotification";
+import type { EntityId } from "../../types";
+import {
+  useAssistantSchedules,
+  useCreateAssistantSchedule,
+  useUpdateAssistantSchedule,
+  useDeleteAssistantSchedule,
+} from "../../hooks/api/useAssistantSchedules";
+import {
+  apiProfileToScheduleItem,
+  scheduleItemToApiPayload,
+} from "../../api/services/assistantSchedules.service";
+import { computeActiveRotatingShift } from "../../utils/scheduleMatrixUtils";
+
+export interface AssistantScheduleItem {
+  id: string | number;
+  type: "fixed" | "rotating";
+  period?: "Semanal" | "Quinzenal" | "Mensal";
+  entry?: string;
+  exit?: string;
+  shiftA?: { entry: string; exit: string; lunch?: { start: string; end: string; duration: number } };
+  shiftB?: { entry: string; exit: string; lunch?: { start: string; end: string; duration: number } };
+  days: string[];
+  lunch?: { start: string; end: string; duration: number };
+  startsWith?: "A" | "B";
+  from: string;
+  to: string | null;
+  status?: "upcoming" | "current" | "superseded";
+  can_edit?: boolean;
+  can_change_end_date?: boolean;
+  can_delete?: boolean;
+  cannot_edit_reason?: string | null;
+  cannot_delete_reason?: string | null;
+}
+
+function addDays(dateStr: string, days: number): string {
+  if (!dateStr) return "";
+  const parts = dateStr.split("-");
+  if (parts.length !== 3) return "";
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + days);
+  const ny = date.getFullYear();
+  const nm = String(date.getMonth() + 1).padStart(2, "0");
+  const nd = String(date.getDate()).padStart(2, "0");
+  return `${ny}-${nm}-${nd}`;
+}
+
+function formatDatePT(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  const parts = dateStr.split("-");
+  if (parts.length !== 3) return dateStr;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
+const TODAY_STR = new Date().toISOString().split("T")[0];
+
+export function getScheduleTypeStatus(
+  s: AssistantScheduleItem,
+  all: AssistantScheduleItem[]
+): "active" | "future" | "past" {
+  if (s.status === "superseded" || (s.to && s.to < TODAY_STR)) {
+    return "past";
+  }
+  if (s.status === "upcoming" || s.from > TODAY_STR) {
+    return "future";
+  }
+  const hasNewerActive = all.some(
+    (other) =>
+      other.id !== s.id &&
+      other.from <= TODAY_STR &&
+      (!other.to || other.to >= TODAY_STR) &&
+      other.from > s.from
+  );
+  if (hasNewerActive) {
+    return "past";
+  }
+  return "active";
+}
+
+const WEEK_DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
+interface AssistantScheduleManagerProps {
+  assistantId?: EntityId;
+}
+
+export default function AssistantScheduleManager({
+  assistantId,
+}: AssistantScheduleManagerProps) {
+  const { data: apiProfiles } = useAssistantSchedules(assistantId);
+  const createScheduleMutation = useCreateAssistantSchedule();
+  const updateScheduleMutation = useUpdateAssistantSchedule();
+  const deleteScheduleMutation = useDeleteAssistantSchedule();
+
+  const [schedules, setSchedules] = useState<AssistantScheduleItem[]>([]);
+
+  React.useEffect(() => {
+    if (apiProfiles) {
+      setSchedules(apiProfiles.map(apiProfileToScheduleItem));
+    }
+  }, [apiProfiles]);
+
+  const [showAddScheduleModal, setShowAddScheduleModal] = useState(false);
+  const [editingScheduleId, setEditingScheduleId] = useState<string | number | null>(null);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleFieldErrors, setScheduleFieldErrors] = useState<{ start?: string; end?: string }>({});
+  const [scheduleToDelete, setScheduleToDelete] = useState<AssistantScheduleItem | null>(null);
+
+  const isSavingSchedule =
+    createScheduleMutation.isPending || updateScheduleMutation.isPending;
+
+  // Form states for adding/editing schedule
+  const [shiftProfile, setShiftProfile] = useState<"fixed" | "rotating">("fixed");
+  const [fixedEntry, setFixedEntry] = useState("08:00");
+  const [fixedExit, setFixedExit] = useState("16:00");
+  const [fixedDays, setFixedDays] = useState<string[]>([
+    "Seg",
+    "Ter",
+    "Qua",
+    "Qui",
+    "Sex",
+  ]);
+  const [lunchEnabled, setLunchEnabled] = useState(true);
+  const [lunchStart, setLunchStart] = useState("12:00");
+  const [lunchEnd, setLunchEnd] = useState("13:30");
+  const [lunchDuration, setLunchDuration] = useState("30");
+  const [fixedStartDate, setFixedStartDate] = useState(TODAY_STR);
+  const [fixedEndDate, setFixedEndDate] = useState("");
+
+  const [rotPeriod, setRotPeriod] = useState<"weekly" | "biweekly" | "monthly">("biweekly");
+  const [rotStartsWith, setRotStartsWith] = useState<"A" | "B">("A");
+  const [shiftBEntry, setShiftBEntry] = useState("10:00");
+  const [shiftBExit, setShiftBExit] = useState("17:00");
+  const [shiftBDays, setShiftBDays] = useState<string[]>([
+    "Seg",
+    "Ter",
+    "Qua",
+    "Qui",
+    "Sex",
+  ]);
+  const [shiftBLunchEnabled, setShiftBLunchEnabled] = useState(true);
+  const [shiftBLunchStart, setShiftBLunchStart] = useState("12:00");
+  const [shiftBLunchEnd, setShiftBLunchEnd] = useState("13:30");
+  const [shiftBLunchDuration, setShiftBLunchDuration] = useState("30");
+  const [rotStartDate, setRotStartDate] = useState(TODAY_STR);
+  const [rotEndDate, setRotEndDate] = useState("");
+
+  const activeSchedule =
+    schedules.find((s) => getScheduleTypeStatus(s, schedules) === "active") ||
+    schedules.find((s) => s.to === null) ||
+    schedules[0];
+
+  const futureSchedule = schedules.find(
+    (s) => getScheduleTypeStatus(s, schedules) === "future"
+  );
+
+  const editingSchedule = editingScheduleId
+    ? schedules.find((s) => s.id === editingScheduleId)
+    : null;
+
+  const isEditingActiveSchedule =
+    editingSchedule
+      ? getScheduleTypeStatus(editingSchedule, schedules) === "active" &&
+        editingSchedule.can_edit === false
+      : false;
+
+  function toggleDay(
+    day: string,
+    currentDays: string[],
+    setter: (d: string[]) => void
+  ) {
+    if (currentDays.includes(day)) {
+      setter(currentDays.filter((d) => d !== day));
+    } else {
+      setter([...currentDays, day]);
+    }
+  }
+
+  function handleOpenAddSchedule() {
+    setEditingScheduleId(null);
+    setScheduleError(null);
+    setScheduleFieldErrors({});
+    setShiftProfile("fixed");
+    setFixedEntry("08:00");
+    setFixedExit("16:00");
+    setFixedDays(["Seg", "Ter", "Qua", "Qui", "Sex"]);
+    setLunchEnabled(true);
+    setLunchStart("12:00");
+    setLunchEnd("13:30");
+    setLunchDuration("30");
+
+    setRotPeriod("biweekly");
+    setRotStartsWith("A");
+    setShiftBEntry("10:00");
+    setShiftBExit("17:00");
+    setShiftBDays(["Seg", "Ter", "Qua", "Qui", "Sex"]);
+    setShiftBLunchEnabled(true);
+    setShiftBLunchStart("12:00");
+    setShiftBLunchEnd("13:30");
+    setShiftBLunchDuration("30");
+
+    const latestSchedule =
+      schedules.length > 0
+        ? [...schedules].sort((a, b) => b.from.localeCompare(a.from))[0]
+        : null;
+
+    if (latestSchedule) {
+      if (latestSchedule.to && latestSchedule.to >= TODAY_STR) {
+        const nextDay = addDays(latestSchedule.to, 1);
+        setFixedStartDate(nextDay);
+        setRotStartDate(nextDay);
+      } else if (latestSchedule.from >= TODAY_STR) {
+        const nextDay = addDays(latestSchedule.from, 1);
+        setFixedStartDate(nextDay);
+        setRotStartDate(nextDay);
+      } else {
+        const tomorrow = addDays(TODAY_STR, 1);
+        setFixedStartDate(tomorrow);
+        setRotStartDate(tomorrow);
+      }
+    } else {
+      setFixedStartDate(TODAY_STR);
+      setRotStartDate(TODAY_STR);
+    }
+    setFixedEndDate("");
+    setRotEndDate("");
+
+    setShowAddScheduleModal(true);
+  }
+
+  function handleOpenEditSchedule(item: AssistantScheduleItem) {
+    setEditingScheduleId(item.id);
+    setScheduleError(null);
+    setScheduleFieldErrors({});
+    setShiftProfile(item.type);
+
+    if (item.type === "fixed") {
+      setFixedEntry(item.entry || "08:00");
+      setFixedExit(item.exit || "16:00");
+      setFixedDays(item.days || ["Seg", "Ter", "Qua", "Qui", "Sex"]);
+      if (item.lunch) {
+        setLunchEnabled(true);
+        setLunchStart(item.lunch.start);
+        setLunchEnd(item.lunch.end);
+        setLunchDuration(String(item.lunch.duration));
+      } else {
+        setLunchEnabled(false);
+      }
+      setFixedStartDate(item.from);
+      setFixedEndDate(item.to || "");
+    } else {
+      setRotPeriod(
+        item.period === "Semanal"
+          ? "weekly"
+          : item.period === "Mensal"
+          ? "monthly"
+          : "biweekly"
+      );
+      setRotStartsWith(item.startsWith || "A");
+      if (item.shiftA) {
+        setFixedEntry(item.shiftA.entry);
+        setFixedExit(item.shiftA.exit);
+        if (item.shiftA.lunch) {
+          setLunchEnabled(true);
+          setLunchStart(item.shiftA.lunch.start);
+          setLunchEnd(item.shiftA.lunch.end);
+          setLunchDuration(String(item.shiftA.lunch.duration));
+        } else {
+          setLunchEnabled(false);
+        }
+      }
+      if (item.shiftB) {
+        setShiftBEntry(item.shiftB.entry);
+        setShiftBExit(item.shiftB.exit);
+        if (item.shiftB.lunch) {
+          setShiftBLunchEnabled(true);
+          setShiftBLunchStart(item.shiftB.lunch.start);
+          setShiftBLunchEnd(item.shiftB.lunch.end);
+          setShiftBLunchDuration(String(item.shiftB.lunch.duration));
+        } else {
+          setShiftBLunchEnabled(false);
+        }
+      }
+      setFixedDays(item.days || ["Seg", "Ter", "Qua", "Qui", "Sex"]);
+      setShiftBDays(item.days || ["Seg", "Ter", "Qua", "Qui", "Sex"]);
+      setRotStartDate(item.from);
+      setRotEndDate(item.to || "");
+    }
+
+    setShowAddScheduleModal(true);
+  }
+
+  async function handleSaveSchedule() {
+    setScheduleError(null);
+    setScheduleFieldErrors({});
+
+    const isFixed = shiftProfile === "fixed";
+    const startVal = (isFixed ? fixedStartDate : rotStartDate).trim();
+    const endVal = (isFixed ? fixedEndDate : rotEndDate).trim() || null;
+
+    if (!isEditingActiveSchedule && !startVal) {
+      setScheduleFieldErrors({ start: "A data de início de vigência é obrigatória." });
+      return;
+    }
+
+    if (endVal && startVal && endVal < startVal) {
+      setScheduleFieldErrors({ end: "A data de fim não pode ser anterior à data de início." });
+      return;
+    }
+
+    if (isEditingActiveSchedule && editingSchedule) {
+      if (!endVal) {
+        if (futureSchedule && futureSchedule.id !== editingSchedule.id) {
+          setScheduleError(
+            `Já existe um horário agendado com início a ${formatDatePT(futureSchedule.from)}. O horário em vigor deve terminar a ${formatDatePT(addDays(futureSchedule.from, -1))}.`
+          );
+          return;
+        }
+      } else {
+        const nextSchedule = schedules.find(
+          (s) => s.id !== editingSchedule.id && s.from > editingSchedule.from
+        );
+
+        if (!nextSchedule) {
+          setScheduleError(
+            "Não é possível definir uma data de término para o horário em vigor sem que exista um novo horário agendado para lhe suceder. Crie primeiro o próximo horário ou mantenha a vigência em aberto."
+          );
+          return;
+        }
+
+        if (endVal < editingSchedule.from) {
+          setScheduleFieldErrors({ end: "A data de término não pode ser anterior à data de início." });
+          return;
+        }
+
+        const expectedEnd = addDays(nextSchedule.from, -1);
+        if (endVal !== expectedEnd) {
+          if (endVal < expectedEnd) {
+            setScheduleError(
+              `A data de término (${formatDatePT(endVal)}) deixaria dias sem horário antes do próximo horário (que inicia a ${formatDatePT(nextSchedule.from)}). Ajuste a data de término para ${formatDatePT(expectedEnd)}.`
+            );
+            return;
+          } else {
+            setScheduleError(
+              `A data de término (${formatDatePT(endVal)}) sobrepõe-se ao próximo horário (que inicia a ${formatDatePT(nextSchedule.from)}). O término deve ser ${formatDatePT(expectedEnd)}.`
+            );
+            return;
+          }
+        }
+      }
+
+      try {
+        if (assistantId) {
+          await updateScheduleMutation.mutateAsync({
+            id: editingSchedule.id,
+            assistantId: String(assistantId),
+            data: { valid_until: endVal },
+          });
+        }
+        setShowAddScheduleModal(false);
+        setEditingScheduleId(null);
+      } catch (err: any) {
+        const beMsg =
+          err?.response?.data?.message || "Não foi possível atualizar a data de término.";
+        setScheduleError(beMsg);
+      }
+      return;
+    }
+
+    const duplicateStartSchedule = schedules.find(
+      (s) => s.id !== editingScheduleId && s.from === startVal
+    );
+    if (duplicateStartSchedule) {
+      setScheduleFieldErrors({
+        start: `Já existe um perfil de horário para este assistente a começar em ${formatDatePT(startVal)}.`,
+      });
+      return;
+    }
+
+    if (activeSchedule && activeSchedule.id !== editingScheduleId) {
+      if (startVal <= activeSchedule.from) {
+        setScheduleError(
+          `A data de início (${formatDatePT(startVal)}) deve ser posterior ao início do horário em vigor (${formatDatePT(activeSchedule.from)}).`
+        );
+        return;
+      }
+    }
+
+    const itemToSave: AssistantScheduleItem = {
+      id: editingScheduleId ?? Date.now(),
+      type: shiftProfile,
+      days: isFixed ? fixedDays : shiftBDays,
+      from: startVal,
+      to: endVal,
+      ...(isFixed
+        ? {
+            entry: fixedEntry,
+            exit: fixedExit,
+            lunch: lunchEnabled
+              ? {
+                  start: lunchStart,
+                  end: lunchEnd,
+                  duration: parseInt(lunchDuration, 10) || 30,
+                }
+              : undefined,
+          }
+        : {
+            period:
+              rotPeriod === "weekly"
+                ? "Semanal"
+                : rotPeriod === "biweekly"
+                ? "Quinzenal"
+                : "Mensal",
+            startsWith: rotStartsWith,
+            shiftA: {
+              entry: fixedEntry,
+              exit: fixedExit,
+              lunch: lunchEnabled
+                ? {
+                    start: lunchStart,
+                    end: lunchEnd,
+                    duration: parseInt(lunchDuration, 10) || 30,
+                  }
+                : undefined,
+            },
+            shiftB: {
+              entry: shiftBEntry,
+              exit: shiftBExit,
+              lunch: shiftBLunchEnabled
+                ? {
+                    start: shiftBLunchStart,
+                    end: shiftBLunchEnd,
+                    duration: parseInt(shiftBLunchDuration, 10) || 30,
+                  }
+                : undefined,
+            },
+          }),
+    };
+
+    try {
+      if (assistantId) {
+        const fullPayload = scheduleItemToApiPayload(String(assistantId), itemToSave);
+        if (editingScheduleId) {
+          const { assistant_id: _, ...updateData } = fullPayload;
+          await updateScheduleMutation.mutateAsync({
+            id: editingScheduleId,
+            assistantId: String(assistantId),
+            data: updateData,
+          });
+        } else {
+          await createScheduleMutation.mutateAsync(fullPayload);
+        }
+      }
+
+      // Sucesso confirmado pelo servidor: fechar modal
+      setShowAddScheduleModal(false);
+      setEditingScheduleId(null);
+    } catch (err: any) {
+      // Em caso de erro: modal permanece aberta com os dados para correção
+      const beMsg =
+        err?.response?.data?.message || "Não foi possível registar o horário.";
+      setScheduleError(beMsg);
+      const beErrors = err?.response?.data?.errors;
+      if (beErrors) {
+        const fieldErrors: { start?: string; end?: string } = {};
+        if (beErrors.valid_from) fieldErrors.start = beErrors.valid_from[0];
+        if (beErrors.valid_until) fieldErrors.end = beErrors.valid_until[0];
+        setScheduleFieldErrors(fieldErrors);
+      }
+    }
+  }
+
+  async function handleConfirmDeleteSchedule() {
+    if (!scheduleToDelete) return;
+
+    if (scheduleToDelete.can_delete === false) {
+      notify.error(
+        scheduleToDelete.cannot_delete_reason ||
+          "Não é possível eliminar o horário em vigor. O assistente tem de ter sempre um horário ativo."
+      );
+      setScheduleToDelete(null);
+      return;
+    }
+
+    if (schedules.length <= 1) {
+      notify.error("O assistente tem de ter pelo menos um horário registado.");
+      setScheduleToDelete(null);
+      return;
+    }
+
+    try {
+      if (assistantId && scheduleToDelete) {
+        await deleteScheduleMutation.mutateAsync({
+          id: scheduleToDelete.id,
+          assistantId: String(assistantId),
+        });
+      }
+      setScheduleToDelete(null);
+    } catch {
+      // Erro tratado e notificado pelo hook
+    }
+    setScheduleToDelete(null);
+  }
+
+  return (
+    <Card className="p-5 w-full">
+      {/* Box Header */}
+      <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-border/50 flex-wrap gap-2">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-lg bg-primary/10 text-primary">
+            <Clock size={16} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground">
+                Horário Padrão & Vigências
+              </h3>
+              <Badge variant="outline" className="text-[11px] font-normal">
+                {schedules.length} {schedules.length === 1 ? "perfil" : "perfis"}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Histórico de horários definidos e agendamento de novas vigências para este assistente.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleOpenAddSchedule}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs ml-auto"
+        >
+          <Plus size={12} />
+          Adicionar Horário
+        </button>
+      </div>
+
+      {/* History list */}
+      <div className="space-y-3">
+        {schedules.length === 0 ? (
+          <div className="py-8 text-center text-xs text-muted-foreground bg-muted/20 rounded-lg border border-dashed border-border p-4">
+            Nenhum perfil de horário configurado para este assistente.
+          </div>
+        ) : (
+          schedules.map((h) => {
+          const status = getScheduleTypeStatus(h, schedules);
+          const isActiveSchedule = status === "active";
+          const isFutureSchedule = status === "future";
+          const rotatingInfo =
+            h.type === "rotating"
+              ? computeActiveRotatingShift(
+                  h.from,
+                  h.period || "Quinzenal",
+                  h.startsWith || "A",
+                  TODAY_STR
+                )
+              : null;
+
+          return (
+            <div
+              key={h.id}
+              className="bg-card border border-border rounded-xl overflow-hidden shadow-xs hover:border-border/80 transition-colors"
+            >
+              {/* Row header */}
+              <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border/50 bg-muted/20">
+                <div
+                  className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${
+                    h.type === "rotating"
+                      ? "bg-[#A855F7]/15"
+                      : "bg-primary/15"
+                  }`}
+                >
+                  <Clock
+                    size={12}
+                    className={
+                      h.type === "rotating"
+                        ? "text-[#A855F7]"
+                        : "text-primary"
+                    }
+                  />
+                </div>
+                <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                  <span className="text-xs font-semibold text-foreground">
+                    {h.type === "fixed" ? "Turno Fixo" : `Turno Rotativo (${h.period})`}
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] px-2 py-0 font-medium ${
+                      isActiveSchedule
+                        ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-semibold"
+                        : isFutureSchedule
+                        ? "bg-blue-500/10 text-blue-600 border-blue-500/20 font-medium"
+                        : "bg-muted text-muted-foreground border-border"
+                    }`}
+                  >
+                    {isActiveSchedule
+                      ? rotatingInfo
+                        ? `Em Vigor: Turno ${rotatingInfo.activeLabel}`
+                        : "Em Vigor"
+                      : isFutureSchedule
+                      ? "Agendado"
+                      : "Histórico"}
+                  </Badge>
+                  {isActiveSchedule && rotatingInfo && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30 font-medium"
+                    >
+                      Ciclo do Turno {rotatingInfo.activeLabel} (até {formatDatePT(rotatingInfo.cycleEndDate)})
+                    </Badge>
+                  )}
+                  <span className="text-[11px] font-mono text-muted-foreground">
+                    {formatDatePT(h.from)}
+                    {h.to ? ` → ${formatDatePT(h.to)}` : " → Em aberto"}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                  <ActionTooltip
+                    content={
+                      h.cannot_edit_reason ||
+                      (h.can_edit === false && h.can_change_end_date
+                        ? "Apenas a data de fim pode ser ajustada para este horário."
+                        : h.can_edit === false
+                        ? "Não é possível editar este horário."
+                        : "Editar horário")
+                    }
+                  >
+                    <button
+                      type="button"
+                      disabled={h.can_edit === false && !h.can_change_end_date}
+                      onClick={() => handleOpenEditSchedule(h)}
+                      className={`p-1.5 rounded-md transition-colors ${
+                        h.can_edit === false && !h.can_change_end_date
+                          ? "opacity-30 cursor-not-allowed text-muted-foreground"
+                          : "hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                      }`}
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  </ActionTooltip>
+
+                  <ActionTooltip
+                    content={
+                      h.cannot_delete_reason ||
+                      (h.can_delete === false
+                        ? "Não é possível eliminar o horário em vigor."
+                        : schedules.length <= 1
+                        ? "O assistente tem de ter pelo menos um horário."
+                        : "Eliminar horário")
+                    }
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (h.can_delete === false) {
+                          notify.error(
+                            h.cannot_delete_reason ||
+                              "Não é possível eliminar este horário."
+                          );
+                          return;
+                        }
+                        if (schedules.length <= 1) {
+                          notify.error("O assistente tem de ter pelo menos um horário.");
+                          return;
+                        }
+                        setScheduleToDelete(h);
+                      }}
+                      disabled={h.can_delete === false || schedules.length <= 1}
+                      className={`p-1.5 rounded-md transition-colors ${
+                        h.can_delete === false || schedules.length <= 1
+                          ? "opacity-30 cursor-not-allowed text-muted-foreground"
+                          : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive cursor-pointer"
+                      }`}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </ActionTooltip>
+                </div>
+              </div>
+
+              {/* Row detail */}
+              <div className="px-4 py-3 space-y-2">
+                {h.type === "fixed" ? (
+                  <>
+                    <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                      <span>
+                        <span className="font-medium text-foreground">
+                          Entrada:
+                        </span>{" "}
+                        {h.entry}
+                      </span>
+                      <span>
+                        <span className="font-medium text-foreground">
+                          Saída:
+                        </span>{" "}
+                        {h.exit}
+                      </span>
+                      {h.lunch && (
+                        <span>
+                          <span className="font-medium text-foreground">
+                            Almoço:
+                          </span>{" "}
+                          {h.lunch.start}–{h.lunch.end} ({h.lunch.duration} min)
+                        </span>
+                      )}
+                      <span>
+                        <span className="font-medium text-foreground">
+                          Dias:
+                        </span>{" "}
+                        {h.days.join(", ")}
+                      </span>
+                    </div>
+
+                    {/* Mini timeline */}
+                    <div className="relative h-5 rounded bg-muted/40 border border-border/40 overflow-hidden mt-1">
+                      {(() => {
+                        const entryH = parseInt(h.entry?.split(":")[0] || "8");
+                        const entryM = parseInt(h.entry?.split(":")[1] || "0");
+                        const exitH = parseInt(h.exit?.split(":")[0] || "16");
+                        const exitM = parseInt(h.exit?.split(":")[1] || "0");
+                        const lunchSH = h.lunch
+                          ? parseInt(h.lunch.start.split(":")[0])
+                          : 0;
+                        const lunchSM = h.lunch
+                          ? parseInt(h.lunch.start.split(":")[1])
+                          : 0;
+                        const lunchEH = h.lunch
+                          ? parseInt(h.lunch.end.split(":")[0])
+                          : 0;
+                        const lunchEM = h.lunch
+                          ? parseInt(h.lunch.end.split(":")[1])
+                          : 0;
+                        const total = 15 * 60;
+                        const toX = (hh: number, mm: number) =>
+                          `${Math.max(0, ((hh - 6) * 60 + mm) / total * 100)}%`;
+                        const toW = (
+                          h1: number,
+                          m1: number,
+                          h2: number,
+                          m2: number
+                        ) =>
+                          `${Math.max(
+                            0,
+                            ((h2 - h1) * 60 + (m2 - m1)) / total * 100
+                          )}%`;
+                        return (
+                          <>
+                            <div
+                              className="absolute inset-y-0.5 rounded bg-primary/70"
+                              style={{
+                                left: toX(entryH, entryM),
+                                width: toW(entryH, entryM, exitH, exitM),
+                              }}
+                            />
+                            {h.lunch && (
+                              <div
+                                className="absolute inset-y-0.5 rounded bg-[#F59E0B]/90"
+                                style={{
+                                  left: toX(lunchSH, lunchSM),
+                                  width: toW(
+                                    lunchSH,
+                                    lunchSM,
+                                    lunchEH,
+                                    lunchEM
+                                  ),
+                                }}
+                              />
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-3">
+                    {isActiveSchedule && rotatingInfo && (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                          <span className="text-foreground">
+                            <strong>Turno em Vigor Hoje ({formatDatePT(TODAY_STR)}):</strong>{" "}
+                            <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                              Turno {rotatingInfo.activeLabel}
+                            </span>{" "}
+                            ({(rotatingInfo.activeLabel === "A" ? h.shiftA : h.shiftB)?.entry} às{" "}
+                            {(rotatingInfo.activeLabel === "A" ? h.shiftA : h.shiftB)?.exit})
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2.5 text-muted-foreground text-[11px]">
+                          <span className="font-medium text-foreground">
+                            Almoço:{" "}
+                            {(rotatingInfo.activeLabel === "A" ? h.shiftA?.lunch : h.shiftB?.lunch) ? (
+                              <strong>
+                                {(rotatingInfo.activeLabel === "A" ? h.shiftA?.lunch : h.shiftB?.lunch)?.start} às{" "}
+                                {(rotatingInfo.activeLabel === "A" ? h.shiftA?.lunch : h.shiftB?.lunch)?.end} (
+                                {(rotatingInfo.activeLabel === "A" ? h.shiftA?.lunch : h.shiftB?.lunch)?.duration} min)
+                              </strong>
+                            ) : (
+                              "Sem pausa definida"
+                            )}
+                          </span>
+                          <span>•</span>
+                          <span>Até {formatDatePT(rotatingInfo.cycleEndDate)}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      {(["A", "B"] as const).map((ab) => {
+                        const s = ab === "A" ? h.shiftA : h.shiftB;
+                        const clr = ab === "A" ? "#6366F1" : "#A855F7";
+                        const isCurrentlyActive = isActiveSchedule && rotatingInfo?.activeLabel === ab;
+
+                        return (
+                          <div
+                            key={ab}
+                            className={`p-3 rounded-lg border transition-all ${
+                              isCurrentlyActive
+                                ? "border-emerald-500/80 bg-emerald-500/5 ring-1 ring-emerald-500/30 shadow-xs"
+                                : "border-border/60 bg-muted/10 opacity-75"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between pb-2 mb-2 border-b border-border/40">
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                                  style={{ backgroundColor: clr }}
+                                >
+                                  {ab}
+                                </div>
+                                <span className="font-semibold text-xs text-foreground">
+                                  Turno {ab}
+                                </span>
+                              </div>
+                              {isCurrentlyActive ? (
+                                <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-[10px] h-5 px-1.5 gap-1 font-semibold">
+                                  <CheckCircle2 size={10} /> Em Vigor Hoje
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/60">
+                                  {isActiveSchedule && rotatingInfo
+                                    ? `Inicia a ${formatDatePT(addDays(rotatingInfo.cycleEndDate, 1))}`
+                                    : "Alternado"}
+                                </Badge>
+                              )}
+                            </div>
+
+                            <div className="space-y-1.5 text-xs">
+                              <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Horário de Trabalho:</span>
+                                <span className="font-medium text-foreground">
+                                  {s?.entry} às {s?.exit}
+                                </span>
+                              </div>
+                              <div
+                                className={`flex items-center justify-between p-1.5 rounded ${
+                                  isCurrentlyActive
+                                    ? "bg-emerald-500/10 text-emerald-950 dark:text-emerald-200"
+                                    : "bg-muted/30 text-muted-foreground"
+                                }`}
+                              >
+                                <span>Pausa de Almoço:</span>
+                                <span className="font-semibold text-foreground">
+                                  {s?.lunch ? `${s.lunch.start} às ${s.lunch.end} (${s.lunch.duration}m)` : "Sem pausa"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Dias:</span> {h.days.join(", ")} · Começa com Horário {h.startsWith}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        }))}
+      </div>
+
+      {/* ── Add / Edit schedule modal ── */}
+      {showAddScheduleModal && (
+        <Modal
+          title={
+            editingScheduleId
+              ? isEditingActiveSchedule
+                ? "Editar Horário em Vigor"
+                : "Editar Horário Padrão"
+              : "Novo Horário Padrão"
+          }
+          subtitle={
+            isEditingActiveSchedule
+              ? "Apenas a data de fim de vigência pode ser ajustada"
+              : "Defina o perfil de turno e o período de vigência"
+          }
+          onClose={() => {
+            if (!isSavingSchedule) {
+              setShowAddScheduleModal(false);
+              setEditingScheduleId(null);
+              setScheduleError(null);
+            }
+          }}
+          maxWidth="max-w-4xl"
+          footer={
+            <>
+              <button
+                type="button"
+                disabled={isSavingSchedule}
+                onClick={() => {
+                  setShowAddScheduleModal(false);
+                  setEditingScheduleId(null);
+                  setScheduleError(null);
+                }}
+                className="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isSavingSchedule}
+                onClick={handleSaveSchedule}
+                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                {isSavingSchedule && (
+                  <Loader2 size={13} className="animate-spin" />
+                )}
+                Guardar Horário
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-5">
+            {/* Active schedule banner */}
+            {isEditingActiveSchedule && (
+              <div className="flex items-start gap-3 p-3.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-900 dark:text-amber-200 text-xs">
+                <Lock size={16} className="mt-0.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-amber-700 dark:text-amber-300">
+                    Horário atualmente em vigor
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    Por motivos de integridade e histórico de escalas, as configurações deste turno não podem ser alteradas enquanto este horário estiver em vigor. Apenas a <strong>Data de Fim de Vigência</strong> pode ser ajustada (requer a existência de um novo horário agendado para o dia seguinte).
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Shift type selector */}
+            <Card className="p-5">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                Perfil de Turno
+              </h4>
+              <div className="flex gap-2">
+                {(["fixed", "rotating"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    disabled={isEditingActiveSchedule}
+                    onClick={() => setShiftProfile(v)}
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-colors ${
+                      shiftProfile === v
+                        ? "bg-primary text-primary-foreground border-primary font-semibold shadow-xs"
+                        : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
+                    } ${isEditingActiveSchedule ? "opacity-60 cursor-not-allowed" : ""}`}
+                  >
+                    {v === "fixed" ? "Turno Fixo" : "Turno Rotativo"}
+                  </button>
+                ))}
+              </div>
+            </Card>
+
+            {/* Fixed shift */}
+            {shiftProfile === "fixed" && (
+              <Card className="p-5 space-y-4">
+                <div className={`space-y-4 ${isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}`}>
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                      Horário Diário
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground block mb-1.5">
+                          Hora de Entrada *
+                        </label>
+                        <TimePicker
+                          value={fixedEntry}
+                          onChange={setFixedEntry}
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground block mb-1.5">
+                          Hora de Saída *
+                        </label>
+                        <TimePicker
+                          value={fixedExit}
+                          onChange={setFixedExit}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Working days */}
+                  <div className="border-t border-border/60 pt-4">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                      Dias de Trabalho
+                    </p>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {WEEK_DAYS.map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => toggleDay(d, fixedDays, setFixedDays)}
+                          className={`w-9 h-9 rounded-lg border text-xs font-medium transition-colors ${
+                            fixedDays.includes(d)
+                              ? "bg-primary text-primary-foreground border-primary font-bold shadow-xs"
+                              : "border-border text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {d}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Lunch */}
+                  <div className="border-t border-border/60 pt-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Pausa de almoço
+                      </p>
+                      <Switch
+                        checked={lunchEnabled}
+                        onCheckedChange={setLunchEnabled}
+                      />
+                    </div>
+                    {lunchEnabled && (
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1.5">
+                            Início do Almoço
+                          </label>
+                          <TimePicker
+                            value={lunchStart}
+                            onChange={setLunchStart}
+                            className="w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1.5">
+                            Fim do Almoço
+                          </label>
+                          <TimePicker
+                            value={lunchEnd}
+                            onChange={setLunchEnd}
+                            className="w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1.5">
+                            Duração Efetiva
+                          </label>
+                          <div className="flex gap-1">
+                            {["30", "45", "60"].map((m) => (
+                              <button
+                                key={m}
+                                type="button"
+                                onClick={() => setLunchDuration(m)}
+                                className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                  lunchDuration === m
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "border-border text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                {m}m
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Vigência */}
+                <div className="border-t border-border/60 pt-4">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                    Vigência
+                  </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1.5 flex items-center justify-between">
+                        <span>Data de Início *</span>
+                        {isEditingActiveSchedule && (
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-normal">
+                            <Lock size={10} /> Bloqueado em vigor
+                          </span>
+                        )}
+                      </label>
+                      <div className={isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}>
+                        <DatePicker
+                          value={fixedStartDate}
+                          hasError={!!scheduleFieldErrors.start}
+                          minDate={isEditingActiveSchedule ? undefined : TODAY_STR}
+                          onChange={(v) => {
+                            setFixedStartDate(v);
+                            setScheduleError(null);
+                            if (scheduleFieldErrors.start) {
+                              setScheduleFieldErrors((prev) => ({ ...prev, start: undefined }));
+                            }
+                            if (v && fixedEndDate && fixedEndDate < v) {
+                              setFixedEndDate(v);
+                            }
+                          }}
+                          className="w-full"
+                        />
+                      </div>
+                      {scheduleFieldErrors.start && (
+                        <p className="text-[11px] text-destructive mt-1 font-medium">
+                          {scheduleFieldErrors.start}
+                        </p>
+                      )}
+                      {!isEditingActiveSchedule && schedules.length > 0 && (
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          O horário anterior terminará automaticamente na véspera desta data.
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1.5 flex items-center justify-between">
+                        <span>Data de Fim</span>
+                        {isEditingActiveSchedule && (
+                          <span className="text-[10px] text-primary font-medium">
+                            Editável
+                          </span>
+                        )}
+                      </label>
+                      <DatePicker
+                        value={fixedEndDate}
+                        hasError={!!scheduleFieldErrors.end}
+                        minDate={fixedStartDate || undefined}
+                        onChange={(v) => {
+                          setFixedEndDate(v);
+                          setScheduleError(null);
+                          if (scheduleFieldErrors.end) {
+                            setScheduleFieldErrors((prev) => ({ ...prev, end: undefined }));
+                          }
+                        }}
+                        className="w-full"
+                        placeholder="AAAA-MM-DD"
+                      />
+                      {scheduleFieldErrors.end ? (
+                        <p className="text-[11px] text-destructive mt-1 font-medium">
+                          {scheduleFieldErrors.end}
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground/70 mt-1">
+                          {isEditingActiveSchedule
+                            ? futureSchedule
+                              ? `Próximo horário inicia a ${formatDatePT(futureSchedule.from)}. O término deve ser ${formatDatePT(addDays(futureSchedule.from, -1))}.`
+                              : "Requer um novo horário agendado para definir término."
+                            : "Em branco = vigência em aberto"}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Rotating shift */}
+            {shiftProfile === "rotating" && (
+              <div className="space-y-5">
+                <Card className="p-5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                    Configuração da Rotação
+                  </p>
+                  <div className="space-y-4">
+                    <div className={`grid grid-cols-3 gap-4 ${isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}`}>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground block mb-2">
+                          Período de Rotatividade
+                        </label>
+                        <div className="flex gap-1.5">
+                          {[
+                            { id: "weekly" as const, label: "Semanal" },
+                            { id: "biweekly" as const, label: "Quinzenal" },
+                            { id: "monthly" as const, label: "Mensal" },
+                          ].map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => setRotPeriod(p.id)}
+                              className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                rotPeriod === p.id
+                                  ? "bg-primary text-primary-foreground border-primary font-bold shadow-xs"
+                                  : "border-border text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              {p.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground block mb-2">
+                          Horário Inicial
+                        </label>
+                        <div className="flex gap-2">
+                          {(["A", "B"] as const).map((s) => (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => setRotStartsWith(s)}
+                              className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                rotStartsWith === s
+                                  ? "bg-primary text-primary-foreground border-primary font-bold shadow-xs"
+                                  : "border-border text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              Começa com {s}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground block mb-2">
+                          Alternância
+                        </label>
+                        <p className="text-xs text-muted-foreground pt-1.5">
+                          {rotPeriod === "weekly"
+                            ? "Alterna a cada 7 dias"
+                            : rotPeriod === "biweekly"
+                            ? "Alterna a cada 14 dias"
+                            : "Alterna a cada 30 dias"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Vigência rotativo */}
+                    <div className="border-t border-border/60 pt-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                        Vigência
+                      </p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1.5 flex items-center justify-between">
+                            <span>Data de Início *</span>
+                            {isEditingActiveSchedule && (
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-normal">
+                                <Lock size={10} /> Bloqueado em vigor
+                              </span>
+                            )}
+                          </label>
+                          <div className={isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}>
+                            <DatePicker
+                              value={rotStartDate}
+                              hasError={!!scheduleFieldErrors.start}
+                              minDate={isEditingActiveSchedule ? undefined : TODAY_STR}
+                              onChange={(v) => {
+                                setRotStartDate(v);
+                                setScheduleError(null);
+                                if (scheduleFieldErrors.start) {
+                                  setScheduleFieldErrors((prev) => ({ ...prev, start: undefined }));
+                                }
+                                if (v && rotEndDate && rotEndDate < v) {
+                                  setRotEndDate(v);
+                                }
+                              }}
+                              className="w-full"
+                            />
+                          </div>
+                          {scheduleFieldErrors.start && (
+                            <p className="text-[11px] text-destructive mt-1 font-medium">
+                              {scheduleFieldErrors.start}
+                            </p>
+                          )}
+                          {!isEditingActiveSchedule && schedules.length > 0 && (
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                              O horário anterior terminará automaticamente na véspera desta data.
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1.5 flex items-center justify-between">
+                            <span>Data de Fim</span>
+                            {isEditingActiveSchedule && (
+                              <span className="text-[10px] text-primary font-medium">
+                                Editável
+                              </span>
+                            )}
+                          </label>
+                          <DatePicker
+                            value={rotEndDate}
+                            hasError={!!scheduleFieldErrors.end}
+                            minDate={rotStartDate || undefined}
+                            onChange={(v) => {
+                              setRotEndDate(v);
+                              setScheduleError(null);
+                              if (scheduleFieldErrors.end) {
+                                setScheduleFieldErrors((prev) => ({ ...prev, end: undefined }));
+                              }
+                            }}
+                            className="w-full"
+                            placeholder="AAAA-MM-DD"
+                          />
+                          {scheduleFieldErrors.end ? (
+                            <p className="text-[11px] text-destructive mt-1 font-medium">
+                              {scheduleFieldErrors.end}
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground/70 mt-1">
+                              {isEditingActiveSchedule
+                                ? futureSchedule
+                                  ? `Próximo horário inicia a ${formatDatePT(futureSchedule.from)}. O término deve ser ${formatDatePT(addDays(futureSchedule.from, -1))}.`
+                                  : "Requer um novo horário agendado para definir término."
+                                : "Em branco = vigência em aberto"}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Shift A and B */}
+                <div className={`grid grid-cols-1 md:grid-cols-2 gap-5 ${isEditingActiveSchedule ? "opacity-60 pointer-events-none" : ""}`}>
+                  {(["A", "B"] as const).map((ab) => {
+                    const isA = ab === "A";
+                    const clr = isA ? "#6366F1" : "#A855F7";
+                    const entryVal = isA ? fixedEntry : shiftBEntry;
+                    const setEntryVal = isA ? setFixedEntry : setShiftBEntry;
+                    const exitVal = isA ? fixedExit : shiftBExit;
+                    const setExitVal = isA ? setFixedExit : setShiftBExit;
+                    const daysVal = isA ? fixedDays : shiftBDays;
+                    const setDaysVal = isA ? setFixedDays : setShiftBDays;
+                    const isLunch = isA ? lunchEnabled : shiftBLunchEnabled;
+                    const setIsLunch = isA ? setLunchEnabled : setShiftBLunchEnabled;
+                    const lunchS = isA ? lunchStart : shiftBLunchStart;
+                    const setLunchS = isA ? setLunchStart : setShiftBLunchStart;
+                    const lunchE = isA ? lunchEnd : shiftBLunchEnd;
+                    const setLunchE = isA ? setLunchEnd : setShiftBLunchEnd;
+                    const lunchD = isA ? lunchDuration : shiftBLunchDuration;
+                    const setLunchD = isA ? setLunchDuration : setShiftBLunchDuration;
+
+                    return (
+                      <Card key={ab} className="p-5 space-y-4">
+                        <div className="flex items-center gap-2 pb-3 border-b border-border/60">
+                          <div
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                            style={{ backgroundColor: clr }}
+                          >
+                            {ab}
+                          </div>
+                          <h4 className="text-sm font-semibold text-foreground">
+                            Horário {ab}
+                          </h4>
+                        </div>
+
+                        <div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-muted-foreground block mb-1">
+                                Hora de Entrada *
+                              </label>
+                              <TimePicker
+                                value={entryVal}
+                                onChange={setEntryVal}
+                                className="w-full"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-muted-foreground block mb-1">
+                                Hora de Saída *
+                              </label>
+                              <TimePicker
+                                value={exitVal}
+                                onChange={setExitVal}
+                                className="w-full"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-border/60 pt-4">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                            Dias de Trabalho
+                          </p>
+                          <div className="flex gap-1 flex-wrap">
+                            {WEEK_DAYS.map((d) => (
+                              <button
+                                key={d}
+                                type="button"
+                                onClick={() => toggleDay(d, daysVal, setDaysVal)}
+                                className={`w-8 h-8 rounded-lg border text-xs font-medium transition-colors ${
+                                  daysVal.includes(d)
+                                    ? "bg-primary text-primary-foreground border-primary font-bold shadow-xs"
+                                    : "border-border text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                {d}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Pausa de almoço */}
+                        <div className="border-t border-border/60 pt-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                              Pausa de almoço
+                            </p>
+                            <Switch
+                              checked={isLunch}
+                              onCheckedChange={setIsLunch}
+                            />
+                          </div>
+                          {isLunch && (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground block mb-1">
+                                    Início do Almoço
+                                  </label>
+                                  <TimePicker
+                                    value={lunchS}
+                                    onChange={setLunchS}
+                                    className="w-full"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground block mb-1">
+                                    Fim do Almoço
+                                  </label>
+                                  <TimePicker
+                                    value={lunchE}
+                                    onChange={setLunchE}
+                                    className="w-full"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="text-[10px] text-muted-foreground block mb-1">
+                                  Duração Efetiva
+                                </label>
+                                <div className="flex gap-1.5 w-full">
+                                  {["30", "45", "60"].map((m) => (
+                                    <button
+                                      key={m}
+                                      type="button"
+                                      onClick={() => setLunchD(m)}
+                                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                        lunchD === m
+                                          ? "bg-primary text-primary-foreground border-primary font-semibold shadow-xs"
+                                          : "border-border text-muted-foreground hover:text-foreground"
+                                      }`}
+                                    >
+                                      {m}m
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Validation error alert */}
+            {scheduleError && (
+              <div className="flex items-start gap-2.5 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs">
+                <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
+                <span className="leading-relaxed font-medium">{scheduleError}</span>
+              </div>
+            )}
+
+          </div>
+        </Modal>
+      )}
+
+      {/* Delete schedule confirmation modal */}
+      <ConfirmationModal
+        open={scheduleToDelete !== null}
+        onClose={() => setScheduleToDelete(null)}
+        onConfirm={handleConfirmDeleteSchedule}
+        title="Eliminar Horário"
+        description={
+          scheduleToDelete ? (
+            <div className="space-y-2">
+              <p>
+                Tem a certeza que deseja eliminar este horário (
+                <strong className="text-foreground">
+                  {scheduleToDelete.type === "fixed" ? "Turno Fixo" : `Turno Rotativo (${scheduleToDelete.period})`}
+                </strong>
+                )?
+              </p>
+              <p className="font-mono text-xs">
+                {formatDatePT(scheduleToDelete.from)}
+                {scheduleToDelete.to ? ` → ${formatDatePT(scheduleToDelete.to)}` : " → Em vigor"}
+              </p>
+              {(getScheduleTypeStatus(scheduleToDelete, schedules) === "future" ||
+                (getScheduleTypeStatus(scheduleToDelete, schedules) === "active" && schedules.length > 1)) && (
+                <p className="text-amber-600 dark:text-amber-400 font-medium text-xs mt-2">
+                  Nota: Ao eliminar este horário, a vigência do horário anterior voltará a ficar em aberto (sem data de fim).
+                </p>
+              )}
+            </div>
+          ) : ""
+        }
+        confirmLabel="Eliminar Horário"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
+    </Card>
+  );
+}

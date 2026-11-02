@@ -1,6 +1,6 @@
 import apiClient from "../client";
 import type { ApiResponse } from "../types/api.types";
-import type { AbsenceType, EntityId } from "../../types";
+import type { EntityId } from "../../types";
 
 export interface AbsenceTypePayload {
   name: string;

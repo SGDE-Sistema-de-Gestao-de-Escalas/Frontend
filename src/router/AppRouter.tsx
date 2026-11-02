@@ -1,6 +1,7 @@
 import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useSchool } from "../context/SchoolContext";
 import MainLayout from "../components/layout/MainLayout";
 import Login from "../pages/Login";
 import OAuthCallback from "../pages/OAuthCallback";
@@ -9,25 +10,28 @@ import Assistants from "../pages/Assistants";
 import Absences from "../pages/Absences";
 import Reports from "../pages/Reports";
 import Config from "../pages/Config";
+import Notifications from "../pages/Notifications";
 import Profile from "../pages/Profile";
 import PlatformSettings from "../pages/PlatformSettings";
 import Account from "../pages/Account";
 import StaffSchedule from "../pages/StaffSchedule";
 import StaffAbsences from "../pages/StaffAbsences";
-import StaffRegisterAbsence from "../pages/StaffRegisterAbsence";
 import LegacyApp from "../pages/LegacyApp";
 
 import TitleUpdater from "./TitleUpdater";
 import { Loader2 } from "lucide-react";
 
 function ProtectedLayout() {
-  const { role, isLoading } = useAuth();
+  const { role, isLoading: isAuthLoading } = useAuth();
+  const { isLoading: isSchoolLoading } = useSchool();
 
-  if (isLoading) {
+  if (isAuthLoading || (role && isSchoolLoading)) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-background gap-3">
         <Loader2 size={32} className="animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">A verificar sessão...</p>
+        <p className="text-sm text-muted-foreground">
+          {isAuthLoading ? "A verificar sessão..." : "A carregar contexto da escola..."}
+        </p>
       </div>
     );
   }
@@ -92,9 +96,13 @@ export default function AppRouter() {
         <Route path="/absences" element={<AdminRoute><Absences /></AdminRoute>} />
         <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
         <Route path="/config" element={<AdminRoute><Config /></AdminRoute>} />
+        <Route path="/notifications" element={<AdminRoute><Notifications /></AdminRoute>} />
+
         <Route path="/profile" element={<Profile />} />
+        <Route path="/profile/:id" element={<Profile />} />
         <Route path="/platform-settings" element={<AdminRoute><PlatformSettings /></AdminRoute>} />
         <Route path="/account" element={<Account />} />
+
 
         {/* Staff Routes */}
         <Route path="/staff/schedule" element={<StaffRoute><StaffSchedule /></StaffRoute>} />
@@ -102,7 +110,7 @@ export default function AppRouter() {
         <Route path="/staff/absence" element={<StaffRoute><StaffAbsences /></StaffRoute>} />
         <Route
           path="/staff/register-absence"
-          element={<StaffRoute><StaffRegisterAbsence /></StaffRoute>}
+          element={<Navigate to="/staff/absences" replace />}
         />
         <Route path="/staff/account" element={<StaffRoute><Account /></StaffRoute>} />
       </Route>

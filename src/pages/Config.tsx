@@ -1,15 +1,17 @@
-import React from "react";
 import ConfigEngine from "../components/config/ConfigEngine";
 import { useSchool } from "../context/SchoolContext";
 import NoSchoolPlaceholder from "../components/common/NoSchoolPlaceholder";
 
 export default function Config() {
-  const { selectedSchool } = useSchool();
+  const { selectedSchool, selectedSchoolId } = useSchool();
 
   if (!selectedSchool) {
     return <NoSchoolPlaceholder moduleName="as Regras do Motor" />;
   }
 
-  return <ConfigEngine />;
+  return (
+    <div key={String(selectedSchoolId ?? "config")} className="w-full">
+      <ConfigEngine />
+    </div>
+  );
 }
-

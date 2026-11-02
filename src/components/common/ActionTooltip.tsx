@@ -35,7 +35,7 @@ export function ActionTooltip({
         align={align}
         sideOffset={6}
         className={cn(
-          "max-w-xs px-2.5 py-1.5 text-xs font-normal leading-normal text-center shadow-lg pointer-events-none",
+          "max-w-xs px-2.5 py-1 text-xs font-normal leading-normal text-center shadow-lg pointer-events-none select-none",
           className
         )}
       >

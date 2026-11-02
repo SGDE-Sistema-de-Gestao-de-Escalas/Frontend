@@ -1,12 +1,13 @@
-import React from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { useSchool } from "../../context/SchoolContext";
 import type { AdminPage, StaffPage } from "../../types";
 import AdminLayout from "./AdminLayout";
 import StaffLayout from "./StaffLayout";
 
 export default function MainLayout() {
   const { role } = useAuth();
+  const { selectedSchoolId } = useSchool();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -16,14 +17,14 @@ export default function MainLayout() {
   let staffPage: StaffPage = "schedule";
 
   if (path.startsWith("/staff")) {
-    if (path.includes("register-absence")) staffPage = "register-absence";
-    else if (path.includes("absence")) staffPage = "absence-detail";
+    if (path.includes("absence")) staffPage = "absence-detail";
     else if (path.includes("account")) staffPage = "account";
     else staffPage = "schedule";
   } else {
     if (path.includes("assistants")) adminPage = "assistants";
     else if (path.includes("absences")) adminPage = "absences";
     else if (path.includes("reports")) adminPage = "reports";
+    else if (path.includes("notifications")) adminPage = "notifications";
     else if (path.includes("config")) adminPage = "config";
     else if (path.includes("profile")) adminPage = "profile";
     else if (path.includes("platform-settings")) adminPage = "platform-settings";
@@ -39,7 +40,6 @@ export default function MainLayout() {
   function handleStaffNavigate(page: StaffPage) {
     if (page === "schedule") navigate("/staff/schedule");
     else if (page === "absence-detail") navigate("/staff/absences");
-    else if (page === "register-absence") navigate("/staff/register-absence");
     else if (page === "account") navigate("/staff/account");
     else navigate(`/staff/${page}`);
   }
@@ -47,14 +47,14 @@ export default function MainLayout() {
   if (role === "staff") {
     return (
       <StaffLayout currentPage={staffPage} onNavigate={handleStaffNavigate}>
-        <Outlet />
+        <Outlet key={String(selectedSchoolId ?? "staff-school")} />
       </StaffLayout>
     );
   }
 
   return (
     <AdminLayout currentPage={adminPage} onNavigate={handleAdminNavigate}>
-      <Outlet />
+      <Outlet key={String(selectedSchoolId ?? "admin-school")} />
     </AdminLayout>
   );
 }

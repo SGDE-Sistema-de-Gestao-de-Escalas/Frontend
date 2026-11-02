@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -17,24 +17,61 @@ import {
 } from "recharts";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { assistants as ASSISTANTS } from "../../api/mockData";
+import { useAssistantsList } from "../../hooks/api/useAssistants";
+import type { EntityId } from "../../types";
 import DatePicker from "../common/DatePicker";
+import CustomSelect from "../common/CustomSelect";
+
+function SimulatorChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload || !payload.length) return null;
+  return (
+    <div className="bg-popover text-popover-foreground border border-border shadow-xl rounded-lg p-2.5 text-xs min-w-[150px] pointer-events-none backdrop-blur-md">
+      <div className="font-semibold text-foreground mb-1.5 pb-1 border-b border-border/50">
+        {label}
+      </div>
+      <div className="space-y-1">
+        {payload.map((p: any, i: number) => (
+          <div key={i} className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: p.color || p.fill }}
+              />
+              <span>{p.name}:</span>
+            </div>
+            <span className="font-mono font-semibold text-foreground">
+              {p.value}h
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function SimulatorPage() {
-  const [selectedAssistant, setSelectedAssistant] = useState<number | null>(
+  const { data: assistantsData = [] } = useAssistantsList();
+  const [selectedAssistant, setSelectedAssistant] = useState<EntityId | null>(
     null
   );
-  const [startDate, setStartDate] = useState("2026-02-03");
-  const [endDate, setEndDate] = useState("2026-02-05");
+  const [startDate, setStartDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+  const [endDate, setEndDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
   const [simulated, setSimulated] = useState(false);
 
-  const assistant = ASSISTANTS.find((a) => a.id === selectedAssistant);
+  const assistant = assistantsData.find(
+    (a) => String(a.id) === String(selectedAssistant)
+  );
 
-  const impactDays = [
-    { day: "Ter 03 Fev", before: 10, after: 9, alert: false },
-    { day: "Qua 04 Fev", before: 11, after: 10, alert: false },
-    { day: "Qui 05 Fev", before: 8, after: 7, alert: true },
-  ];
+  const impactDays: {
+    day: string;
+    before: number;
+    after: number;
+    alert: boolean;
+  }[] = [];
 
   return (
     <div>
@@ -58,21 +95,18 @@ export default function SimulatorPage() {
               <label className="text-xs text-muted-foreground block mb-1.5">
                 Assistente *
               </label>
-              <select
-                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background focus:outline-none focus:ring-1 focus:ring-ring"
-                value={selectedAssistant ?? ""}
-                onChange={(e) => {
-                  setSelectedAssistant(Number(e.target.value));
+              <CustomSelect
+                placeholder="Selecionar assistente..."
+                value={selectedAssistant ? String(selectedAssistant) : ""}
+                onValueChange={(val) => {
+                  setSelectedAssistant(val || null);
                   setSimulated(false);
                 }}
-              >
-                <option value="">Selecionar assistente...</option>
-                {ASSISTANTS.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
+                options={assistantsData.map((a) => ({
+                  value: String(a.id),
+                  label: a.name,
+                }))}
+              />
             </div>
             <div>
               <label className="text-xs text-muted-foreground block mb-1.5">
@@ -242,13 +276,7 @@ export default function SimulatorPage() {
                         tickLine={false}
                         domain={[0, 12]}
                       />
-                      <Tooltip
-                        contentStyle={{
-                          fontSize: 11,
-                          borderRadius: 8,
-                          border: "1px solid #E8EBF2",
-                        }}
-                      />
+                      <Tooltip content={<SimulatorChartTooltip />} cursor={{ fill: 'currentColor', opacity: 0.05 }} />
                       <Bar
                         key="bar-before"
                         dataKey="before"
@@ -282,4 +310,3 @@ export default function SimulatorPage() {
     </div>
   );
 }
-

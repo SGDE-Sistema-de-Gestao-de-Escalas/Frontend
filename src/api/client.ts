@@ -18,11 +18,20 @@ export const apiClient = axios.create({
 // Request Interceptor: Attach Bearer Token (if available) & Selected School
 apiClient.interceptors.request.use(
   (config) => {
-    const token =
-      localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // Se o pedido for FormData, removemos o Content-Type default ("application/json")
+    // para que o browser/axios defina automaticamente 'multipart/form-data; boundary=...'
+    if (config.data instanceof FormData) {
+      if (typeof (config.headers as any)?.delete === "function") {
+        (config.headers as any).delete("Content-Type");
+        (config.headers as any).delete("content-type");
+      } else if (config.headers) {
+        delete (config.headers as any)["Content-Type"];
+        delete (config.headers as any)["content-type"];
+      }
     }
+
+    // A autenticação vai no cookie HttpOnly (withCredentials): o token não é
+    // guardado nem lido do localStorage/sessionStorage (F-10).
 
     const schoolId = localStorage.getItem("selected_school_id");
     const url = config.url || "";
@@ -30,6 +39,7 @@ apiClient.interceptors.request.use(
     const isGlobalRoute =
       url.includes("/schools") ||
       url.includes("/absence-types") ||
+      url.includes("/holidays") ||
       url.includes("/roles") ||
       url.includes("/users") ||
       url.includes("/me");

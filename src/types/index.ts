@@ -8,18 +8,19 @@ export type AdminPage =
   | "add-assistant"
   | "assistants"
   | "reports"
+  | "notifications"
   | "account"
   | "platform-settings";
 
 export type StaffPage =
   | "schedule"
-  | "register-absence"
+  | "absences"
   | "account"
   | "absence-detail";
 
 export type StaffViewMode = "day" | "week" | "month";
 
-export type ConfigTab = "security" | "windows" | "holidays" | "activity-types";
+export type ConfigTab = "security" | "windows" | "activity-types";
 
 export type BlockState =
   | "work"
@@ -57,22 +58,90 @@ export interface School {
 
 export type DeleteActionType = "hard_delete" | "anonymize";
 
-export interface Assistant {
+export interface AssistantSchool {
   id: EntityId;
   name: string;
+  acronym?: string;
+}
+
+export interface Assistant {
+  id: EntityId;
+  user_id?: EntityId;
+  school_id?: EntityId;
+  schoolId?: EntityId;
+  first_name?: string;
+  last_name?: string;
+  name: string;
   initials: string;
-  staffNumber: string;
-  mecanografico?: string;
-  exception: string | null;
-  schoolId: EntityId;
-  availableForTransfer: boolean;
-  active: boolean;
+  role?: string;
   is_active?: boolean;
+  active?: boolean;
+  internal_number?: string;
+  mecanografico?: string;
+  staffNumber?: string;
+  email?: string;
+  phone?: string;
+  nif?: string;
+  social_security_number?: string;
+  birth_date?: string;
+  admission_date?: string;
+  has_criminal_record?: boolean;
+  criminal_record_name?: string | null;
+  criminal_record_path?: string | null;
+  criminal_record_url?: string | null;
+  criminal_record_expiry?: string | null;
+  address_street?: string;
+  address_zip_code?: string;
+  address_city?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  emergency_contact_kinship?: string;
+  available_for_transfer?: boolean;
+  availableForTransfer?: boolean;
+  is_temporary_transfer?: boolean;
+  origin_school_id?: EntityId | null;
+  origin_school_name?: string | null;
+  destination_school_id?: EntityId | null;
+  destination_school_name?: string | null;
+  exception?: string | null;
+  school?: AssistantSchool;
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string | null;
+  is_anonymized?: boolean;
+  anonymized_at?: string | null;
   can_delete?: boolean;
   cannot_delete_reason?: string | null;
   delete_action?: DeleteActionType;
   delete_message?: string;
 }
+
+export interface CreateAssistantPayload {
+  first_name: string;
+  last_name: string;
+  email: string;
+  internal_number: string;
+  phone?: string;
+  nif?: string;
+  social_security_number?: string;
+  birth_date?: string;
+  admission_date?: string;
+  criminal_record?: File | null;
+  criminal_record_file?: File | null;
+  criminal_record_expiry?: string | null;
+  address_street?: string;
+  address_zip_code?: string;
+  address_city?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  emergency_contact_kinship?: string;
+  available_for_transfer?: boolean;
+}
+
+export type UpdateAssistantPayload = Partial<CreateAssistantPayload> & {
+  remove_criminal_record?: boolean;
+};
+
 
 export interface AdminUser {
   id: EntityId;
@@ -135,19 +204,39 @@ export type NotificationType = "alert" | "absence" | "expiry" | "info";
 export type NotifType = NotificationType;
 
 export interface Notification {
-  id: EntityId;
+  id: string;
   type: NotificationType;
+  /** Código do evento (ex.: "absence.registered"). */
+  event: string | null;
   title: string;
-  body: string;
-  time: string;
+  body: string | null;
+  /** Rota interna para onde a notificação deve levar o utilizador. */
+  link: string | null;
+  schoolId: string | null;
   read: boolean;
+  readAt: string | null;
+  /** ISO 8601 */
+  createdAt: string;
+  data: Record<string, unknown> | null;
 }
+
+export type NotificationUnreadCounts = Record<NotificationType | "all", number>;
 
 export interface ActivityType {
   id: string;
-  label: string;
+  label?: string;
+  name?: string;
   color: string;
-  builtIn: boolean;
+  builtIn?: boolean;
+  is_system?: boolean;
+  is_fallback?: boolean;
+  school_id?: string;
+  active?: boolean;
+  status_message?: string | null;
+  can_delete?: boolean;
+  cannot_delete_reason?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ScheduleRule {
@@ -196,8 +285,11 @@ export interface Holiday {
   id: EntityId;
   name: string;
   date: string;
-  type: "national" | "municipal" | "nacional";
-  impact: "low" | "medium" | "high" | "baixo" | "médio" | "alto";
+  description?: string | null;
+  type?: "national" | "municipal" | "nacional";
+  impact?: "low" | "medium" | "high" | "baixo" | "médio" | "alto";
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AuditLogEntry {

@@ -16,6 +16,7 @@ export interface AuthUser {
   role: Role | { id: string | number; name: string; slug: Role };
   assistant_id?: string | number | null;
   school_id?: string | number | null;
+  school_name?: string | null;
 }
 
 export interface BackendLoginResponse {
@@ -119,6 +120,8 @@ export const authService = {
     first_name: string;
     last_name: string;
     email: string;
+    /** Obrigatória só quando o email muda (F-08). */
+    current_password?: string;
   }, userId?: string | number): Promise<AuthUser> {
     // 1) Tenta o endpoint específico de perfil PUT /me
     try {

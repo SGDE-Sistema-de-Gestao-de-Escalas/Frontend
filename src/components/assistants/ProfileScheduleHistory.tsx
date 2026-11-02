@@ -1,183 +1,523 @@
-import React, { useState } from "react";
-import { ChevronLeft, ChevronRight, Clock, Coffee, Lock, UserX } from "lucide-react";
-import { PROFILE_MONTHS, TIME_SLOTS } from "../../api/mockData";
-import type { BlockState } from "../../types";
-import { BLOCK_STYLES } from "../dashboard/blockStyles";
+import { useMemo, useState } from "react";
+import {
+  ArrowRightLeft,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Loader2,
+} from "lucide-react";
+import type { BlockState, EntityId } from "../../types";
+import {
+  BLOCK_STYLES,
+  formatDurationSlots,
+  slotsToBlocks,
+  TIME_SLOTS,
+  VIEW_START,
+  VIEW_END,
+} from "../dashboard/blockStyles";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import DateRangePicker, { type DateRange } from "../common/DateRangePicker";
+import { useSchedulesList } from "../../hooks/api/useSchedules";
+import { useAbsencesList } from "../../hooks/api/useAbsences";
+import {
+  useOperatingCalendar,
+  useOperatingExceptions,
+  useOperatingRules,
+} from "../../hooks/api/useOperatingHours";
+import { useHolidaysList } from "../../hooks/api/useHolidays";
+import { useAllAssistantSchedules } from "../../hooks/api/useAssistantSchedules";
+import { useAllAssistantExceptions } from "../../hooks/api/useAssistantExceptions";
+import {
+  buildDayMatrixFromApi,
+  getDateInfo,
+  getRealMonthsRange,
+  getSchedulePublishStatusForDate,
+  resolveAssistantShiftBounds,
+  resolveSchoolDayStatusByIsoDate,
+  type AssistantScheduleProfileApi,
+  type AssistantExceptionApi,
+} from "../../utils/scheduleMatrixUtils";
+import { getBlockDisplayColor } from "../staff/StaffScheduleSection";
 
-function generateWeekSchedule(weekOffset: number): Record<string, BlockState[]> {
-  const days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-  const patterns: Record<string, BlockState[]> = {};
-  days.forEach((day, di) => {
-    const row: BlockState[] = Array(96).fill("off");
-    if (di >= 5) {
-      patterns[day] = row;
-      return;
-    }
-    if (weekOffset === -1 && di === 2) {
-      for (let i = 0; i < 96; i++) row[i] = "absent";
-      patterns[day] = row;
-      return;
-    }
-    const startSlot = 40; // 10:00
-    const endSlot = 68; // 17:00
-    const lunchStart = 52; // 13:00
-    const lunchEnd = 56; // 14:00
-    for (let i = startSlot; i < endSlot; i++) {
-      if (i >= lunchStart && i < lunchEnd) row[i] = "lunch";
-      else row[i] = "work";
-    }
-    patterns[day] = row;
-  });
-  return patterns;
+export interface ProfileScheduleHistoryProps {
+  assistantId?: EntityId;
+  assistantName?: string;
+  schoolId?: EntityId;
 }
 
-function summariseDay(slots: BlockState[]) {
-  const counts: Record<string, number> = {
-    work: 0,
-    surveillance: 0,
-    lunch: 0,
-    absent: 0,
-    off: 0,
+function getDateInfoFromIso(iso: string) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dateObj = new Date(y, m - 1, d, 12, 0, 0);
+  const jsDay = dateObj.getDay();
+  const dow = (jsDay + 6) % 7; // 0=Mon...6=Sun
+  const dayNames = [
+    "Segunda-feira",
+    "Terça-feira",
+    "Quarta-feira",
+    "Quinta-feira",
+    "Sexta-feira",
+    "Sábado",
+    "Domingo",
+  ];
+  const monthsShort = [
+    "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+    "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+  ];
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const dateStr = `${pad(d)} ${monthsShort[m - 1]} ${y}`;
+  const now = new Date();
+  const isToday =
+    now.getFullYear() === y &&
+    now.getMonth() === m - 1 &&
+    now.getDate() === d;
+
+  return {
+    isoDate: iso,
+    dayName: dayNames[dow],
+    dateStr,
+    dow,
+    isToday,
   };
-  slots.forEach((s) => {
-    if (s in counts) counts[s]++;
-  });
-  return counts;
 }
 
-const WEEK_OFFSETS: Record<number, string> = {
-  0: "Semana atual (27 Jan – 02 Fev)",
-  "-1": "Semana anterior (20 Jan – 26 Jan)",
-  "-2": "Semana de 13 Jan – 19 Jan",
-  "-3": "Semana de 06 Jan – 12 Jan",
-};
-
-export default function ProfileScheduleHistory() {
-  const [viewMode, setViewMode] = useState<"week" | "month">("week");
+/**
+ * Separador de Histórico de Escalas do Perfil do Assistente.
+ * Exibe o histórico semanal, mensal ou por período livre através de DateRangePicker,
+ * com barras de horário visuais, cores de atividade reais e tooltips informativos.
+ */
+export default function ProfileScheduleHistory({
+  assistantId,
+  assistantName = "Assistente",
+  schoolId,
+}: ProfileScheduleHistoryProps) {
+  const [viewMode, setViewMode] = useState<"week" | "month" | "range">("week");
   const [weekOffset, setWeekOffset] = useState(0);
-  const [monthIdx, setMonthIdx] = useState(3); // Jan 2026 = index 3
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [monthOffset, setMonthOffset] = useState(1);
+  const [selectedMonthDay, setSelectedMonthDay] = useState<number | null>(null);
 
-  const weekData = generateWeekSchedule(weekOffset);
-  const weekDays = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-  const weekDates: Record<string, string> = {
-    Seg:
-      weekOffset === 0
-        ? "27 Jan"
-        : weekOffset === -1
-        ? "20 Jan"
-        : weekOffset === -2
-        ? "13 Jan"
-        : "06 Jan",
-    Ter:
-      weekOffset === 0
-        ? "28 Jan"
-        : weekOffset === -1
-        ? "21 Jan"
-        : weekOffset === -2
-        ? "14 Jan"
-        : "07 Jan",
-    Qua:
-      weekOffset === 0
-        ? "29 Jan"
-        : weekOffset === -1
-        ? "22 Jan"
-        : weekOffset === -2
-        ? "15 Jan"
-        : "08 Jan",
-    Qui:
-      weekOffset === 0
-        ? "30 Jan"
-        : weekOffset === -1
-        ? "23 Jan"
-        : weekOffset === -2
-        ? "16 Jan"
-        : "09 Jan",
-    Sex:
-      weekOffset === 0
-        ? "31 Jan"
-        : weekOffset === -1
-        ? "24 Jan"
-        : weekOffset === -2
-        ? "17 Jan"
-        : "10 Jan",
-    Sáb:
-      weekOffset === 0
-        ? "01 Fev"
-        : weekOffset === -1
-        ? "25 Jan"
-        : weekOffset === -2
-        ? "18 Jan"
-        : "11 Jan",
-    Dom:
-      weekOffset === 0
-        ? "02 Fev"
-        : weekOffset === -1
-        ? "26 Jan"
-        : weekOffset === -2
-        ? "19 Jan"
-        : "12 Jan",
-  };
+  const monthsList = useMemo(() => getRealMonthsRange(2, 4), []);
+  const clampedMonthIdx = Math.max(0, Math.min(monthOffset, monthsList.length - 1));
+  const currentMonth = monthsList[clampedMonthIdx];
 
-  const currentMonth = PROFILE_MONTHS[monthIdx];
+  // Semana selecionada alinhada à Segunda-feira
+  const todayInfo = getDateInfo(0);
+  const currentWeekMondayOffset = -todayInfo.dow + weekOffset * 7;
+  const weekOffsets = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => currentWeekMondayOffset + i),
+    [currentWeekMondayOffset]
+  );
 
-  function getDaySlots(dayNum: number): BlockState[] {
-    const dow = (currentMonth.offset + dayNum - 1) % 7;
-    const isWeekend = dow === 0 || dow === 6;
-    const row: BlockState[] = Array(96).fill("off");
-    if (isWeekend) return row;
-    if (currentMonth.sickDay && dayNum === currentMonth.sickDay) {
-      row.fill("absent");
-      return row;
-    }
-    const startSlot = 40;
-    const endSlot = 68;
-    const lunchStart = 52;
-    const lunchEnd = 56;
-    for (let i = startSlot; i < endSlot; i++) {
-      if (i >= lunchStart && i < lunchEnd) row[i] = "lunch";
-      else row[i] = "work";
-    }
-    return row;
-  }
+  const weekStartInfo = getDateInfo(weekOffsets[0]);
+  const weekEndInfo = getDateInfo(weekOffsets[6]);
 
-  const selectedDaySlots = selectedDay ? getDaySlots(selectedDay) : null;
+  // Intervalo livre selecionado pelo DateRangePicker
+  const [customRange, setCustomRange] = useState<DateRange>(() => {
+    return {
+      startDate: weekStartInfo.isoDate,
+      endDate: weekEndInfo.isoDate,
+    };
+  });
 
-  function groupSlots(slots: BlockState[]) {
-    const groups: { state: BlockState; start: number; end: number }[] = [];
-    let cur: { state: BlockState; start: number; end: number } | null = null;
-    slots.forEach((s, i) => {
-      if (s === "off") {
-        if (cur) {
-          groups.push(cur);
-          cur = null;
-        }
-        return;
-      }
-      if (cur && cur.state === s) {
-        cur.end = i;
-      } else {
-        if (cur) groups.push(cur);
-        cur = { state: s, start: i, end: i };
-      }
+  // Atalhos de datas para consulta do histórico (passado, presente e futuro)
+  const historyDatePresets = useMemo(() => {
+    const t = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const toIsoStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    const dow = t.getDay();
+    const diffToMon = dow === 0 ? -6 : 1 - dow;
+    const thisMon = new Date(t);
+    thisMon.setDate(t.getDate() + diffToMon);
+    const thisSun = new Date(thisMon);
+    thisSun.setDate(thisMon.getDate() + 6);
+
+    const lastMon = new Date(thisMon);
+    lastMon.setDate(thisMon.getDate() - 7);
+    const lastSun = new Date(thisMon);
+    lastSun.setDate(thisMon.getDate() - 1);
+
+    const firstThisMonth = new Date(t.getFullYear(), t.getMonth(), 1);
+    const lastThisMonth = new Date(t.getFullYear(), t.getMonth() + 1, 0);
+
+    const firstLastMonth = new Date(t.getFullYear(), t.getMonth() - 1, 1);
+    const lastLastMonth = new Date(t.getFullYear(), t.getMonth(), 0);
+
+    const thirtyDaysAgo = new Date(t);
+    thirtyDaysAgo.setDate(t.getDate() - 30);
+
+    return [
+      { label: "Esta Semana", start: toIsoStr(thisMon), end: toIsoStr(thisSun) },
+      { label: "Semana Passada", start: toIsoStr(lastMon), end: toIsoStr(lastSun) },
+      { label: "Este Mês", start: toIsoStr(firstThisMonth), end: toIsoStr(lastThisMonth) },
+      { label: "Mês Passado", start: toIsoStr(firstLastMonth), end: toIsoStr(lastLastMonth) },
+      { label: "Últimos 30 Dias", start: toIsoStr(thirtyDaysAgo), end: toIsoStr(t) },
+    ];
+  }, []);
+
+  // Determinar limites de pesquisa da query
+  const queryStart =
+    viewMode === "week"
+      ? weekStartInfo.isoDate
+      : viewMode === "month"
+      ? currentMonth.startIso
+      : customRange.startDate || todayInfo.isoDate;
+
+  const queryEnd =
+    viewMode === "week"
+      ? weekEndInfo.isoDate
+      : viewMode === "month"
+      ? currentMonth.endIso
+      : customRange.endDate || todayInfo.isoDate;
+
+  const { data: schedules = [], isLoading: isLoadingSchedules } = useSchedulesList({
+    start_date: queryStart,
+    end_date: queryEnd,
+    assistant_id: assistantId,
+    per_page: 250,
+  });
+
+  const { data: absencesRes } = useAbsencesList({
+    start_date: queryStart,
+    end_date: queryEnd,
+    assistant_id: assistantId,
+    per_page: 100,
+  });
+
+  const { data: calendarDays } = useOperatingCalendar(queryStart, queryEnd);
+  const { data: holidays } = useHolidaysList();
+  const { data: operatingExceptions } = useOperatingExceptions("all");
+  const { data: operatingRules } = useOperatingRules("all");
+
+  const { data: allAssistantSchedules = [] } = useAllAssistantSchedules();
+  const { data: allAssistantExceptions = [] } = useAllAssistantExceptions();
+
+  const targetId = (assistantId as string) ?? "assistant";
+  const initials = assistantName
+    ? assistantName.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
+    : "AO";
+
+  const profilesByAssistant = useMemo(() => {
+    const map: Record<string, AssistantScheduleProfileApi[]> = {};
+    allAssistantSchedules.forEach((p) => {
+      const aid = String(p.assistant_id);
+      if (!map[aid]) map[aid] = [];
+      map[aid].push(p);
     });
-    if (cur) groups.push(cur);
-    return groups;
-  }
+    return map;
+  }, [allAssistantSchedules]);
 
-  const HOUR_TICKS = [24, 32, 40, 48, 56, 64, 72, 80, 84];
+  const exceptionsByAssistant = useMemo(() => {
+    const map: Record<string, AssistantExceptionApi[]> = {};
+    allAssistantExceptions.forEach((e) => {
+      const aid = String(e.assistant_id);
+      if (!map[aid]) map[aid] = [];
+      map[aid].push(e);
+    });
+    return map;
+  }, [allAssistantExceptions]);
+
+  // Lista de datas contínuas para o modo por período
+  const datesInRange = useMemo(() => {
+    if (!customRange.startDate || !customRange.endDate) return [];
+    if (customRange.startDate > customRange.endDate) return [];
+    const list: string[] = [];
+    const curr = new Date(customRange.startDate + "T12:00:00");
+    const end = new Date(customRange.endDate + "T12:00:00");
+    const pad = (n: number) => String(n).padStart(2, "0");
+    let safety = 0;
+    while (curr <= end && safety < 180) {
+      const y = curr.getFullYear();
+      const m = pad(curr.getMonth() + 1);
+      const d = pad(curr.getDate());
+      list.push(`${y}-${m}-${d}`);
+      curr.setDate(curr.getDate() + 1);
+      safety++;
+    }
+    return list;
+  }, [customRange.startDate, customRange.endDate]);
+
+  // Renderizador unificado do cartão de horário diário
+  function renderDayCard(isoDate: string) {
+    const info = getDateInfoFromIso(isoDate);
+    const status = resolveSchoolDayStatusByIsoDate(isoDate, {
+      calendarDays,
+      holidays,
+      operatingExceptions,
+      operatingRules,
+    });
+    const isClosed = !status.isOpen;
+
+    const { matrix, slotMetaByAssistant } = buildDayMatrixFromApi({
+      isoDate,
+      isOpen: !isClosed,
+      assistants: [
+        {
+          id: targetId,
+          name: assistantName,
+          initials,
+        },
+      ],
+      schedules,
+      absences: absencesRes?.data || [],
+      profilesByAssistant,
+      exceptionsByAssistant,
+    });
+
+    const slots = matrix[targetId] || Array(96).fill("off");
+    const meta = slotMetaByAssistant?.[targetId] || {};
+    const dayBlocks = slotsToBlocks(slots, meta);
+    const activeBlocks = dayBlocks.filter((b) => b.state !== "off");
+
+    const activeSlots = slots.filter(
+      (s) => s !== "off" && s !== "lunch" && s !== "absent"
+    ).length;
+    const hasWork = activeSlots > 0;
+    const hasAbsent = slots.some((s) => s === "absent");
+
+    const entryBlock = activeBlocks.find((b) => b.state !== "absent");
+    const lastBlock = [...activeBlocks]
+      .reverse()
+      .find((b) => b.state !== "absent");
+
+    const weekShiftBounds = resolveAssistantShiftBounds({
+      assistantId: targetId,
+      isoDate,
+      dow: info.dow,
+      viewStartSlot: status.viewStartSlot ?? VIEW_START,
+      viewEndSlot: status.viewEndSlot ?? VIEW_END,
+      profiles: profilesByAssistant[String(targetId)],
+      exceptions: exceptionsByAssistant[String(targetId)],
+      schedulesList: schedules,
+      absences: absencesRes?.data || [],
+    });
+
+    const shiftStart = weekShiftBounds.startSlot ?? (entryBlock ? entryBlock.start : 32);
+    const shiftEnd = weekShiftBounds.endSlot ?? (lastBlock ? lastBlock.start + lastBlock.count : 68);
+    const shiftSlots = Math.max(1, shiftEnd - shiftStart);
+
+    const entryExitStr =
+      entryBlock && lastBlock
+        ? `${TIME_SLOTS[entryBlock.start]} – ${
+            TIME_SLOTS[lastBlock.start + lastBlock.count] || "24:00"
+          }`
+        : null;
+
+    const pubInfo = getSchedulePublishStatusForDate(isoDate, schedules);
+
+    return (
+      <Card
+        key={isoDate}
+        className={`p-3.5 transition-all ${
+          info.isToday
+            ? "border-primary bg-primary/3 shadow-xs"
+            : isClosed || (!hasWork && !hasAbsent)
+            ? "border-border/60 bg-card/60 opacity-85"
+            : "border-border bg-card shadow-2xs"
+        }`}
+      >
+        {/* Linha de Cabeçalho do Dia */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-xs text-foreground min-w-[70px]">
+              {info.dayName}
+            </span>
+            <span
+              className={`text-xs font-mono ${
+                info.isToday ? "text-primary font-bold" : "text-muted-foreground"
+              }`}
+            >
+              {info.dateStr}
+            </span>
+            {info.isToday && (
+              <Badge variant="default" className="text-[10px] py-0 px-1.5">
+                Hoje
+              </Badge>
+            )}
+            {hasAbsent && (
+              <Badge
+                variant="outline"
+                className="text-[10px] py-0 px-1.5 border-destructive/30 text-destructive bg-destructive/10"
+              >
+                Ausência
+              </Badge>
+            )}
+            {(() => {
+              const daySchedule = schedules.find((sc) => {
+                if (sc.entries && sc.entries.length > 0) {
+                  return sc.entries.some((entry) => entry.date?.slice(0, 10) === isoDate);
+                }
+                const ws = (sc.week_start || "").slice(0, 10);
+                const we = (sc.week_end || "").slice(0, 10);
+                return Boolean(ws && we && ws <= isoDate && isoDate <= we);
+              });
+              const isDayTransfer = Boolean(
+                daySchedule?.is_temporary_transfer ||
+                (daySchedule?.school_id && schoolId && String(daySchedule.school_id) !== String(schoolId))
+              );
+              if (!isDayTransfer) return null;
+              return (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] py-0 px-1.5 border-amber-500/30 text-amber-700 dark:text-amber-300 bg-amber-500/10 flex items-center gap-1 font-medium"
+                  title={`Colocação em ${daySchedule?.school_name || "outra escola"}`}
+                >
+                  <ArrowRightLeft size={10} className="shrink-0" />
+                  <span>{daySchedule?.school_name || "Transferência"}</span>
+                </Badge>
+              );
+            })()}
+          </div>
+
+          {/* Estado do Dia / Horário de Trabalho */}
+          <div>
+            {isClosed ? (
+              <Badge
+                variant="outline"
+                className={`text-xs ${
+                  status.reasonType === "exception"
+                    ? "border-destructive/30 text-destructive bg-destructive/10 font-medium"
+                    : status.reasonType === "holiday"
+                    ? "border-amber-500/30 text-amber-700 dark:text-amber-300 bg-amber-500/10 font-medium"
+                    : "border-border text-muted-foreground bg-muted/40"
+                }`}
+              >
+                {status.closedLabel || "Encerrada"}
+              </Badge>
+            ) : isLoadingSchedules ? (
+              <span className="text-[11px] font-medium text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md flex items-center gap-1">
+                <Loader2 size={11} className="animate-spin text-primary" />
+                <span>A verificar...</span>
+              </span>
+            ) : !pubInfo.hasSchedule ? (
+              <span className="text-[11px] font-medium text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md border border-border">
+                Não gerada
+              </span>
+            ) : !pubInfo.isPublished ? (
+              <span className="text-[11px] font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                Em preparação
+              </span>
+            ) : hasWork && entryExitStr ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-medium text-foreground">
+                  {entryExitStr}
+                </span>
+                <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                  {formatDurationSlots(activeSlots)}
+                </span>
+              </div>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                Dia de descanso
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Barra Contínua do Horário com Cores Reais e Tooltips */}
+        {!isClosed && activeBlocks.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="relative h-4 rounded-md overflow-hidden bg-muted/40 my-1">
+              {activeBlocks.map((b, bi) => {
+                const cs = Math.max(b.start, shiftStart);
+                const ce = Math.min(b.start + b.count, shiftEnd);
+                if (ce <= cs) return null;
+                const color = getBlockDisplayColor(b);
+                const name = b.activityName || BLOCK_STYLES[b.state]?.label || "Atividade";
+                const timeStr = `${TIME_SLOTS[b.start]} – ${
+                  TIME_SLOTS[b.start + b.count] || "24:00"
+                }`;
+
+                const dMin = b.count * 15;
+                const dStr =
+                  dMin >= 60
+                    ? `${Math.floor(dMin / 60)}h${dMin % 60 > 0 ? ` ${dMin % 60}m` : ""}`
+                    : `${dMin}m`;
+
+                const tooltipTitle = `${name}: ${timeStr} (${dStr})`;
+
+                return (
+                  <Tooltip key={bi}>
+                    <TooltipTrigger asChild>
+                      <div
+                        className="absolute inset-y-0.5 transition-transform hover:scale-105 hover:z-10 cursor-pointer rounded-xs"
+                        style={{
+                          left: `${((cs - shiftStart) / shiftSlots) * 100}%`,
+                          width: `${((ce - cs) / shiftSlots) * 100}%`,
+                          backgroundColor: color,
+                        }}
+                        title={tooltipTitle}
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      sideOffset={5}
+                      className="bg-popover text-popover-foreground border border-border shadow-xl px-3 py-2 rounded-xl text-left"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full"
+                          style={{ backgroundColor: color }}
+                        />
+                        <span className="font-semibold text-xs text-foreground">
+                          {name}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-mono text-muted-foreground mt-1">
+                        {timeStr} ({dStr})
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </div>
+
+            {/* Lista resumida das atividades deste dia */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+              {activeBlocks
+                .filter((b) => b.state !== "lunch")
+                .map((b, bi) => {
+                  const color = getBlockDisplayColor(b);
+                  const name = b.activityName || BLOCK_STYLES[b.state]?.label || "Atividade";
+                  const timeStr = `${TIME_SLOTS[b.start]}–${
+                    TIME_SLOTS[b.start + b.count] || "24:00"
+                  }`;
+                  return (
+                    <div
+                      key={bi}
+                      className="inline-flex items-center gap-1 text-[10px] font-medium text-foreground/80 bg-muted/50 border border-border/50 px-2 py-0.5 rounded-md"
+                      title={`${name}: ${timeStr}`}
+                    >
+                      <span
+                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                        style={{ backgroundColor: color }}
+                      />
+                      <span>{name}</span>
+                      <span className="font-mono text-muted-foreground text-[9px]">
+                        {timeStr}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-4">
-      {/* Controls */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">
+      {/* Barra de Controlos (Semanal / Mensal / Por Período e Navegação) */}
+      <div className="flex items-center justify-between gap-3 flex-wrap bg-card border border-border p-3 rounded-xl shadow-2xs">
+        {/* Toggle de Modos de Visualização */}
+        <div className="flex items-center bg-muted rounded-lg p-0.5 border border-border/50">
           <button
             type="button"
             onClick={() => setViewMode("week")}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
               viewMode === "week"
                 ? "bg-card shadow-xs text-foreground font-semibold"
                 : "text-muted-foreground hover:text-foreground"
@@ -188,7 +528,7 @@ export default function ProfileScheduleHistory() {
           <button
             type="button"
             onClick={() => setViewMode("month")}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
               viewMode === "month"
                 ? "bg-card shadow-xs text-foreground font-semibold"
                 : "text-muted-foreground hover:text-foreground"
@@ -196,182 +536,307 @@ export default function ProfileScheduleHistory() {
           >
             Mensal
           </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("range")}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+              viewMode === "range"
+                ? "bg-card shadow-xs text-foreground font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Por Período
+          </button>
         </div>
 
-        {viewMode === "week" ? (
-          <div className="flex items-center gap-2">
+        {/* 1. Controlos da Vista Semanal */}
+        {viewMode === "week" && (
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
-              disabled={weekOffset <= -3}
               onClick={() => setWeekOffset((p) => p - 1)}
-              className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30 transition-colors"
+              className="p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              title="Semana anterior"
             >
               <ChevronLeft size={14} />
             </button>
-            <span className="text-xs font-medium text-foreground font-mono">
-              {WEEK_OFFSETS[weekOffset] ?? `Semana ${weekOffset}`}
+            <span className="text-xs font-semibold text-foreground px-2">
+              {weekStartInfo.dateStr.slice(0, 6)} – {weekEndInfo.dateStr}
             </span>
             <button
               type="button"
-              disabled={weekOffset >= 0}
               onClick={() => setWeekOffset((p) => p + 1)}
-              className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30 transition-colors"
+              className="p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              title="Semana seguinte"
             >
               <ChevronRight size={14} />
             </button>
+            {weekOffset !== 0 && (
+              <button
+                type="button"
+                onClick={() => setWeekOffset(0)}
+                className="ml-1 px-2.5 py-1 text-[11px] font-medium rounded-md border border-border hover:bg-muted text-foreground transition-colors cursor-pointer"
+              >
+                Esta Semana
+              </button>
+            )}
+            <div className="h-4 w-px bg-border/60 mx-1 hidden sm:block" />
+            <DateRangePicker
+              value={customRange}
+              customPresets={historyDatePresets}
+              placeholder="Pesquisar por período..."
+              onChange={(r) => {
+                setCustomRange(r);
+                setViewMode("range");
+              }}
+              className="w-[230px]"
+            />
           </div>
-        ) : (
-          <div className="flex items-center gap-2">
+        )}
+
+        {/* 2. Controlos da Vista Mensal */}
+        {viewMode === "month" && (
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
-              disabled={monthIdx <= 0}
-              onClick={() => {
-                setMonthIdx((p) => p - 1);
-                setSelectedDay(null);
-              }}
-              className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30 transition-colors"
+              disabled={monthOffset <= 0}
+              onClick={() => setMonthOffset((p) => Math.max(0, p - 1))}
+              className="p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 cursor-pointer"
+              title="Mês anterior"
             >
               <ChevronLeft size={14} />
             </button>
-            <span className="text-xs font-medium text-foreground">
+            <span className="text-xs font-semibold text-foreground px-2">
               {currentMonth.label}
             </span>
             <button
               type="button"
-              disabled={monthIdx >= PROFILE_MONTHS.length - 1}
-              onClick={() => {
-                setMonthIdx((p) => p + 1);
-                setSelectedDay(null);
-              }}
-              className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30 transition-colors"
+              disabled={monthOffset >= monthsList.length - 1}
+              onClick={() => setMonthOffset((p) => Math.min(monthsList.length - 1, p + 1))}
+              className="p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 cursor-pointer"
+              title="Mês seguinte"
             >
               <ChevronRight size={14} />
             </button>
+            {monthOffset !== 1 && (
+              <button
+                type="button"
+                onClick={() => setMonthOffset(1)}
+                className="ml-1 px-2.5 py-1 text-[11px] font-medium rounded-md border border-border hover:bg-muted text-foreground transition-colors cursor-pointer"
+              >
+                Mês Atual
+              </button>
+            )}
+            <div className="h-4 w-px bg-border/60 mx-1 hidden sm:block" />
+            <DateRangePicker
+              value={customRange}
+              customPresets={historyDatePresets}
+              placeholder="Pesquisar por período..."
+              onChange={(r) => {
+                setCustomRange(r);
+                setViewMode("range");
+              }}
+              className="w-[230px]"
+            />
+          </div>
+        )}
+
+        {/* 3. Controlos da Vista Por Período */}
+        {viewMode === "range" && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <DateRangePicker
+              value={customRange}
+              customPresets={historyDatePresets}
+              placeholder="Selecionar período..."
+              onChange={(r) => setCustomRange(r)}
+              className="w-[280px]"
+            />
+            {customRange.startDate && customRange.endDate && (
+              <Badge variant="outline" className="text-xs font-normal">
+                {datesInRange.length} {datesInRange.length === 1 ? "dia" : "dias"}
+              </Badge>
+            )}
           </div>
         )}
       </div>
 
-      {/* Week View */}
+      {/* VISTA SEMANAL */}
       {viewMode === "week" && (
-        <Card className="p-4 border-border bg-card">
-          <div className="space-y-3">
-            {weekDays.map((day) => {
-              const slots = weekData[day];
-              const groups = groupSlots(slots);
-              const isWeekend = day === "Sáb" || day === "Dom";
-              const isAbsent = slots.some((s) => s === "absent");
-
-              return (
-                <div key={day} className="flex items-center gap-4 text-xs">
-                  <div className="w-16 flex-shrink-0">
-                    <span className="font-semibold text-foreground">{day}</span>
-                    <span className="text-[10px] text-muted-foreground ml-1.5 font-mono">
-                      {weekDates[day]}
-                    </span>
-                  </div>
-
-                  <div className="flex-1 h-7 bg-muted/20 rounded-md relative overflow-hidden flex items-center">
-                    {isWeekend ? (
-                      <span className="text-[10px] text-muted-foreground/60 px-3">
-                        Folga semanal
-                      </span>
-                    ) : isAbsent ? (
-                      <div className="w-full h-full bg-destructive/15 flex items-center px-3 gap-1.5 text-destructive font-semibold text-[10px]">
-                        <UserX size={12} />
-                        Ausente — Falta médica
-                      </div>
-                    ) : (
-                      groups.map((g, gi) => {
-                        const left = ((g.start - 24) / 60) * 100;
-                        const width = ((g.end - g.start + 1) / 60) * 100;
-                        return (
-                          <div
-                            key={gi}
-                            className={`absolute h-5 rounded ${
-                              BLOCK_STYLES[g.state].bg
-                            } opacity-90`}
-                            style={{
-                              left: `${Math.max(0, left)}%`,
-                              width: `${Math.min(100, width)}%`,
-                            }}
-                            title={`${TIME_SLOTS[g.start]}–${
-                              TIME_SLOTS[g.end + 1] || "24:00"
-                            } · ${BLOCK_STYLES[g.state].label}`}
-                          />
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
+        <div className="space-y-2.5">
+          {weekOffsets.map((offset) => {
+            const info = getDateInfo(offset);
+            return renderDayCard(info.isoDate);
+          })}
+        </div>
       )}
 
-      {/* Month View */}
+      {/* VISTA POR PERÍODO LIVRE */}
+      {viewMode === "range" && (
+        <div className="space-y-2.5">
+          {datesInRange.length === 0 ? (
+            <Card className="p-8 text-center text-xs text-muted-foreground border-border bg-card">
+              Selecione um intervalo de datas válido para consultar o histórico de escalas.
+            </Card>
+          ) : isLoadingSchedules ? (
+            <div className="flex items-center justify-center p-12 text-xs text-muted-foreground gap-2">
+              <Loader2 size={16} className="animate-spin text-primary" />
+              <span>A carregar escalas para o período selecionado...</span>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between text-xs text-muted-foreground px-1 pb-0.5">
+                <span>
+                  Histórico de <strong>{datesInRange.length}</strong> {datesInRange.length === 1 ? "dia" : "dias"} selecionados ({customRange.startDate} a {customRange.endDate})
+                </span>
+              </div>
+              {datesInRange.map((isoDate) => renderDayCard(isoDate))}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* VISTA MENSAL */}
       {viewMode === "month" && (
-        <Card className="p-4 border-border bg-card">
+        <Card className="p-4 border-border bg-card shadow-2xs space-y-4">
           <div className="grid grid-cols-7 gap-1 text-center text-xs">
-            {["D", "S", "T", "Q", "Q", "S", "S"].map((d, i) => (
+            {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((d) => (
               <div
-                key={i}
-                className="py-1 font-semibold text-muted-foreground text-[10px]"
+                key={d}
+                className="py-1 font-semibold text-muted-foreground text-[10px] uppercase tracking-wider"
               >
                 {d}
               </div>
             ))}
-            {Array.from({ length: currentMonth.offset }, (_, i) => (
-              <div key={`blank-${i}`} className="h-10" />
+
+            {Array.from({ length: currentMonth.firstDow }, (_, i) => (
+              <div key={`blank-${i}`} className="h-12" />
             ))}
+
             {Array.from({ length: currentMonth.days }, (_, i) => {
               const dayNum = i + 1;
-              const dow = (currentMonth.offset + i) % 7;
-              const isWeekend = dow === 0 || dow === 6;
-              const isSick = currentMonth.sickDay === dayNum;
-              const isSelected = selectedDay === dayNum;
+              const dow = (currentMonth.firstDow + i) % 7;
+              const isWeekend = dow >= 5;
+              const mm = String(currentMonth.monthIndex + 1).padStart(2, "0");
+              const dd = String(dayNum).padStart(2, "0");
+              const dayIso = `${currentMonth.year}-${mm}-${dd}`;
+
+              const pubInfo = getSchedulePublishStatusForDate(dayIso, schedules);
+
+              const { matrix } = buildDayMatrixFromApi({
+                isoDate: dayIso,
+                isOpen: !isWeekend,
+                assistants: [{ id: targetId, name: assistantName, initials }],
+                schedules,
+                absences: absencesRes?.data || [],
+                profilesByAssistant,
+                exceptionsByAssistant,
+              });
+              const daySlots = matrix[targetId] || Array(96).fill("off");
+              const isAbsent = daySlots.some((s) => s === "absent");
+              const hasWork = daySlots.some((s) => s !== "off" && s !== "absent" && s !== "lunch");
+              const isSelected = selectedMonthDay === dayNum;
 
               return (
                 <button
                   key={dayNum}
                   type="button"
-                  onClick={() => setSelectedDay(isSelected ? null : dayNum)}
-                  className={`h-10 rounded-lg flex flex-col items-center justify-center transition-colors relative border ${
+                  onClick={() => setSelectedMonthDay(isSelected ? null : dayNum)}
+                  className={`h-12 rounded-xl flex flex-col items-center justify-between p-1 transition-colors relative border cursor-pointer ${
                     isSelected
-                      ? "border-primary bg-primary/10 text-primary font-bold"
-                      : isSick
+                      ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                      : isAbsent
                       ? "border-destructive/30 bg-destructive/10 text-destructive font-semibold"
                       : isWeekend
-                      ? "border-transparent text-muted-foreground/40 bg-muted/10 cursor-default"
-                      : "border-border/40 hover:bg-muted/40 text-foreground"
+                      ? "border-transparent text-muted-foreground/30 bg-muted/10 cursor-default"
+                      : "border-border/50 hover:bg-muted/40 text-foreground"
                   }`}
                 >
                   <span className="text-[11px] font-mono">{dayNum}</span>
                   {!isWeekend && (
-                    <span
-                      className={`w-1 h-1 rounded-full mt-0.5 ${
-                        isSick ? "bg-destructive" : "bg-[#0E7C59]"
-                      }`}
-                    />
+                    <div className="flex items-center gap-0.5 mb-0.5">
+                      {isAbsent ? (
+                        <span className="w-1.5 h-1.5 rounded-full bg-destructive" title="Ausência" />
+                      ) : pubInfo.isPublished && hasWork ? (
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary" title="Escala Publicada" />
+                      ) : pubInfo.isDraft ? (
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Em Preparação" />
+                      ) : null}
+                    </div>
                   )}
                 </button>
               );
             })}
           </div>
 
-          {selectedDay && selectedDaySlots && (
-            <div className="mt-4 pt-4 border-t border-border space-y-2">
-              <p className="text-xs font-semibold text-foreground">
-                Detalhe de {selectedDay} {currentMonth.label}
-              </p>
-              <div className="flex gap-2">
-                {groupSlots(selectedDaySlots).map((g, gi) => (
-                  <Badge key={gi} variant="outline" className="text-xs">
-                    {TIME_SLOTS[g.start]}–{TIME_SLOTS[g.end + 1] || "24:00"}:{" "}
-                    {BLOCK_STYLES[g.state].label}
-                  </Badge>
-                ))}
-              </div>
+          {/* Detalhe do Dia Selecionado no Mês */}
+          {selectedMonthDay && (
+            <div className="pt-3 border-t border-border/60">
+              {(() => {
+                const mm = String(currentMonth.monthIndex + 1).padStart(2, "0");
+                const dd = String(selectedMonthDay).padStart(2, "0");
+                const dayIso = `${currentMonth.year}-${mm}-${dd}`;
+                const pubInfo = getSchedulePublishStatusForDate(dayIso, schedules);
+
+                const { matrix, slotMetaByAssistant } = buildDayMatrixFromApi({
+                  isoDate: dayIso,
+                  isOpen: true,
+                  assistants: [{ id: targetId, name: assistantName, initials }],
+                  schedules,
+                  absences: absencesRes?.data || [],
+                  profilesByAssistant,
+                  exceptionsByAssistant,
+                });
+                const daySlots = matrix[targetId] || Array(96).fill("off");
+                const meta = slotMetaByAssistant?.[targetId] || {};
+                const dayBlocks = slotsToBlocks(daySlots, meta);
+                const activeBlocks = dayBlocks.filter((b) => b.state !== "off");
+
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-foreground">
+                        Dia {selectedMonthDay} de {currentMonth.label}
+                      </span>
+                      <span className="text-xs font-medium">
+                        {!pubInfo.hasSchedule ? (
+                          <Badge variant="outline" className="text-[10px]">Não gerada</Badge>
+                        ) : !pubInfo.isPublished ? (
+                          <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-700 bg-amber-500/10">Em preparação</Badge>
+                        ) : (
+                          <Badge variant="default" className="text-[10px]">Publicada</Badge>
+                        )}
+                      </span>
+                    </div>
+
+                    {activeBlocks.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">
+                        Sem horário ou atividades atribuídas neste dia.
+                      </p>
+                    ) : (
+                      <div className="flex items-center gap-2 flex-wrap pt-1">
+                        {activeBlocks.map((b, bi) => {
+                          const color = getBlockDisplayColor(b);
+                          const name = b.activityName || BLOCK_STYLES[b.state]?.label || "Atividade";
+                          const timeStr = `${TIME_SLOTS[b.start]} – ${TIME_SLOTS[b.start + b.count] || "24:00"}`;
+                          return (
+                            <div
+                              key={bi}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border bg-muted/40 text-xs font-medium"
+                            >
+                              <span
+                                className="w-2 h-2 rounded-full shrink-0"
+                                style={{ backgroundColor: color }}
+                              />
+                              <span className="font-semibold text-foreground">{name}</span>
+                              <span className="font-mono text-muted-foreground text-[11px]">{timeStr}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </Card>
@@ -379,4 +844,3 @@ export default function ProfileScheduleHistory() {
     </div>
   );
 }
-
