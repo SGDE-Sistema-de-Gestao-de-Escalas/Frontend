@@ -43,6 +43,8 @@ import PrintScheduleModal, {
   PrintableAssistantSchedule,
   PrintableAbsentAssistant,
 } from "./PrintScheduleModal";
+import { useAuth } from "../../context/AuthContext";
+import schedulesService from "../../api/services/schedules.service";
 import type { Assistant, BlockState, EntityId, ScheduleMatrix } from "../../types";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -163,6 +165,8 @@ export default function MatrixGrid({
   onRequestRecalculate,
 }: MatrixGridProps) {
   const { selectedSchoolId, selectedSchool, agrupamento } = useSchool();
+  const { role } = useAuth();
+  const isAdmin = role === "admin";
   const [editMode, setEditMode] = useState(false);
   // Persisted/confirmed schedules per dayOffset
   const [savedMatricesByDay, setSavedMatricesByDay] = useState<
@@ -265,25 +269,29 @@ const [publishModalState, setPublishModalState] = useState<{
     return getThreeWeeksWindowIso(dayOffset);
   }, [currentWeekMondayOffset]);
 
-  // Se o utilizador tiver definido um intervalo personalizado no filtro do cabeçalho,
-  // esse intervalo tem prioridade. Caso contrário, usa a janela de 3 semanas.
+  // Garante que o intervalo pedido ao servidor cobre sempre pelo menos o intervalo do cabeçalho
+  // e também a semana ativa em visualização, evitando que a grelha fique vazia ao navegar.
   const effectiveRangeStartIso = useMemo(() => {
-    if (queryStartDate && queryEndDate) return queryStartDate;
-    let start = currentWeekWindow.startIso;
+    let start = queryStartDate || currentWeekWindow.startIso;
+    if (currentWeekWindow.startIso && currentWeekWindow.startIso < start) {
+      start = currentWeekWindow.startIso;
+    }
     if (copyPickerIsoDate && copyPickerIsoDate < start) {
       start = copyPickerIsoDate;
     }
     return start;
-  }, [queryStartDate, queryEndDate, currentWeekWindow.startIso, copyPickerIsoDate]);
+  }, [queryStartDate, currentWeekWindow.startIso, copyPickerIsoDate]);
 
   const effectiveRangeEndIso = useMemo(() => {
-    if (queryStartDate && queryEndDate) return queryEndDate;
-    let end = currentWeekWindow.endIso;
+    let end = queryEndDate || currentWeekWindow.endIso;
+    if (currentWeekWindow.endIso && currentWeekWindow.endIso > end) {
+      end = currentWeekWindow.endIso;
+    }
     if (copyPickerIsoDate && copyPickerIsoDate > end) {
       end = copyPickerIsoDate;
     }
     return end;
-  }, [queryStartDate, queryEndDate, currentWeekWindow.endIso, copyPickerIsoDate]);
+  }, [queryEndDate, currentWeekWindow.endIso, copyPickerIsoDate]);
 
   // Carregamento consolidado de arranque: 1 único pedido HTTP que traz todo o estado de uma só vez
   const { data: bootstrapData, isLoading: isBootstrapLoading } = useDashboardBootstrap(
@@ -355,6 +363,8 @@ const [publishModalState, setPublishModalState] = useState<{
           origin_school_name: tr.origin_school?.name || "Outra Escola",
           active: true,
           is_active: true,
+          schedule_profiles: (tr.assistant as any)?.schedule_profiles || [],
+          assistant_exceptions: (tr.assistant as any)?.assistant_exceptions || [],
         });
       }
     });
@@ -2724,20 +2734,22 @@ function paintSlot(aid: EntityId, slot: number) {
 
                   <div className="h-4 w-[1px] bg-border mx-0.5" />
 
-                  {/* Botão Imprimir / Exportar */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPrintModalState({
-                        open: true,
-                        initialDocModel: "wall",
-                      })
-                    }
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
-                  >
-                    <Printer size={12} />
-                    <span>Imprimir / Exportar</span>
-                  </button>
+                  {/* Botão Imprimir / Exportar (apenas Administrador) */}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPrintModalState({
+                          open: true,
+                          initialDocModel: "wall",
+                        })
+                      }
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
+                    >
+                      <Printer size={12} />
+                      <span>Imprimir / Exportar</span>
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -4205,7 +4217,8 @@ function paintSlot(aid: EntityId, slot: number) {
       </Dialog>
 
       {/* Modal de Publicação de Escalas (Rascunho -> Publicada) */}
-      <PrintScheduleModal
+      {isAdmin && (
+        <PrintScheduleModal
         open={printModalState.open}
         onClose={() => setPrintModalState((prev) => ({ ...prev, open: false }))}
         initialDocModel={printModalState.initialDocModel}
@@ -4227,6 +4240,7 @@ function paintSlot(aid: EntityId, slot: number) {
         exceptionsByAssistant={exceptionsByAssistant}
         lunchBlocksByDate={lunchBlocksByDate}
       />
+      )}
 
       <PublishSchedulesModal
         open={publishModalState.open}

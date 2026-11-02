@@ -1,4 +1,3 @@
-
 export type ScheduleProfileType = "fixo" | "rotativo";
 export type RotationPeriod = "weekly" | "biweekly" | "monthly";
 export type ShiftLabel = "A" | "B";
@@ -12,7 +11,7 @@ export interface AssistantScheduleShiftApi {
   lunch_start?: string | null;
   lunch_end?: string | null;
   lunch_duration_minutes?: number | null;
-  days: number[]; // 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sáb, 7=Dom
+  days: number[]; // 0=Seg, 1=Ter, 2=Qua, 3=Qui, 4=Sex, 5=Sáb, 6=Dom
 }
 
 export interface AssistantScheduleProfileApi {
@@ -53,6 +52,12 @@ export interface UpdateAssistantScheduleProfilePayload {
   shifts?: AssistantScheduleShiftApi[];
 }
 
+export interface ScheduleImpactInfo {
+  requires_recalculation: boolean;
+  affected_dates: string[];
+  event_type?: string;
+}
+
 export interface AssistantExceptionApi {
   id: string;
   assistant_id: string;
@@ -73,8 +78,20 @@ export interface AssistantExceptionApi {
   can_delete?: boolean;
   cannot_edit_reason?: string | null;
   cannot_delete_reason?: string | null;
+  has_past_schedules?: boolean;
+  has_future_schedules?: boolean;
+  draft_days_count?: number;
+  published_days_count?: number;
+  delete_warning?: string | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface AssistantExceptionMutationResponse {
+  data?: AssistantExceptionApi;
+  message?: string;
+  warning?: string | null;
+  impact?: ScheduleImpactInfo | null;
 }
 
 export interface CreateAssistantExceptionPayload {
@@ -105,4 +122,3 @@ export interface UpdateAssistantExceptionPayload {
   lunch_end?: string | null;
   lunch_duration_minutes?: number | null;
 }
-

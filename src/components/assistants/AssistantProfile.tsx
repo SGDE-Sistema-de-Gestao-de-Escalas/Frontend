@@ -11,6 +11,7 @@ import {
   FileText,
   HeartHandshake,
   Loader2,
+  Lock,
   Mail,
   MapPin,
   Pencil,
@@ -53,6 +54,7 @@ import {
 import { useAssistantSchedules } from "../../hooks/api/useAssistantSchedules";
 import { apiProfileToScheduleItem } from "../../api/services/assistantSchedules.service";
 import type { AssistantScheduleItem } from "./AssistantScheduleManager";
+import { getScheduleTypeStatus } from "./AssistantScheduleManager";
 import { computeActiveRotatingShift } from "../../utils/scheduleMatrixUtils";
 import type { EntityId } from "../../types";
 
@@ -100,6 +102,9 @@ interface ExceptionRule {
   canDelete?: boolean;
   cannotEditReason?: string | null;
   cannotDeleteReason?: string | null;
+  hasPastSchedules?: boolean;
+  hasFutureSchedules?: boolean;
+  deleteWarning?: string | null;
 }
 
 interface CurrentShiftDetails {
@@ -196,11 +201,9 @@ export default function AssistantProfile({
 
   const activeSchedule = React.useMemo(() => {
     return (
-      assistantSchedules.find((s) => {
-        if (s.to && s.to < TODAY_STR) return false;
-        if (s.from > TODAY_STR) return false;
-        return true;
-      }) || assistantSchedules.find((s) => s.to === null) || assistantSchedules[0]
+      assistantSchedules.find((s) => getScheduleTypeStatus(s, assistantSchedules) === "active") ||
+      assistantSchedules.find((s) => s.to === null) ||
+      assistantSchedules[0]
     );
   }, [assistantSchedules]);
 
@@ -287,10 +290,22 @@ export default function AssistantProfile({
           canDelete: e.can_delete,
           cannotEditReason: e.cannot_edit_reason,
           cannotDeleteReason: e.cannot_delete_reason,
+          hasPastSchedules: e.has_past_schedules,
+          hasFutureSchedules: e.has_future_schedules,
+          deleteWarning: e.delete_warning,
         }))
       );
     }
   }, [apiExceptions]);
+
+  const editingException = editingExceptionId
+    ? exceptions.find((e) => e.id === editingExceptionId) || null
+    : null;
+  const isEditingStartDateLocked = !!(
+    editingException &&
+    editingException.hasPastSchedules &&
+    editingException.inicio < TODAY_STR
+  );
 
   useDocumentTitle(`${resolvedName} - Perfil`);
 
@@ -1201,11 +1216,12 @@ export default function AssistantProfile({
                             <div className="flex items-center gap-1 shrink-0">
                               <ActionTooltip
                                 content={
-                                  row.canEdit === false && row.canChangeEndDate
+                                  row.cannotEditReason ||
+                                  (row.canEdit === false && row.canChangeEndDate
                                     ? "Apenas a data de fim pode ser ajustada para esta exceção em vigor."
                                     : row.canEdit === false
                                     ? "Não é possível editar esta exceção."
-                                    : "Editar exceção"
+                                    : "Editar exceção")
                                 }
                               >
                                 <button
@@ -1529,24 +1545,31 @@ export default function AssistantProfile({
                       </p>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                            Data de Início *
+                          <label className="text-xs text-muted-foreground block mb-1.5 font-medium flex items-center justify-between">
+                            <span>Data de Início *</span>
+                            {isEditingStartDateLocked && (
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-normal">
+                                <Lock size={10} /> Bloqueado (escalas passadas)
+                              </span>
+                            )}
                           </label>
-                          <DatePicker
-                            value={exceptionStartDate}
-                            hasError={!!exceptionErrors.startDate}
-                            minDate={editingExceptionId ? undefined : TODAY_STR}
-                            onChange={(v) => {
-                              setExceptionStartDate(v);
-                              if (exceptionErrors.startDate) {
-                                setExceptionErrors((prev) => ({ ...prev, startDate: undefined }));
-                              }
-                              if (v && exceptionEndDate && exceptionEndDate < v) {
-                                setExceptionEndDate(v);
-                              }
-                            }}
-                            className="w-full"
-                          />
+                          <div className={isEditingStartDateLocked ? "opacity-60 pointer-events-none" : ""}>
+                            <DatePicker
+                              value={exceptionStartDate}
+                              hasError={!!exceptionErrors.startDate}
+                              minDate={editingExceptionId ? undefined : TODAY_STR}
+                              onChange={(v) => {
+                                setExceptionStartDate(v);
+                                if (exceptionErrors.startDate) {
+                                  setExceptionErrors((prev) => ({ ...prev, startDate: undefined }));
+                                }
+                                if (v && exceptionEndDate && exceptionEndDate < v) {
+                                  setExceptionEndDate(v);
+                                }
+                              }}
+                              className="w-full"
+                            />
+                          </div>
                           {exceptionErrors.startDate && (
                             <p className="text-[11px] text-destructive mt-1 font-medium">
                               {exceptionErrors.startDate}
@@ -1593,33 +1616,16 @@ export default function AssistantProfile({
 
       {/* ── Horários & Escalas tab ── */}
       {activeTab === "history" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-card">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-lg bg-primary/10 text-primary">
-                <Clock size={18} />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">
-                  Gestão de Horários & Vigências
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Consulte os turnos agendados e configure o horário padrão de funcionamento do assistente.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveTab("schedule")}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
-            >
-              <Clock size={13} />
-              Gerir Horários do Assistente
-            </button>
-          </div>
-
-          <ProfileScheduleHistory assistantId={assistantId} />
-        </div>
+        <ProfileScheduleHistory
+          assistantId={assistantId}
+          assistantName={
+            assistant?.name ||
+            (assistant?.first_name
+              ? `${assistant.first_name} ${assistant.last_name || ""}`.trim()
+              : undefined)
+          }
+          schoolId={assistant?.school_id}
+        />
       )}
 
       {/* Modal: Confirmar Alteração de Estado (Inativar / Ativar) */}
@@ -1692,11 +1698,19 @@ export default function AssistantProfile({
         title="Eliminar Regra de Exceção"
         description={
           deleteExceptionTarget ? (
-            <>
-              Tem a certeza que pretende eliminar permanentemente a regra de exceção{" "}
-              <strong className="text-foreground">{deleteExceptionTarget.tipo}</strong> ({deleteExceptionTarget.detalhe})?
-              Esta ação removerá o registo de horário especial desta vigência.
-            </>
+            <div className="space-y-2">
+              <p>
+                Tem a certeza que pretende eliminar permanentemente a regra de exceção{" "}
+                <strong className="text-foreground">{deleteExceptionTarget.tipo}</strong> ({deleteExceptionTarget.detalhe})?
+                Esta ação removerá o registo de horário especial desta vigência.
+              </p>
+              {deleteExceptionTarget.deleteWarning && (
+                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-300 text-xs mt-2">
+                  <AlertTriangle size={14} className="shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                  <span>{deleteExceptionTarget.deleteWarning}</span>
+                </div>
+              )}
+            </div>
           ) : ""
         }
         confirmLabel="Eliminar Exceção"
@@ -1739,4 +1753,3 @@ export default function AssistantProfile({
     </div>
   );
 }
-

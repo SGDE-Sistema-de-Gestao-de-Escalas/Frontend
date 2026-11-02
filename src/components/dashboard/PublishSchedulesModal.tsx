@@ -35,7 +35,7 @@ import {
   TooltipTrigger,
 } from "../ui/tooltip";
 import ActionTooltip from "../common/ActionTooltip";
-import { usePublishSchedules } from "../../hooks/api/useSchedules";
+import { usePublishSchedules, useSchedulesList } from "../../hooks/api/useSchedules";
 import { useSchool } from "../../context/SchoolContext";
 import type { BackendScheduleResource } from "../../api/services/schedules.service";
 import type { BackendAbsenceResource } from "../../api/services/absences.service";
@@ -781,9 +781,23 @@ export default function PublishSchedulesModal({
   const { selectedSchool } = useSchool();
   const publishMutation = usePublishSchedules();
 
+  // Garante que TODOS os rascunhos da escola estão disponíveis no modal para publicar,
+  // independentemente do intervalo ou dia atualmente selecionado no Dashboard
+  const { data: allDraftSchedules = [] } = useSchedulesList({
+    status: "draft",
+    per_page: 500,
+  });
+
+  const effectiveSchedules = useMemo(() => {
+    const map = new Map<number | string, BackendScheduleResource>();
+    (schedules || []).forEach((s) => map.set(s.id, s));
+    (allDraftSchedules || []).forEach((s) => map.set(s.id, s));
+    return Array.from(map.values());
+  }, [schedules, allDraftSchedules]);
+
   const draftDays = useMemo(
-    () => getAllDraftDaysFromSchedules(schedules),
-    [schedules]
+    () => getAllDraftDaysFromSchedules(effectiveSchedules),
+    [effectiveSchedules]
   );
 
   const weekGroups = useMemo(
@@ -796,7 +810,7 @@ export default function PublishSchedulesModal({
     draftDays.forEach((d) => {
       map[d.isoDate] = validateDayForPublish(
         d.isoDate,
-        schedules,
+        effectiveSchedules,
         assistants,
         absences,
         temporaryAssignments,
@@ -807,7 +821,7 @@ export default function PublishSchedulesModal({
       );
     });
     return map;
-  }, [draftDays, schedules, assistants, absences, temporaryAssignments, selectedSchoolId, computedProfilesByAssistant, computedExceptionsByAssistant, operatingSources]);
+  }, [draftDays, effectiveSchedules, assistants, absences, temporaryAssignments, selectedSchoolId, computedProfilesByAssistant, computedExceptionsByAssistant, operatingSources]);
 
   const publishableDates = useMemo(
     () =>
@@ -926,7 +940,7 @@ export default function PublishSchedulesModal({
     if (!previewDate) return null;
     return getDayScheduleDetails(
       previewDate,
-      schedules,
+      effectiveSchedules,
       assistants,
       absences,
       temporaryAssignments,
@@ -937,7 +951,7 @@ export default function PublishSchedulesModal({
     );
   }, [
     previewDate,
-    schedules,
+    effectiveSchedules,
     assistants,
     absences,
     temporaryAssignments,

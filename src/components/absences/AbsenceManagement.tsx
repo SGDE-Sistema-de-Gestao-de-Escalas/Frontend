@@ -26,6 +26,7 @@ import {
   DialogFooter,
 } from "../ui/dialog";
 import DatePicker, { formatToIsoDate } from "../common/DatePicker";
+import DateRangePicker from "../common/DateRangePicker";
 import TimePicker from "../common/TimePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import SearchableSelect from "../common/SearchableSelect";
@@ -512,38 +513,19 @@ export default function AbsenceManagement() {
             />
           </div>
 
-          {/* Filtro Data Inicial */}
-          <div className="w-full sm:w-44">
+          {/* Filtro Intervalo de Datas */}
+          <div className="w-full sm:w-60">
             <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-              Data de Início
+              Período de Ausência
             </label>
-            <DatePicker
-              value={startDateFilter}
-              onChange={(val) => {
-                setStartDateFilter(val);
-                setCurrentPage(1);
-                if (val && endDateFilter && endDateFilter < val) {
-                  setEndDateFilter(val);
-                }
-              }}
-              placeholder="Desde..."
-              className="w-full"
-            />
-          </div>
-
-          {/* Filtro Data Final */}
-          <div className="w-full sm:w-44">
-            <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-              Data de Fim
-            </label>
-            <DatePicker
-              value={endDateFilter}
-              minDate={startDateFilter || undefined}
-              onChange={(val) => {
-                setEndDateFilter(val);
+            <DateRangePicker
+              value={{ startDate: startDateFilter, endDate: endDateFilter }}
+              onChange={(range) => {
+                setStartDateFilter(range.startDate);
+                setEndDateFilter(range.endDate);
                 setCurrentPage(1);
               }}
-              placeholder="Até..."
+              placeholder="Filtrar por período..."
               className="w-full"
             />
           </div>
@@ -1177,79 +1159,26 @@ export default function AbsenceManagement() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                    Data de Início *
-                  </label>
-                  <DatePicker
-                    value={formStartDate}
-                    hasError={!!formErrors.startDate}
-                    onChange={(v) => {
-                      setFormStartDate(v);
-                      if (formErrors.startDate) {
-                        setFormErrors((p) => ({ ...p, startDate: undefined }));
-                      }
-                      if (v && formEndDate && formEndDate < v) {
-                        setFormEndDate(v);
-                      }
-                    }}
-                    className="w-full"
-                  />
-                  {formErrors.startDate && (
-                    <p className="text-[11px] text-destructive mt-1 font-medium">
-                      {formErrors.startDate}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                    Data de Fim *
-                  </label>
-                  <DatePicker
-                    value={formEndDate}
-                    hasError={!!formErrors.endDate}
-                    minDate={formStartDate || undefined}
-                    onChange={(v) => {
-                      setFormEndDate(v);
-                      if (formErrors.endDate) {
-                        setFormErrors((p) => ({ ...p, endDate: undefined }));
-                      }
-                    }}
-                    className="w-full"
-                  />
-                  {formErrors.endDate && (
-                    <p className="text-[11px] text-destructive mt-1 font-medium">
-                      {formErrors.endDate}
-                    </p>
-                  )}
-                </div>
-
-                {!formIsFullDay && (
-                  <>
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                        Hora Inicial
-                      </label>
-                      <TimePicker
-                        value={formStartTime}
-                        onChange={setFormStartTime}
-                        className="w-full"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                        Hora Final
-                      </label>
-                      <TimePicker
-                        value={formEndTime}
-                        onChange={setFormEndTime}
-                        className="w-full"
-                      />
-                    </div>
-                  </>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                  Período da Ausência *
+                </label>
+                <DateRangePicker
+                  value={{ startDate: formStartDate, endDate: formEndDate }}
+                  hasError={!!formErrors.startDate || !!formErrors.endDate}
+                  onChange={(range) => {
+                    setFormStartDate(range.startDate);
+                    setFormEndDate(range.endDate);
+                    if (formErrors.startDate || formErrors.endDate) {
+                      setFormErrors((p) => ({ ...p, startDate: undefined, endDate: undefined }));
+                    }
+                  }}
+                  className="w-full"
+                />
+                {(formErrors.startDate || formErrors.endDate) && (
+                  <p className="text-[11px] text-destructive mt-1 font-medium">
+                    {formErrors.startDate || formErrors.endDate}
+                  </p>
                 )}
               </div>
             </div>

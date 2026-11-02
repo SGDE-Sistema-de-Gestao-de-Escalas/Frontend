@@ -3,13 +3,11 @@ import {
   AlertCircle,
   AlertTriangle,
   Building2,
-  Calendar,
   Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   Clock,
-  HelpCircle,
   Info,
   Loader2,
   Sparkles,
@@ -26,7 +24,7 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import DatePicker from "../common/DatePicker";
+import DateRangePicker from "../common/DateRangePicker";
 import TimePicker from "../common/TimePicker";
 import CustomSelect from "../common/CustomSelect";
 import {
@@ -92,8 +90,11 @@ export default function RecalculateModal({
     return d.toISOString().split("T")[0];
   }, []);
 
-  const [startDate, setStartDate] = useState(initialStartDate || todayIso);
-  const [endDate, setEndDate] = useState(initialEndDate || initialStartDate || defaultEndIso);
+  const initialSafeStart = initialStartDate && initialStartDate >= todayIso ? initialStartDate : todayIso;
+  const initialSafeEnd = initialEndDate && initialEndDate >= initialSafeStart ? initialEndDate : defaultEndIso;
+
+  const [startDate, setStartDate] = useState(initialSafeStart);
+  const [endDate, setEndDate] = useState(initialSafeEnd);
   const [strategy, setStrategy] = useState<"auto" | "full">("auto");
   const [respectExceptions, setRespectExceptions] = useState(true);
   const [step, setStep] = useState<"form" | "gap" | "done">("form");
@@ -122,10 +123,39 @@ export default function RecalculateModal({
     });
   }, [existingSchedules, startDate, endDate]);
 
+  const recalcDatePresets = useMemo(() => {
+    const t = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const toIsoStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    const thisSun = new Date(t);
+    const dow = t.getDay();
+    const daysToSun = dow === 0 ? 0 : 7 - dow;
+    thisSun.setDate(t.getDate() + daysToSun);
+
+    const nextMon = new Date(t);
+    const daysToNextMon = dow === 0 ? 1 : 8 - dow;
+    nextMon.setDate(t.getDate() + daysToNextMon);
+    const nextSun = new Date(nextMon);
+    nextSun.setDate(nextMon.getDate() + 6);
+
+    const endThisMonth = new Date(t.getFullYear(), t.getMonth() + 1, 0);
+    const startNextMonth = new Date(t.getFullYear(), t.getMonth() + 1, 1);
+    const endNextMonth = new Date(t.getFullYear(), t.getMonth() + 2, 0);
+
+    return [
+      { label: "Esta Semana", start: todayIso, end: toIsoStr(thisSun) },
+      { label: "Próxima Semana", start: toIsoStr(nextMon), end: toIsoStr(nextSun) },
+      { label: "Próximas 2 Semanas", start: todayIso, end: toIsoStr(nextSun) },
+      { label: "Resto do Mês", start: todayIso, end: toIsoStr(endThisMonth) },
+      { label: "Próximo Mês", start: toIsoStr(startNextMonth), end: toIsoStr(endNextMonth) },
+    ];
+  }, [todayIso]);
+
   useEffect(() => {
     if (open) {
-      const defaultStart = initialStartDate || todayIso;
-      const defaultEnd = initialEndDate || initialStartDate || defaultStart;
+      const defaultStart = initialStartDate && initialStartDate >= todayIso ? initialStartDate : todayIso;
+      const defaultEnd = initialEndDate && initialEndDate >= defaultStart ? initialEndDate : (defaultEndIso >= defaultStart ? defaultEndIso : defaultStart);
       setStartDate(defaultStart);
       setEndDate(defaultEnd);
       setStep("form");
@@ -134,7 +164,7 @@ export default function RecalculateModal({
       setSelectedSubstituteId(null);
       setDateErrors({});
     }
-  }, [open, initialStartDate, initialEndDate, todayIso]);
+  }, [open, initialStartDate, initialEndDate, todayIso, defaultEndIso]);
 
   // Resultado real devolvido pelo motor do Backend
   const [generationResult, setGenerationResult] =
@@ -325,35 +355,6 @@ export default function RecalculateModal({
     }
   }, [step, conflicts.length, generateMutation.isPending]);
 
-  function applyDatePreset(preset: "this-week" | "next-week" | "next-month") {
-    const now = new Date();
-    if (preset === "this-week") {
-      const currentDow = now.getDay();
-      const diffToMon = currentDow === 0 ? -6 : 1 - currentDow;
-      const mon = new Date(now);
-      mon.setDate(now.getDate() + diffToMon);
-      const fri = new Date(mon);
-      fri.setDate(mon.getDate() + 4);
-      setStartDate(mon.toISOString().split("T")[0]);
-      setEndDate(fri.toISOString().split("T")[0]);
-    } else if (preset === "next-week") {
-      const currentDow = now.getDay();
-      const diffToNextMon = currentDow === 0 ? 1 : 8 - currentDow;
-      const nextMon = new Date(now);
-      nextMon.setDate(now.getDate() + diffToNextMon);
-      const nextFri = new Date(nextMon);
-      nextFri.setDate(nextMon.getDate() + 4);
-      setStartDate(nextMon.toISOString().split("T")[0]);
-      setEndDate(nextFri.toISOString().split("T")[0]);
-    } else if (preset === "next-month") {
-      const nextMonthFirst = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      const nextMonthLast = new Date(now.getFullYear(), now.getMonth() + 2, 0);
-      setStartDate(nextMonthFirst.toISOString().split("T")[0]);
-      setEndDate(nextMonthLast.toISOString().split("T")[0]);
-    }
-    setDateErrors({});
-  }
-
   function handleClose() {
     if (generateMutation.isPending || publishMutation.isPending) return;
     setStep("form");
@@ -374,6 +375,8 @@ export default function RecalculateModal({
     const errors: { start?: string; end?: string; api?: string } = {};
     if (!startDate) {
       errors.start = "A data de início é obrigatória.";
+    } else if (startDate < todayIso) {
+      errors.start = "Não é permitido gerar horários para datas passadas.";
     }
     if (!endDate) {
       errors.end = "A data de fim é obrigatória.";
@@ -718,97 +721,32 @@ export default function RecalculateModal({
           {step === "form" && (
             <>
               {/* Seleção do Período */}
-              <div className="space-y-3">
-                <label className="text-xs font-semibold text-foreground uppercase tracking-wide flex items-center gap-1.5">
-                  <Calendar size={13} className="text-primary" />
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground uppercase tracking-wide block">
                   Período da Escala:
                 </label>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1 font-medium">
-                      Data de Início *
-                    </label>
-                    <DatePicker
-                      value={startDate}
-                      hasError={!!dateErrors.start}
-                      onChange={(v) => {
-                        setStartDate(v);
-                        if (dateErrors.start || dateErrors.api) {
-                          setDateErrors((p) => ({
-                            ...p,
-                            start: undefined,
-                            api: undefined,
-                          }));
-                        }
-                        if (v && endDate && endDate < v) {
-                          setEndDate(v);
-                        }
-                      }}
-                      className="w-full"
-                    />
-                    {dateErrors.start && (
-                      <p className="text-[11px] text-destructive mt-1 font-medium">
-                        {dateErrors.start}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1 font-medium">
-                      Data de Fim *
-                    </label>
-                    <DatePicker
-                      value={endDate}
-                      hasError={!!dateErrors.end}
-                      minDate={startDate || undefined}
-                      onChange={(v) => {
-                        setEndDate(v);
-                        if (dateErrors.end || dateErrors.api) {
-                          setDateErrors((p) => ({
-                            ...p,
-                            end: undefined,
-                            api: undefined,
-                          }));
-                        }
-                      }}
-                      className="w-full"
-                    />
-                    {dateErrors.end && (
-                      <p className="text-[11px] text-destructive mt-1 font-medium">
-                        {dateErrors.end}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Atalhos Rápidos por baixo das datas de forma limpa e desafogada */}
-                <div className="flex items-center gap-2 pt-0.5 flex-wrap">
-                  <span className="text-[11px] text-muted-foreground font-medium">Preenchimento rápido:</span>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => applyDatePreset("this-week")}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                    >
-                      Esta Semana
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyDatePreset("next-week")}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                    >
-                      Próxima Semana
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyDatePreset("next-month")}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-card hover:bg-muted font-medium transition-colors text-foreground shadow-2xs cursor-pointer"
-                    >
-                      Próximo Mês
-                    </button>
-                  </div>
-                </div>
+                <DateRangePicker
+                  value={{ startDate, endDate }}
+                  minDate={todayIso}
+                  customPresets={recalcDatePresets}
+                  hasError={!!dateErrors.start || !!dateErrors.end || !!dateErrors.api}
+                  allowClear={false}
+                  onChange={(range) => {
+                    const nextStart = range.startDate && range.startDate < todayIso ? todayIso : range.startDate;
+                    const nextEnd = range.endDate && range.endDate < nextStart ? nextStart : range.endDate;
+                    setStartDate(nextStart);
+                    setEndDate(nextEnd);
+                    if (dateErrors.start || dateErrors.end || dateErrors.api) {
+                      setDateErrors({});
+                    }
+                  }}
+                  className="w-full"
+                />
+                {(dateErrors.start || dateErrors.end) && (
+                  <p className="text-[11px] text-destructive mt-1 font-medium">
+                    {dateErrors.start || dateErrors.end}
+                  </p>
+                )}
               </div>
 
               {/* Estratégia de Alocação (Select com descrição dinâmica) */}
@@ -884,34 +822,7 @@ export default function RecalculateModal({
                 </div>
               )}
 
-              {/* Alerta se o período já se encontra publicado */}
-              {hasPublishedSchedulesInRange && (
-                <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5 animate-in fade-in-50">
-                  <AlertTriangle
-                    size={16}
-                    className="text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0"
-                  />
-                  <div className="space-y-1">
-                    <p className="font-semibold text-foreground">
-                      Atenção: Horário deste período já se encontra publicado
-                    </p>
-                    <p className="leading-relaxed opacity-90">
-                      O período selecionado ({startDate === endDate ? startDate : `${startDate} a ${endDate}`}) já possui uma escala publicada. Ao recalcular, esta escala passará para o estado de <strong>Rascunho (Draft)</strong> e deixará de estar em vigor até ser novamente publicada.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Caixa Informativa sobre as Fases do Motor (Estilo idêntico ao modelo CSV) */}
-              <div className="rounded-lg border border-border bg-muted/30 p-3.5 space-y-2 text-xs">
-                <div className="flex items-center gap-1.5 font-medium text-foreground">
-                  <HelpCircle size={14} className="text-primary" />
-                  <span>Como opera o Motor Inteligente de Geração?</span>
-                </div>
-                <p className="text-muted-foreground text-[11px] leading-relaxed">
-                  O motor executa as <strong>3 Rondas Obrigatórias</strong> (Ronda A para período completo, Ronda B com divisão em blocos de 15 min, Ronda C1 de troca atómica e Ronda C2 de aptidão universal), posiciona a pausa de <strong>Almoço Balanceado</strong> e preenche o turno remanescente com <strong>Apoio Escola</strong>.
-                </p>
-              </div>
+              
             </>
           )}
 

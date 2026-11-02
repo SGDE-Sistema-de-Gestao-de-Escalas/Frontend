@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   ChevronLeft,
   Download,
@@ -82,6 +82,27 @@ export default function AddEditAssistant({
   const [criminalRecordFile, setCriminalRecordFile] = useState<File | null>(null);
   const [removeExistingCriminalRecord, setRemoveExistingCriminalRecord] = useState<boolean>(false);
   const [isDownloadingRecord, setIsDownloadingRecord] = useState<boolean>(false);
+
+  const criminalExpiryPresets = useMemo(() => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const toIso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    const plus3m = new Date(now);
+    plus3m.setMonth(now.getMonth() + 3);
+
+    const plus6m = new Date(now);
+    plus6m.setMonth(now.getMonth() + 6);
+
+    const plus1y = new Date(now);
+    plus1y.setFullYear(now.getFullYear() + 1);
+
+    return [
+      { label: "+3 Meses (90d)", value: toIso(plus3m) },
+      { label: "+6 Meses", value: toIso(plus6m) },
+      { label: "+1 Ano", value: toIso(plus1y) },
+    ];
+  }, []);
 
   // Address
   const [addressStreet, setAddressStreet] = useState<string>(clean(assistant?.address_street));
@@ -500,6 +521,7 @@ export default function AddEditAssistant({
               </label>
               <DatePicker
                 value={birthDate}
+                maxDate={new Date().toISOString().split("T")[0]}
                 onChange={(val) => {
                   setBirthDate(val);
                   clearError("birth_date");
@@ -796,12 +818,33 @@ export default function AddEditAssistant({
                   </label>
                   <DatePicker
                     value={criminalRecordExpiry}
+                    presets={criminalExpiryPresets}
                     onChange={(val) => {
                       setCriminalRecordExpiry(val);
                       clearError("criminal_record_expiry");
                     }}
                     className="w-full"
                   />
+                  <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                    <span className="text-[10px] text-muted-foreground font-medium">Atalhos rápidos:</span>
+                    {criminalExpiryPresets.map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => {
+                          setCriminalRecordExpiry(p.value);
+                          clearError("criminal_record_expiry");
+                        }}
+                        className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-colors cursor-pointer ${
+                          criminalRecordExpiry === p.value
+                            ? "border-primary bg-primary text-primary-foreground font-bold shadow-xs"
+                            : "border-border bg-muted/40 hover:bg-muted text-foreground"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
                   {formErrors.criminal_record_expiry && (
                     <p className="text-[11px] text-destructive mt-1 font-medium">
                       {formErrors.criminal_record_expiry}
