@@ -71,11 +71,7 @@ function toMinutes(timeStr: string): number {
   return (h || 0) * 60 + (m || 0);
 }
 
-const RECALCULATE_STEPS = [
-  { id: "form", label: "1. Período e Parâmetros" },
-  { id: "gap", label: "2. Défice e Cobertura" },
-  { id: "done", label: "3. Conclusão" },
-];
+
 
 export default function RecalculateModal({
   open,
@@ -650,11 +646,6 @@ export default function RecalculateModal({
               ? "A escala foi publicada e comunicada às equipas com sucesso."
               : "Validação concluída. Pode rever os indicadores ou publicar a escala agora."
           }
-          steps={RECALCULATE_STEPS}
-          currentStep={step}
-          onStepClick={(s) => {
-            if (s === "form" && step === "gap") setStep("form");
-          }}
         />
 
         {/* Body Content com overflow controlado */}
