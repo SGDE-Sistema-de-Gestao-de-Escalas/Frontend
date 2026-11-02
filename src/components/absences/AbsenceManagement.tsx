@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { useState, useMemo, useEffect } from "react";
 import {
   Check,
@@ -52,6 +53,11 @@ import { notify } from "../common/FeedbackNotification";
 
 export default function AbsenceManagement() {
   const { selectedSchoolId } = useSchool();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const absenceIdParam = searchParams.get("absenceId");
+  const statusParam = searchParams.get("status");
+
+  const [targetedAbsence, setTargetedAbsence] = useState<BackendAbsenceResource | null>(null);
 
   // Dados remotos via TanStack Query (com status "all" para trazer ativos e inativos)
   const { data: assistants = [], isLoading: _isLoadingAssistants } = useAssistantsList({
@@ -77,6 +83,17 @@ export default function AbsenceManagement() {
     setShowForm(false);
     setEditingAbsence(null);
   }, [selectedSchoolId]);
+
+  // Sincronizar parâmetros de pesquisa da URL (vindos de notificações)
+  useEffect(() => {
+    if (statusParam && ["all", "pending", "justified", "unjustified"].includes(statusParam)) {
+      setStatusFilter(statusParam as any);
+    } else if (absenceIdParam) {
+      // Ao abrir ausência específica vinda de notificação, mostra todas para não a ocultar por filtro
+      setStatusFilter("all");
+    }
+  }, [statusParam, absenceIdParam]);
+
 
   // Se o assistente selecionado no filtro não existir na lista da escola ativa, repor "all"
   useEffect(() => {
@@ -143,6 +160,39 @@ export default function AbsenceManagement() {
 
   // Estado do item selecionado no Master-Detail
   const [selectedId, setSelectedId] = useState<string | number | null>(null);
+  useEffect(() => {
+    if (absenceIdParam) {
+      setSelectedId(absenceIdParam);
+    }
+  }, [absenceIdParam]);
+
+  // Se selectedId foi definido (ex: via notificação) mas não está na página atual, obtém os detalhes via API
+  useEffect(() => {
+    if (!selectedId) {
+      setTargetedAbsence(null);
+      return;
+    }
+
+    const inList = paginatedAbsences.find((a) => String(a.id) === String(selectedId));
+    if (inList) {
+      setTargetedAbsence(null);
+      return;
+    }
+
+    let isMounted = true;
+    absencesService
+      .getById(selectedId)
+      .then((res) => {
+        if (isMounted) setTargetedAbsence(res);
+      })
+      .catch(() => {
+        // Silencioso se não encontrada
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedId, paginatedAbsences]);
 
   // Estado dos modais
   const [showForm, setShowForm] = useState(false);
@@ -195,35 +245,32 @@ export default function AbsenceManagement() {
   }, []);
 
   // Sincronizar o item selecionado:
-  // - No Desktop (>= 1024px): seleciona por defeito o 1º item se nada estiver selecionado ou se o item atual deixar de existir.
-  // - No Mobile (< 1024px): NUNCA forçamos a seleção para permitir que o utilizador navegue na listagem e use o botão "Voltar".
+  // - NÃO forçamos a seleção cega do 1º item no Desktop, evitando induzir o admin em erro ao abrir a página ou notificações.
+  // - A seleção apenas ocorre se o utilizador clicar num registo ou se vier via URL (?absenceId=).
   useEffect(() => {
-    if (paginatedAbsences.length === 0) {
+    if (paginatedAbsences.length === 0 && !targetedAbsence) {
       setSelectedId(null);
-      return;
     }
+  }, [paginatedAbsences, targetedAbsence]);
 
-    if (isDesktop) {
-      const exists = paginatedAbsences.some((a) => String(a.id) === String(selectedId));
-      if (!exists) {
-        setSelectedId(paginatedAbsences[0].id);
-      }
-    } else {
-      // No mobile, apenas verificamos se o item selecionado AINDA existe (caso tenha sido eliminado)
-      if (selectedId !== null) {
-        const exists = paginatedAbsences.some((a) => String(a.id) === String(selectedId));
-        if (!exists) {
-          setSelectedId(null);
-        }
-      }
+  function handleClearSelection() {
+    setSelectedId(null);
+    setTargetedAbsence(null);
+    if (searchParams.has("absenceId")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("absenceId");
+      setSearchParams(next, { replace: true });
     }
-  }, [paginatedAbsences, selectedId, isDesktop]);
+  }
 
-  // Obter o item selecionado
+  // Obter o item selecionado (da lista paginada ou o item carregado diretamente por ID)
   const selectedAbsence = useMemo(() => {
     if (!selectedId) return null;
-    return paginatedAbsences.find((a) => String(a.id) === String(selectedId)) || null;
-  }, [paginatedAbsences, selectedId]);
+    return (
+      paginatedAbsences.find((a) => String(a.id) === String(selectedId)) ||
+      (targetedAbsence && String(targetedAbsence.id) === String(selectedId) ? targetedAbsence : null)
+    );
+  }, [paginatedAbsences, selectedId, targetedAbsence]);
 
   const hasActiveFilters =
     statusFilter !== "all" ||
@@ -821,10 +868,19 @@ export default function AbsenceManagement() {
                   <ActionTooltip content="Voltar à lista">
                     <button
                       type="button"
-                      onClick={() => setSelectedId(null)}
+                      onClick={handleClearSelection}
                       className="lg:hidden p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground cursor-pointer"
                     >
                       <ChevronLeft size={16} />
+                    </button>
+                  </ActionTooltip>
+                  <ActionTooltip content="Fechar detalhe">
+                    <button
+                      type="button"
+                      onClick={handleClearSelection}
+                      className="hidden lg:flex p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground cursor-pointer"
+                    >
+                      <X size={15} />
                     </button>
                   </ActionTooltip>
                   <div
