@@ -365,7 +365,7 @@ const [publishModalState, setPublishModalState] = useState<{
           is_active: true,
           schedule_profiles: (tr.assistant as any)?.schedule_profiles || [],
           assistant_exceptions: (tr.assistant as any)?.assistant_exceptions || [],
-        });
+        } as any);
       }
     });
 

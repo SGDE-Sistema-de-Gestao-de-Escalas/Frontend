@@ -4,6 +4,10 @@ import holidaysService, {
   HolidayFilters,
   HolidayPayload,
   BackendHolidayResource,
+  MunicipalityResource,
+  HolidayPreviewItem,
+  HolidayImportPayload,
+  HolidayImportResult,
 } from "../../api/services/holidays.service";
 import type { EntityId } from "../../types";
 
@@ -20,6 +24,72 @@ export function useHolidaysList(filters?: HolidayFilters) {
       if (Array.isArray(result)) return result;
       if (Array.isArray((result as any)?.data)) return (result as any).data;
       return [];
+    },
+  });
+}
+
+/**
+ * Hook para obter a lista dos 308 concelhos portugueses
+ */
+export function useMunicipalities() {
+  return useQuery({
+    queryKey: [...HOLIDAYS_QUERY_KEY, "municipalities"],
+    queryFn: async (): Promise<MunicipalityResource[]> => {
+      return holidaysService.getMunicipalities();
+    },
+    staleTime: 1000 * 60 * 60 * 24, // 24h
+  });
+}
+
+/**
+ * Hook para pré-visualizar feriados a importar para um ano e concelho
+ */
+export function useHolidayPreview(
+  params: {
+    year: number;
+    municipality?: string | null;
+    include_carnival?: boolean;
+  },
+  options?: { enabled?: boolean }
+) {
+  return useQuery({
+    queryKey: [...HOLIDAYS_QUERY_KEY, "preview", params],
+    queryFn: async (): Promise<HolidayPreviewItem[]> => {
+      return holidaysService.preview(params);
+    },
+    enabled: options?.enabled ?? true,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+/**
+ * Hook para importar feriados em lote
+ */
+export function useImportHolidays() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: HolidayImportPayload): Promise<HolidayImportResult> =>
+      holidaysService.import(payload),
+    onSuccess: (res: HolidayImportResult) => {
+      queryClient.invalidateQueries({ queryKey: HOLIDAYS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+
+      notify.success(res.message, "Importação Concluída");
+
+      if (res.requires_recalculation) {
+        notify.warning(
+          "A importação de feriados afeta escalas geradas em estabelecimento(s). É necessário recalcular o horário.",
+          "Recálculo Necessário"
+        );
+      }
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message ||
+        "Não foi possível importar os feriados.";
+      notify.error(message, undefined, "Erro na Importação");
     },
   });
 }
@@ -51,8 +121,16 @@ export function useCreateHoliday() {
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: HOLIDAYS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
       const msg = res?.message || "O feriado foi registado com sucesso no calendário.";
       notify.success(msg, "Feriado Criado");
+
+      if (res?.impact?.requires_recalculation) {
+        notify.warning(
+          "A criação do feriado coincide com escalas geradas. É necessário recalcular o horário.",
+          "Recálculo Necessário"
+        );
+      }
     },
     onError: (error: any) => {
       const message =
@@ -77,11 +155,19 @@ export function useUpdateHoliday() {
     onSuccess: (res: any, variables) => {
       queryClient.invalidateQueries({ queryKey: HOLIDAYS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
       queryClient.invalidateQueries({
         queryKey: [...HOLIDAYS_QUERY_KEY, "detail", variables.id],
       });
       const msg = res?.message || "Os dados do feriado foram atualizados com sucesso.";
       notify.success(msg, "Feriado Atualizado");
+
+      if (res?.impact?.requires_recalculation) {
+        notify.warning(
+          "A alteração ao feriado afeta escalas geradas em estabelecimento(s). É necessário recalcular o horário.",
+          "Recálculo Necessário"
+        );
+      }
     },
     onError: (error: any) => {
       const message =
@@ -105,8 +191,16 @@ export function useDeleteHoliday() {
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: HOLIDAYS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
       const msg = res?.message || "O feriado foi removido do calendário.";
       notify.success(msg, "Feriado Removido");
+
+      if (res?.impact?.requires_recalculation) {
+        notify.warning(
+          "A eliminação do feriado afeta escalas geradas em estabelecimento(s). É necessário recalcular o horário.",
+          "Recálculo Necessário"
+        );
+      }
     },
     onError: (error: any) => {
       const message =
@@ -116,4 +210,3 @@ export function useDeleteHoliday() {
     },
   });
 }
-
