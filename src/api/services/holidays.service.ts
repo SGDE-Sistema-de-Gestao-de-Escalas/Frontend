@@ -105,7 +105,7 @@ export const holidaysService = {
       params: {
         year: params.year,
         municipality: params.municipality || undefined,
-        include_carnival: params.include_carnival ?? true,
+        include_carnival: params.include_carnival ? 1 : 0,
       },
     });
     return response.data.data;
@@ -120,7 +120,7 @@ export const holidaysService = {
       year: data.year,
       municipality: data.municipality || undefined,
       dates: data.dates,
-      include_carnival: data.include_carnival ?? true,
+      include_carnival: data.include_carnival ? 1 : 0,
     });
     return response.data;
   },
