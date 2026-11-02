@@ -356,6 +356,8 @@ const [publishModalState, setPublishModalState] = useState<{
           origin_school_name: tr.origin_school?.name || "Outra Escola",
           active: true,
           is_active: true,
+          schedule_profiles: (tr.assistant as any)?.schedule_profiles || [],
+          assistant_exceptions: (tr.assistant as any)?.assistant_exceptions || [],
         });
       }
     });

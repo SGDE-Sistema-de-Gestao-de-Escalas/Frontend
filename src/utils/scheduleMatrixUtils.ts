@@ -899,6 +899,26 @@ export interface ActiveRotatingShiftInfo {
   cycleEndDate: string;
 }
 
+/**
+ * Retorna a segunda-feira ISO (início da semana) às 00:00:00 para uma data YYYY-MM-DD.
+ * O domingo (day = 0) pertence ao final da semana anterior (-6 dias).
+ */
+export function getIsoMonday(dateStr: string): Date {
+  const d = new Date(dateStr + "T00:00:00");
+  const day = d.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diffToMonday);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function formatDateISO(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function computeActiveRotatingShift(
   validFromStr: string,
   rotationPeriod: string = "biweekly",
@@ -906,35 +926,78 @@ export function computeActiveRotatingShift(
   targetDateStr: string = new Date().toISOString().split("T")[0]
 ): ActiveRotatingShiftInfo {
   const normPeriod = String(rotationPeriod).toLowerCase();
-  const periodDays =
-    normPeriod.includes("sem") || normPeriod === "weekly"
-      ? 7
-      : normPeriod.includes("men") || normPeriod === "monthly"
-      ? 28
-      : 14;
+  const isWeekly = normPeriod.includes("sem") || normPeriod === "weekly";
+  const isMonthly = normPeriod.includes("men") || normPeriod === "monthly";
 
   const validFrom = validFromStr ? validFromStr.slice(0, 10) : targetDateStr;
-  const tTarget = new Date(targetDateStr + "T00:00:00").getTime();
-  const tBase = new Date(validFrom + "T00:00:00").getTime();
-  const daysDiff = Math.max(0, Math.floor((tTarget - tBase) / (1000 * 60 * 60 * 24)));
+  const targetDate = targetDateStr ? targetDateStr.slice(0, 10) : new Date().toISOString().split("T")[0];
 
-  const rotationCycle = Math.floor(daysDiff / periodDays);
-  const isInitial = rotationCycle % 2 === 0;
   const startChar: "A" | "B" = startsWith === "B" ? "B" : "A";
-  const activeLabel: "A" | "B" = isInitial
-    ? startChar
-    : startChar === "A"
-    ? "B"
-    : "A";
+  const oppositeChar: "A" | "B" = startChar === "A" ? "B" : "A";
 
-  const cycleStartMs = tBase + rotationCycle * periodDays * (1000 * 60 * 60 * 24);
-  const cycleEndMs = cycleStartMs + (periodDays - 1) * (1000 * 60 * 60 * 24);
+  let activeLabel: "A" | "B" = startChar;
+  let rotationCycle = 0;
+  let cycleStartDate = targetDate;
+  let cycleEndDate = targetDate;
+  let periodDays = 14;
+  let periodLabel = "Quinzenal";
 
-  const cycleStartDate = new Date(cycleStartMs).toISOString().split("T")[0];
-  const cycleEndDate = new Date(cycleEndMs).toISOString().split("T")[0];
+  if (isMonthly) {
+    periodDays = 30;
+    periodLabel = "Mensal";
 
-  const periodLabel =
-    periodDays === 7 ? "Semanal" : periodDays === 28 ? "Mensal" : "Quinzenal";
+    const [tY, tM] = targetDate.split("-").map(Number);
+    const [fY, fM] = validFrom.split("-").map(Number);
+    const monthsDiff = (tY - fY) * 12 + (tM - fM);
+    rotationCycle = Math.abs(monthsDiff);
+    const index = rotationCycle % 2;
+    activeLabel = index === 0 ? startChar : oppositeChar;
+
+    cycleStartDate = `${tY}-${String(tM).padStart(2, "0")}-01`;
+    const lastDayOfMonth = new Date(tY, tM, 0).getDate();
+    cycleEndDate = `${tY}-${String(tM).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
+  } else if (isWeekly) {
+    periodDays = 7;
+    periodLabel = "Semanal";
+
+    const anchorMonday = getIsoMonday(validFrom);
+    const targetMonday = getIsoMonday(targetDate);
+    const daysBetweenMondays = Math.round((targetMonday.getTime() - anchorMonday.getTime()) / 86400000);
+    const weeksDiff = Math.floor(daysBetweenMondays / 7);
+
+    rotationCycle = Math.abs(weeksDiff);
+    const index = rotationCycle % 2;
+    activeLabel = index === 0 ? startChar : oppositeChar;
+
+    cycleStartDate = formatDateISO(targetMonday);
+    const endMonday = new Date(targetMonday.getTime());
+    endMonday.setDate(endMonday.getDate() + 6);
+    cycleEndDate = formatDateISO(endMonday);
+  } else {
+    // Biweekly (Quinzenal)
+    periodDays = 14;
+    periodLabel = "Quinzenal";
+
+    const anchorMonday = getIsoMonday(validFrom);
+    const targetMonday = getIsoMonday(targetDate);
+    const daysBetweenMondays = Math.round((targetMonday.getTime() - anchorMonday.getTime()) / 86400000);
+    const weeksDiff = Math.floor(daysBetweenMondays / 7);
+
+    rotationCycle = Math.floor(Math.abs(weeksDiff) / 2);
+    const index = rotationCycle % 2;
+    activeLabel = index === 0 ? startChar : oppositeChar;
+
+    const cycleStartOffsetWeeks = weeksDiff >= 0
+      ? Math.floor(weeksDiff / 2) * 2
+      : -Math.ceil(Math.abs(weeksDiff) / 2) * 2;
+    const cycleStart = new Date(anchorMonday.getTime());
+    cycleStart.setDate(cycleStart.getDate() + cycleStartOffsetWeeks * 7);
+    cycleStartDate = formatDateISO(cycleStart);
+
+    const cycleEnd = new Date(cycleStart.getTime());
+    cycleEnd.setDate(cycleEnd.getDate() + 13);
+    cycleEndDate = formatDateISO(cycleEnd);
+  }
 
   return {
     activeLabel,
@@ -1056,30 +1119,13 @@ export function resolveAssistantShiftBounds(params: {
           }
         }
       } else if (currentProfile.type === "rotativo") {
-        const validFrom = currentProfile.valid_from
-          ? currentProfile.valid_from.slice(0, 10)
-          : isoDate;
-        const tTarget = new Date(isoDate + "T00:00:00").getTime();
-        const tBase = new Date(validFrom + "T00:00:00").getTime();
-        const daysDiff = Math.max(
-          0,
-          Math.floor((tTarget - tBase) / (1000 * 60 * 60 * 24))
+        const rotInfo = computeActiveRotatingShift(
+          currentProfile.valid_from || isoDate,
+          currentProfile.rotation_period || "biweekly",
+          currentProfile.starts_with || "A",
+          isoDate
         );
-        const periodDays =
-          currentProfile.rotation_period === "weekly"
-            ? 7
-            : currentProfile.rotation_period === "monthly"
-            ? 28
-            : 14;
-
-        const rotationCycle = Math.floor(daysDiff / periodDays);
-        const isInitial = rotationCycle % 2 === 0;
-        const startsWith = currentProfile.starts_with || "A";
-        const activeLabel: "A" | "B" = isInitial
-          ? startsWith
-          : startsWith === "A"
-          ? "B"
-          : "A";
+        const activeLabel = rotInfo.activeLabel;
 
         const shift =
           currentProfile.shifts?.find((s) => s.shift_label === activeLabel) ||

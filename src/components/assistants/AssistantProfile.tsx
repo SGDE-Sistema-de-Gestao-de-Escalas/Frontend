@@ -54,6 +54,7 @@ import {
 import { useAssistantSchedules } from "../../hooks/api/useAssistantSchedules";
 import { apiProfileToScheduleItem } from "../../api/services/assistantSchedules.service";
 import type { AssistantScheduleItem } from "./AssistantScheduleManager";
+import { getScheduleTypeStatus } from "./AssistantScheduleManager";
 import { computeActiveRotatingShift } from "../../utils/scheduleMatrixUtils";
 import type { EntityId } from "../../types";
 
@@ -200,11 +201,9 @@ export default function AssistantProfile({
 
   const activeSchedule = React.useMemo(() => {
     return (
-      assistantSchedules.find((s) => {
-        if (s.to && s.to < TODAY_STR) return false;
-        if (s.from > TODAY_STR) return false;
-        return true;
-      }) || assistantSchedules.find((s) => s.to === null) || assistantSchedules[0]
+      assistantSchedules.find((s) => getScheduleTypeStatus(s, assistantSchedules) === "active") ||
+      assistantSchedules.find((s) => s.to === null) ||
+      assistantSchedules[0]
     );
   }, [assistantSchedules]);
 

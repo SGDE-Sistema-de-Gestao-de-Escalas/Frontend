@@ -76,7 +76,7 @@ function formatDatePT(dateStr: string | null | undefined): string {
 
 const TODAY_STR = new Date().toISOString().split("T")[0];
 
-function getScheduleTypeStatus(
+export function getScheduleTypeStatus(
   s: AssistantScheduleItem,
   all: AssistantScheduleItem[]
 ): "active" | "future" | "past" {
