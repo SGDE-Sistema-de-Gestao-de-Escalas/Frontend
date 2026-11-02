@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { useState, useMemo, useEffect } from "react";
 import {
   Check,
@@ -23,6 +24,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "../ui/dialog";
 import DatePicker, { formatToIsoDate } from "../common/DatePicker";
@@ -51,6 +53,11 @@ import { notify } from "../common/FeedbackNotification";
 
 export default function AbsenceManagement() {
   const { selectedSchoolId } = useSchool();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const absenceIdParam = searchParams.get("absenceId");
+  const statusParam = searchParams.get("status");
+
+  const [targetedAbsence, setTargetedAbsence] = useState<BackendAbsenceResource | null>(null);
 
   // Dados remotos via TanStack Query (com status "all" para trazer ativos e inativos)
   const { data: assistants = [], isLoading: _isLoadingAssistants } = useAssistantsList({
@@ -76,6 +83,17 @@ export default function AbsenceManagement() {
     setShowForm(false);
     setEditingAbsence(null);
   }, [selectedSchoolId]);
+
+  // Sincronizar parâmetros de pesquisa da URL (vindos de notificações)
+  useEffect(() => {
+    if (statusParam && ["all", "pending", "justified", "unjustified"].includes(statusParam)) {
+      setStatusFilter(statusParam as any);
+    } else if (absenceIdParam) {
+      // Ao abrir ausência específica vinda de notificação, mostra todas para não a ocultar por filtro
+      setStatusFilter("all");
+    }
+  }, [statusParam, absenceIdParam]);
+
 
   // Se o assistente selecionado no filtro não existir na lista da escola ativa, repor "all"
   useEffect(() => {
@@ -142,6 +160,39 @@ export default function AbsenceManagement() {
 
   // Estado do item selecionado no Master-Detail
   const [selectedId, setSelectedId] = useState<string | number | null>(null);
+  useEffect(() => {
+    if (absenceIdParam) {
+      setSelectedId(absenceIdParam);
+    }
+  }, [absenceIdParam]);
+
+  // Se selectedId foi definido (ex: via notificação) mas não está na página atual, obtém os detalhes via API
+  useEffect(() => {
+    if (!selectedId) {
+      setTargetedAbsence(null);
+      return;
+    }
+
+    const inList = paginatedAbsences.find((a) => String(a.id) === String(selectedId));
+    if (inList) {
+      setTargetedAbsence(null);
+      return;
+    }
+
+    let isMounted = true;
+    absencesService
+      .getById(selectedId)
+      .then((res) => {
+        if (isMounted) setTargetedAbsence(res);
+      })
+      .catch(() => {
+        // Silencioso se não encontrada
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedId, paginatedAbsences]);
 
   // Estado dos modais
   const [showForm, setShowForm] = useState(false);
@@ -174,6 +225,7 @@ export default function AbsenceManagement() {
     absenceType?: string;
     startDate?: string;
     endDate?: string;
+    time?: string;
   }>({});
 
   // Deteção responsiva do breakpoint desktop (lg: >= 1024px)
@@ -193,35 +245,32 @@ export default function AbsenceManagement() {
   }, []);
 
   // Sincronizar o item selecionado:
-  // - No Desktop (>= 1024px): seleciona por defeito o 1º item se nada estiver selecionado ou se o item atual deixar de existir.
-  // - No Mobile (< 1024px): NUNCA forçamos a seleção para permitir que o utilizador navegue na listagem e use o botão "Voltar".
+  // - NÃO forçamos a seleção cega do 1º item no Desktop, evitando induzir o admin em erro ao abrir a página ou notificações.
+  // - A seleção apenas ocorre se o utilizador clicar num registo ou se vier via URL (?absenceId=).
   useEffect(() => {
-    if (paginatedAbsences.length === 0) {
+    if (paginatedAbsences.length === 0 && !targetedAbsence) {
       setSelectedId(null);
-      return;
     }
+  }, [paginatedAbsences, targetedAbsence]);
 
-    if (isDesktop) {
-      const exists = paginatedAbsences.some((a) => String(a.id) === String(selectedId));
-      if (!exists) {
-        setSelectedId(paginatedAbsences[0].id);
-      }
-    } else {
-      // No mobile, apenas verificamos se o item selecionado AINDA existe (caso tenha sido eliminado)
-      if (selectedId !== null) {
-        const exists = paginatedAbsences.some((a) => String(a.id) === String(selectedId));
-        if (!exists) {
-          setSelectedId(null);
-        }
-      }
+  function handleClearSelection() {
+    setSelectedId(null);
+    setTargetedAbsence(null);
+    if (searchParams.has("absenceId")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("absenceId");
+      setSearchParams(next, { replace: true });
     }
-  }, [paginatedAbsences, selectedId, isDesktop]);
+  }
 
-  // Obter o item selecionado
+  // Obter o item selecionado (da lista paginada ou o item carregado diretamente por ID)
   const selectedAbsence = useMemo(() => {
     if (!selectedId) return null;
-    return paginatedAbsences.find((a) => String(a.id) === String(selectedId)) || null;
-  }, [paginatedAbsences, selectedId]);
+    return (
+      paginatedAbsences.find((a) => String(a.id) === String(selectedId)) ||
+      (targetedAbsence && String(targetedAbsence.id) === String(selectedId) ? targetedAbsence : null)
+    );
+  }, [paginatedAbsences, selectedId, targetedAbsence]);
 
   const hasActiveFilters =
     statusFilter !== "all" ||
@@ -244,6 +293,7 @@ export default function AbsenceManagement() {
     setFormAssistantId(firstActive ? String(firstActive.id) : (assistants[0] ? String(assistants[0].id) : ""));
     setFormAbsenceTypeId(absenceTypes[0] ? String(absenceTypes[0].id) : "");
     setFormStartDate(todayStr);
+    setFormIsFullDay(true);
     setFormStartTime("08:00");
     setFormEndDate(todayStr);
     setFormEndTime("17:00");
@@ -326,6 +376,16 @@ export default function AbsenceManagement() {
       errors.endDate = "A data de fim é obrigatória.";
     } else if (formStartDate && formEndDate < formStartDate) {
       errors.endDate = "A data de fim não pode ser anterior à data de início.";
+    }
+
+    if (!formIsFullDay) {
+      if (!formStartTime) {
+        errors.time = "A hora de início é obrigatória.";
+      } else if (!formEndTime) {
+        errors.time = "A hora de fim é obrigatória.";
+      } else if (formStartDate === formEndDate && formEndTime <= formStartTime) {
+        errors.time = "A hora de fim deve ser posterior à hora de início.";
+      }
     }
 
     if (Object.keys(errors).length > 0) {
@@ -808,10 +868,19 @@ export default function AbsenceManagement() {
                   <ActionTooltip content="Voltar à lista">
                     <button
                       type="button"
-                      onClick={() => setSelectedId(null)}
+                      onClick={handleClearSelection}
                       className="lg:hidden p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground cursor-pointer"
                     >
                       <ChevronLeft size={16} />
+                    </button>
+                  </ActionTooltip>
+                  <ActionTooltip content="Fechar detalhe">
+                    <button
+                      type="button"
+                      onClick={handleClearSelection}
+                      className="hidden lg:flex p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground cursor-pointer"
+                    >
+                      <X size={15} />
                     </button>
                   </ActionTooltip>
                   <div
@@ -1086,6 +1155,11 @@ export default function AbsenceManagement() {
             <DialogTitle className="font-semibold text-foreground text-sm">
               {editingAbsence ? "Editar Ausência" : "Registar Ausência"}
             </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+              {editingAbsence
+                ? "Atualize as informações e período da ausência selecionada."
+                : "Preencha os dados abaixo para registar uma nova ausência de assistente."}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="p-5 space-y-4 overflow-y-auto max-h-[calc(92vh-120px)]">
@@ -1181,6 +1255,44 @@ export default function AbsenceManagement() {
                   </p>
                 )}
               </div>
+
+              {!formIsFullDay && (
+                <div className="space-y-1">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1 font-medium">
+                        Hora Início *
+                      </label>
+                      <TimePicker
+                        value={formStartTime}
+                        onChange={(val) => {
+                          setFormStartTime(val);
+                          if (formErrors.time) setFormErrors((p) => ({ ...p, time: undefined }));
+                        }}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1 font-medium">
+                        Hora Fim *
+                      </label>
+                      <TimePicker
+                        value={formEndTime}
+                        onChange={(val) => {
+                          setFormEndTime(val);
+                          if (formErrors.time) setFormErrors((p) => ({ ...p, time: undefined }));
+                        }}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                  {formErrors.time && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {formErrors.time}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Observações */}

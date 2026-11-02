@@ -76,7 +76,7 @@ export default function AvatarMenu({
               className="cursor-pointer px-4 py-2 text-sm text-foreground transition-colors"
             >
               <Settings size={15} className="mr-2 text-muted-foreground" />
-              Configurações da Plataforma
+              Definições
             </DropdownMenuItem>
           )}
         </div>

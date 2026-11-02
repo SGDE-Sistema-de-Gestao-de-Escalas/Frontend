@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import {
   CalendarRange,
@@ -113,6 +114,17 @@ export default function DashboardSection({
   const [recalcDates, setRecalcDates] = useState<{ start?: string; end?: string }>({});
   const [lastGenerationResult, setLastGenerationResult] =
     useState<GenerateScheduleResponse | null>(null);
+
+  const [searchParams] = useSearchParams();
+  const dateParam = searchParams.get("date");
+
+  useEffect(() => {
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      const targetOffset = getOffsetFromIsoDate(dateParam);
+      setDayOffset(targetOffset);
+      setViewMode("day");
+    }
+  }, [dateParam]);
 
   const { data: pendingRecalculations } = usePendingRecalculations();
 

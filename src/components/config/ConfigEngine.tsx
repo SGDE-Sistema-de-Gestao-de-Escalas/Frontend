@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Clock, Layers, Shield } from "lucide-react";
 import type { ConfigTab } from "../../types";
 import ActivityTypesTab from "./ActivityTypesTab";
@@ -6,7 +7,19 @@ import ScheduleRulesTab from "./ScheduleRulesTab";
 import WindowsTab from "./WindowsTab";
 
 export default function ConfigEngine() {
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<ConfigTab>("security");
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "rules" || tab === "security") {
+      setActiveTab("security");
+    } else if (tab === "operating" || tab === "windows") {
+      setActiveTab("windows");
+    } else if (tab === "activity-types") {
+      setActiveTab("activity-types");
+    }
+  }, [searchParams]);
 
   const tabs: { id: ConfigTab; label: string; icon: React.ReactNode }[] = [
     {
