@@ -23,6 +23,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "../ui/dialog";
 import DatePicker, { formatToIsoDate } from "../common/DatePicker";
@@ -174,6 +175,7 @@ export default function AbsenceManagement() {
     absenceType?: string;
     startDate?: string;
     endDate?: string;
+    time?: string;
   }>({});
 
   // Deteção responsiva do breakpoint desktop (lg: >= 1024px)
@@ -244,6 +246,7 @@ export default function AbsenceManagement() {
     setFormAssistantId(firstActive ? String(firstActive.id) : (assistants[0] ? String(assistants[0].id) : ""));
     setFormAbsenceTypeId(absenceTypes[0] ? String(absenceTypes[0].id) : "");
     setFormStartDate(todayStr);
+    setFormIsFullDay(true);
     setFormStartTime("08:00");
     setFormEndDate(todayStr);
     setFormEndTime("17:00");
@@ -326,6 +329,16 @@ export default function AbsenceManagement() {
       errors.endDate = "A data de fim é obrigatória.";
     } else if (formStartDate && formEndDate < formStartDate) {
       errors.endDate = "A data de fim não pode ser anterior à data de início.";
+    }
+
+    if (!formIsFullDay) {
+      if (!formStartTime) {
+        errors.time = "A hora de início é obrigatória.";
+      } else if (!formEndTime) {
+        errors.time = "A hora de fim é obrigatória.";
+      } else if (formStartDate === formEndDate && formEndTime <= formStartTime) {
+        errors.time = "A hora de fim deve ser posterior à hora de início.";
+      }
     }
 
     if (Object.keys(errors).length > 0) {
@@ -1086,6 +1099,11 @@ export default function AbsenceManagement() {
             <DialogTitle className="font-semibold text-foreground text-sm">
               {editingAbsence ? "Editar Ausência" : "Registar Ausência"}
             </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+              {editingAbsence
+                ? "Atualize as informações e período da ausência selecionada."
+                : "Preencha os dados abaixo para registar uma nova ausência de assistente."}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="p-5 space-y-4 overflow-y-auto max-h-[calc(92vh-120px)]">
@@ -1181,6 +1199,44 @@ export default function AbsenceManagement() {
                   </p>
                 )}
               </div>
+
+              {!formIsFullDay && (
+                <div className="space-y-1">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1 font-medium">
+                        Hora Início *
+                      </label>
+                      <TimePicker
+                        value={formStartTime}
+                        onChange={(val) => {
+                          setFormStartTime(val);
+                          if (formErrors.time) setFormErrors((p) => ({ ...p, time: undefined }));
+                        }}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1 font-medium">
+                        Hora Fim *
+                      </label>
+                      <TimePicker
+                        value={formEndTime}
+                        onChange={(val) => {
+                          setFormEndTime(val);
+                          if (formErrors.time) setFormErrors((p) => ({ ...p, time: undefined }));
+                        }}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                  {formErrors.time && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {formErrors.time}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Observações */}
