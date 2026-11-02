@@ -40,28 +40,21 @@ interface ImportHolidaysModalProps {
   onSuccess?: () => void;
 }
 
-function formatDisplayDate(dateStr: string) {
+function formatHolidayFullDate(dateStr: string) {
   if (!dateStr) return "";
   const parts = dateStr.split("-");
   if (parts.length !== 3) return dateStr;
-  const year = parts[0];
+  const year = parseInt(parts[0], 10);
   const month = parseInt(parts[1], 10) - 1;
-  const day = parts[2];
-  const months = [
-    "Jan",
-    "Fev",
-    "Mar",
-    "Abr",
-    "Mai",
-    "Jun",
-    "Jul",
-    "Ago",
-    "Set",
-    "Out",
-    "Nov",
-    "Dez",
-  ];
-  return `${day} ${months[month]} ${year}`;
+  const day = parseInt(parts[2], 10);
+  const date = new Date(year, month, day);
+  const formatted = date.toLocaleDateString("pt-PT", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
 const MODAL_STEPS = [
@@ -205,6 +198,8 @@ export default function ImportHolidaysModal({
 
   const newItemsCount = previewItems.filter((i) => !i.already_exists).length;
   const existingItemsCount = previewItems.filter((i) => i.already_exists).length;
+  const pastItemsCount = previewItems.filter((i) => !i.already_exists && i.is_past).length;
+  const upcomingNewItemsCount = newItemsCount - pastItemsCount;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -335,10 +330,18 @@ export default function ImportHolidaysModal({
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-muted-foreground">
                     <strong className="text-emerald-600 dark:text-emerald-400">
-                      {newItemsCount}
+                      {upcomingNewItemsCount}
                     </strong>{" "}
                     novos
                   </span>
+                  {pastItemsCount > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      <strong className="text-amber-600 dark:text-amber-400">
+                        {pastItemsCount}
+                      </strong>{" "}
+                      passados
+                    </span>
+                  )}
                   {existingItemsCount > 0 && (
                     <span className="text-xs text-muted-foreground">
                       <strong className="text-muted-foreground">
@@ -374,7 +377,7 @@ export default function ImportHolidaysModal({
                         disabled={newItemsCount === 0}
                       />
                       <span className="cursor-pointer" onClick={handleToggleAll}>
-                        Selecionar Todos os Novos ({newItemsCount})
+                        Selecionar Todos ({newItemsCount})
                       </span>
                     </div>
                     <span>{selectedDates.size} selecionado(s)</span>
@@ -396,53 +399,51 @@ export default function ImportHolidaysModal({
                               ? "opacity-60 bg-muted/10 cursor-not-allowed"
                               : isSelected
                               ? "bg-primary/5 hover:bg-primary/10 cursor-pointer"
+                              : item.is_past
+                              ? "bg-amber-500/[0.02] hover:bg-muted/20 cursor-pointer"
                               : "hover:bg-muted/20 cursor-pointer"
                           }`}
                         >
-                          <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
                             <Checkbox
                               checked={isSelected}
                               onCheckedChange={() => handleToggleDate(item.date)}
                               disabled={item.already_exists}
                             />
-                            <div className="min-w-0">
-                              <p className="font-semibold text-foreground truncate">
-                                {item.name}
-                              </p>
-                              <p className="text-[11px] text-muted-foreground truncate">
-                                {item.description || "Feriado oficial"}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-semibold text-foreground text-sm leading-snug break-words">
+                                  {item.name}
+                                </span>
+                                {/* Badge Nacional / Municipal pequeno sem capslock */}
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium leading-none ${
+                                    item.type === "municipal"
+                                      ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+                                      : "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+                                  }`}
+                                >
+                                  {item.type === "municipal" ? "Municipal" : "Nacional"}
+                                </span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5 leading-normal">
+                                {formatHolidayFullDate(item.date)}
                               </p>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
-                            {/* Type Badge */}
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
-                                item.type === "municipal"
-                                  ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
-                                  : "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
-                              }`}
-                            >
-                              {item.type === "municipal" ? "Municipal" : "Nacional"}
-                            </span>
-
-                            {/* Date */}
-                            <span className="font-mono text-[11px] text-foreground w-24 text-right">
-                              {formatDisplayDate(item.date)}
-                            </span>
-
-                            {/* Status */}
+                            {/* Status Badge */}
                             {item.already_exists ? (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground border border-border">
-                                Já existe
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground border border-border">
+                                Já registado
                               </span>
                             ) : item.is_past ? (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
                                 Passado
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
                                 Novo
                               </span>
                             )}
