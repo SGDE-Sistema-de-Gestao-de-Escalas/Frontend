@@ -45,6 +45,20 @@ export interface UpdateScheduleRulePayload {
   assistant_ids?: string[];
 }
 
+export interface ScheduleRuleDeleteImpact {
+  has_impact: boolean;
+  requires_recalculation: boolean;
+  affected_dates: string[];
+  affected_schedules: number;
+  drafted_schedules: number;
+  message: string;
+}
+
+export interface DeleteScheduleRuleResult {
+  message: string;
+  impact?: ScheduleRuleDeleteImpact;
+}
+
 export const scheduleRulesService = {
   /**
    * Listar todas as regras de horário para a escola ativa (via header X-School-ID)
@@ -92,8 +106,10 @@ export const scheduleRulesService = {
    * Eliminar regra de horário
    * DELETE /api/schedule-rules/{id}
    */
-  async delete(id: string): Promise<{ message: string }> {
-    const response = await apiClient.delete<any>(`/schedule-rules/${id}`);
+  async delete(id: string, options?: { confirm?: boolean }): Promise<DeleteScheduleRuleResult> {
+    const response = await apiClient.delete<any>(`/schedule-rules/${id}`, {
+      params: options?.confirm ? { confirm: 1 } : undefined,
+    });
     return response.data;
   },
 };

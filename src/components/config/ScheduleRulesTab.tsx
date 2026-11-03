@@ -28,10 +28,14 @@ import {
   useCreateScheduleRule,
   useUpdateScheduleRule,
   useDeleteScheduleRule,
+  getDeleteConfirmation,
 } from "../../hooks/api/useScheduleRules";
 import { useActivityTypesList } from "../../hooks/api/useActivityTypes";
 import { useAssistantsList } from "../../hooks/api/useAssistants";
-import type { BackendScheduleRuleResource } from "../../api/services/scheduleRules.service";
+import type {
+  BackendScheduleRuleResource,
+  ScheduleRuleDeleteImpact,
+} from "../../api/services/scheduleRules.service";
 import { isFallbackActivityType } from "./ActivityTypesTab";
 
 const DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
@@ -50,6 +54,7 @@ export default function ScheduleRulesTab() {
   const [showAdd, setShowAdd] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [deleteRuleTarget, setDeleteRuleTarget] = useState<BackendScheduleRuleResource | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<ScheduleRuleDeleteImpact | null>(null);
 
   // Form state
   const todayStr = new Date().toISOString().split("T")[0];
@@ -916,15 +921,16 @@ export default function ScheduleRulesTab() {
 
       {/* Confirmation Modal for deleting rule */}
       <ConfirmationModal
-        open={deleteRuleTarget !== null}
+        open={deleteRuleTarget !== null && deleteImpact === null}
         onClose={() => setDeleteRuleTarget(null)}
         onConfirm={async () => {
           if (deleteRuleTarget) {
             try {
-              await deleteRuleMutation.mutateAsync(deleteRuleTarget.id);
+              await deleteRuleMutation.mutateAsync({ id: deleteRuleTarget.id });
               setDeleteRuleTarget(null);
-            } catch {
-              // Notificado no hook
+            } catch (error) {
+              const impact = getDeleteConfirmation(error);
+              if (impact) setDeleteImpact(impact);
             }
           }
         }}
@@ -948,6 +954,48 @@ export default function ScheduleRulesTab() {
         confirmLabel={deleteRuleMutation.isPending ? "A eliminar..." : "Eliminar Regra"}
         cancelLabel="Cancelar"
         variant="danger"
+      />
+
+      <ConfirmationModal
+        open={deleteRuleTarget !== null && deleteImpact !== null}
+        onClose={() => {
+          setDeleteImpact(null);
+          setDeleteRuleTarget(null);
+        }}
+        onConfirm={async () => {
+          if (deleteRuleTarget) {
+            try {
+              await deleteRuleMutation.mutateAsync({ id: deleteRuleTarget.id, confirm: true });
+              setDeleteImpact(null);
+              setDeleteRuleTarget(null);
+            } catch {
+              setDeleteImpact(null);
+            }
+          }
+        }}
+        title="Esta regra está em uso"
+        description={
+          deleteImpact ? (
+            <>
+              A regra está a ser usada em{" "}
+              <strong className="text-foreground">
+                {deleteImpact.affected_dates.length} dia(s)
+              </strong>{" "}
+              de hoje em diante, em{" "}
+              <strong className="text-foreground">
+                {deleteImpact.affected_schedules} horário(s)
+              </strong>
+              . Ao eliminá-la,{" "}
+              <strong className="text-foreground">
+                {deleteImpact.drafted_schedules} horário(s) publicado(s)
+              </strong>{" "}
+              passam a rascunho e é necessário recalcular o horário.
+            </>
+          ) : ""
+        }
+        confirmLabel={deleteRuleMutation.isPending ? "A eliminar..." : "Eliminar e Passar a Rascunho"}
+        cancelLabel="Cancelar"
+        variant="warning"
       />
 
       {/* Confirmation Modal for mandatory rule without substitutes */}
