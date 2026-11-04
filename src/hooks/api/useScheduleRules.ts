@@ -3,6 +3,8 @@ import { notify } from "../../components/common/FeedbackNotification";
 import scheduleRulesService, {
   BackendScheduleRuleResource,
   CreateScheduleRulePayload,
+  DeleteScheduleRuleResult,
+  ScheduleRuleDeleteImpact,
   UpdateScheduleRulePayload,
 } from "../../api/services/scheduleRules.service";
 import { useSchool } from "../../context/SchoolContext";
@@ -84,6 +86,14 @@ export function useUpdateScheduleRule() {
   });
 }
 
+export function getDeleteConfirmation(error: any): ScheduleRuleDeleteImpact | null {
+  const data = error?.response?.data;
+  if (error?.response?.status === 409 && data?.requires_confirmation === true) {
+    return data.impact ?? null;
+  }
+  return null;
+}
+
 /**
  * Hook para eliminar uma regra de horário.
  */
@@ -91,18 +101,26 @@ export function useDeleteScheduleRule() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: string) => scheduleRulesService.delete(id),
-    onSuccess: () => {
+    mutationFn: ({ id, confirm }: { id: string; confirm?: boolean }) =>
+      scheduleRulesService.delete(id, { confirm }),
+    onSuccess: (data: DeleteScheduleRuleResult) => {
       queryClient.invalidateQueries({ queryKey: SCHEDULE_RULES_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-bootstrap"] });
-      notify.success("A regra de horário foi removida com sucesso.", "Regra Removida");
+      if (data?.impact?.requires_recalculation) {
+        notify.warning(
+          `A regra foi removida. ${data.impact.message}`,
+          "Recálculo de Escala Necessário"
+        );
+      } else {
+        notify.success("A regra de horário foi removida com sucesso.", "Regra Removida");
+      }
     },
     onError: (error: any) => {
+      if (getDeleteConfirmation(error)) return;
       const message =
         error?.response?.data?.message || "Não foi possível remover a regra de horário.";
       notify.error(message, "Erro ao Remover Regra");
     },
   });
 }
-

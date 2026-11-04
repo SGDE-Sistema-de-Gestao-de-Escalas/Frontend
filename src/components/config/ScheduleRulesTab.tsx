@@ -28,13 +28,27 @@ import {
   useCreateScheduleRule,
   useUpdateScheduleRule,
   useDeleteScheduleRule,
+  getDeleteConfirmation,
 } from "../../hooks/api/useScheduleRules";
 import { useActivityTypesList } from "../../hooks/api/useActivityTypes";
 import { useAssistantsList } from "../../hooks/api/useAssistants";
-import type { BackendScheduleRuleResource } from "../../api/services/scheduleRules.service";
+import type {
+  BackendScheduleRuleResource,
+  ScheduleRuleDeleteImpact,
+} from "../../api/services/scheduleRules.service";
 import { isFallbackActivityType } from "./ActivityTypesTab";
 
 const DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
+function formatAffectedDay(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("pt-PT", {
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
 
 export default function ScheduleRulesTab() {
   const { data: rules = [], isLoading: isLoadingRules } = useScheduleRulesList();
@@ -50,6 +64,8 @@ export default function ScheduleRulesTab() {
   const [showAdd, setShowAdd] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [deleteRuleTarget, setDeleteRuleTarget] = useState<BackendScheduleRuleResource | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<ScheduleRuleDeleteImpact | null>(null);
+  const [showAffectedDays, setShowAffectedDays] = useState(false);
 
   // Form state
   const todayStr = new Date().toISOString().split("T")[0];
@@ -916,15 +932,16 @@ export default function ScheduleRulesTab() {
 
       {/* Confirmation Modal for deleting rule */}
       <ConfirmationModal
-        open={deleteRuleTarget !== null}
+        open={deleteRuleTarget !== null && deleteImpact === null}
         onClose={() => setDeleteRuleTarget(null)}
         onConfirm={async () => {
           if (deleteRuleTarget) {
             try {
-              await deleteRuleMutation.mutateAsync(deleteRuleTarget.id);
+              await deleteRuleMutation.mutateAsync({ id: deleteRuleTarget.id });
               setDeleteRuleTarget(null);
-            } catch {
-              // Notificado no hook
+            } catch (error) {
+              const impact = getDeleteConfirmation(error);
+              if (impact) setDeleteImpact(impact);
             }
           }
         }}
@@ -948,6 +965,70 @@ export default function ScheduleRulesTab() {
         confirmLabel={deleteRuleMutation.isPending ? "A eliminar..." : "Eliminar Regra"}
         cancelLabel="Cancelar"
         variant="danger"
+      />
+
+      <ConfirmationModal
+        open={deleteRuleTarget !== null && deleteImpact !== null}
+        onClose={() => {
+          setDeleteImpact(null);
+          setShowAffectedDays(false);
+          setDeleteRuleTarget(null);
+        }}
+        onConfirm={async () => {
+          if (deleteRuleTarget) {
+            try {
+              await deleteRuleMutation.mutateAsync({ id: deleteRuleTarget.id, confirm: true });
+              setDeleteImpact(null);
+              setShowAffectedDays(false);
+              setDeleteRuleTarget(null);
+            } catch {
+              setDeleteImpact(null);
+            }
+          }
+        }}
+        title="Esta regra está em uso"
+        description={
+          deleteImpact ? (
+            <>
+              A regra está a ser usada em{" "}
+              <strong className="text-foreground">
+                {deleteImpact.affected_dates.length} dia(s)
+              </strong>{" "}
+              de hoje em diante. Ao eliminá-la, todos os horários da escola nas semanas desses dias (
+              <strong className="text-foreground">{deleteImpact.affected_schedules}</strong>, dos quais{" "}
+              <strong className="text-foreground">{deleteImpact.drafted_schedules}</strong> publicados)
+              passam a rascunho e é necessário recalcular o horário.
+              {deleteImpact.affected_days.length > 0 && (
+                <div className="mt-4 border border-border rounded-xl overflow-hidden bg-muted/20 text-left">
+                  <button
+                    type="button"
+                    onClick={() => setShowAffectedDays(!showAffectedDays)}
+                    className="w-full flex items-center justify-between p-3 text-left text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <span>Dias afetados ({deleteImpact.affected_days.length})</span>
+                    {showAffectedDays ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+
+                  {showAffectedDays && (
+                    <div className="max-h-48 overflow-y-auto divide-y divide-border p-2 space-y-1.5 text-xs text-muted-foreground">
+                      {deleteImpact.affected_days.map((day) => (
+                        <div key={day.date} className="pt-1 flex items-center justify-between gap-2">
+                          <span className="text-foreground capitalize">{formatAffectedDay(day.date)}</span>
+                          <span className="text-[11px] text-amber-600 dark:text-amber-400">
+                            {day.assistants} assistente(s) com esta regra
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          ) : ""
+        }
+        confirmLabel={deleteRuleMutation.isPending ? "A eliminar..." : "Eliminar e Passar a Rascunho"}
+        cancelLabel="Cancelar"
+        variant="warning"
       />
 
       {/* Confirmation Modal for mandatory rule without substitutes */}

@@ -87,7 +87,9 @@ apiClient.interceptors.response.use(
     }
 
     // Se o BackOffice enviou uma mensagem específica de negócio, exibimos com o FeedbackNotification
-    if (backendMessage && status !== 401 && status !== 422) {
+    const needsConfirmation = status === 409 && (data as any)?.requires_confirmation === true;
+
+    if (backendMessage && status !== 401 && status !== 422 && !needsConfirmation) {
       notify.error(
         backendMessage,
         undefined,
