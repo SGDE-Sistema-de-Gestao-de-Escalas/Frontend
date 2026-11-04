@@ -45,10 +45,17 @@ export interface UpdateScheduleRulePayload {
   assistant_ids?: string[];
 }
 
+export interface ScheduleRuleAffectedDay {
+  date: string;
+  assistants: number;
+  entries: number;
+}
+
 export interface ScheduleRuleDeleteImpact {
   has_impact: boolean;
   requires_recalculation: boolean;
   affected_dates: string[];
+  affected_days: ScheduleRuleAffectedDay[];
   affected_schedules: number;
   drafted_schedules: number;
   message: string;
