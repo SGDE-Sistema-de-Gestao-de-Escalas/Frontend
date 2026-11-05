@@ -145,6 +145,27 @@ function cloneMatrix(m: ScheduleMatrix): ScheduleMatrix {
   return c;
 }
 
+interface DayEditSnapshot {
+  hadDraft: boolean;
+  matrix: ScheduleMatrix;
+  slotMeta: Record<EntityId, Record<number, MergedScheduleBlockMeta>>;
+}
+
+function cloneDaySlotMeta(
+  meta?: Record<EntityId, Record<number, MergedScheduleBlockMeta>>
+): Record<EntityId, Record<number, MergedScheduleBlockMeta>> {
+  if (!meta) return {};
+  const copy: Record<EntityId, Record<number, MergedScheduleBlockMeta>> = {};
+  Object.entries(meta).forEach(([aid, slots]) => {
+    const slotCopy: Record<number, MergedScheduleBlockMeta> = {};
+    Object.entries(slots || {}).forEach(([s, m]) => {
+      slotCopy[Number(s)] = { ...m };
+    });
+    copy[aid] = slotCopy;
+  });
+  return copy;
+}
+
 function areRowsEqual(r1?: BlockState[], r2?: BlockState[]): boolean {
   if (!r1 || !r2) return r1 === r2;
   if (r1.length !== r2.length) return false;
@@ -186,6 +207,7 @@ export default function MatrixGrid({
 
   // Baseline das matrizes do servidor no momento em que a edição/rascunho começou (para deteção cirúrgica de conflitos)
   const baselineMatricesRef = useRef<Record<number, ScheduleMatrix>>({});
+  const [undoStackByDay, setUndoStackByDay] = useState<Record<number, DayEditSnapshot[]>>({});
   // Conflitos detetados entre o servidor e rascunhos locais ativos
   const [conflictsByDay, setConflictsByDay] = useState<
     Record<number, { assistantNames: string[]; freshServerMatrix: ScheduleMatrix }>
@@ -199,6 +221,7 @@ export default function MatrixGrid({
     setCopiedFromByDay({});
     setConflictsByDay({});
     baselineMatricesRef.current = {};
+    setUndoStackByDay({});
     setEditMode(false);
     setIsPainting(false);
     setPaintAid(null);
@@ -238,6 +261,7 @@ export default function MatrixGrid({
       setCopiedFromByDay({});
       setConflictsByDay({});
       baselineMatricesRef.current = {};
+    setUndoStackByDay({});
       setEditMode(false);
       setIsPainting(false);
       setPaintAid(null);
@@ -866,6 +890,88 @@ const [publishModalState, setPublishModalState] = useState<{
     return () => window.removeEventListener("mouseup", stop);
   }, []);
 
+  function pushUndoSnapshotForCurrentDay() {
+    const hadDraft = Boolean(draftMatricesByDay[dayOffset]);
+    const currentMatrix = draftMatricesByDay[dayOffset] ?? baseDayMatrix;
+    const currentMeta = draftSlotMetaByDay[dayOffset] ?? {};
+    const snapshot: DayEditSnapshot = {
+      hadDraft,
+      matrix: cloneMatrix(currentMatrix),
+      slotMeta: cloneDaySlotMeta(currentMeta),
+    };
+    setUndoStackByDay((prev) => {
+      const dayStack = prev[dayOffset] ?? [];
+      return {
+        ...prev,
+        [dayOffset]: [...dayStack.slice(-49), snapshot],
+      };
+    });
+  }
+
+  function undoLastDayEdit() {
+    if (!canEditCurrentDay) return;
+    const dayStack = undoStackByDay[dayOffset];
+    if (!dayStack || dayStack.length === 0) return;
+
+    const lastSnapshot = dayStack[dayStack.length - 1];
+    const remainingStack = dayStack.slice(0, -1);
+
+    setUndoStackByDay((prev) => ({
+      ...prev,
+      [dayOffset]: remainingStack,
+    }));
+
+    if (!lastSnapshot.hadDraft) {
+      delete baselineMatricesRef.current[dayOffset];
+      setDraftMatricesByDay((prev) => {
+        const copy = { ...prev };
+        delete copy[dayOffset];
+        return copy;
+      });
+      setDraftSlotMetaByDay((prev) => {
+        const copy = { ...prev };
+        delete copy[dayOffset];
+        return copy;
+      });
+    } else {
+      setDraftMatricesByDay((prev) => ({
+        ...prev,
+        [dayOffset]: cloneMatrix(lastSnapshot.matrix),
+      }));
+      setDraftSlotMetaByDay((prev) => ({
+        ...prev,
+        [dayOffset]: cloneDaySlotMeta(lastSnapshot.slotMeta),
+      }));
+    }
+  }
+
+  const undoLastDayEditRef = useRef(undoLastDayEdit);
+  undoLastDayEditRef.current = undoLastDayEdit;
+
+  useEffect(() => {
+    if (!canEditCurrentDay || showFinishModal || showDiscardConfirmModal) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        undoLastDayEditRef.current();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [canEditCurrentDay, showFinishModal, showDiscardConfirmModal]);
+
     function toggleBlockLockAtSlot(aid: EntityId, targetSlot: number) {
     if (!canEditCurrentDay) return;
     if (!baselineMatricesRef.current[dayOffset]) {
@@ -892,6 +998,7 @@ const [publishModalState, setPublishModalState] = useState<{
 
     if (!targetBlock) return;
 
+    pushUndoSnapshotForCurrentDay();
     const newIsLocked = !Boolean(targetBlock.isLocked);
 
     setDraftMatricesByDay((prev) => {
@@ -994,6 +1101,12 @@ function paintSlot(aid: EntityId, slot: number) {
 
   function discardDayDraft(offsetToDiscard: number) {
     delete baselineMatricesRef.current[offsetToDiscard];
+    setUndoStackByDay((prev) => {
+      if (!prev[offsetToDiscard]) return prev;
+      const copy = { ...prev };
+      delete copy[offsetToDiscard];
+      return copy;
+    });
     setConflictsByDay((prev) => {
       if (!prev[offsetToDiscard]) return prev;
       const copy = { ...prev };
@@ -1796,6 +1909,7 @@ function paintSlot(aid: EntityId, slot: number) {
       setDraftSlotMetaByDay({});
       setConflictsByDay({});
       baselineMatricesRef.current = {};
+    setUndoStackByDay({});
       setShowFinishModal(false);
       setEditMode(false);
       setIsPainting(false);
@@ -2392,6 +2506,7 @@ function paintSlot(aid: EntityId, slot: number) {
                                           toggleBlockLockAtSlot(assistant.id, slot);
                                           return;
                                         }
+                                        pushUndoSnapshotForCurrentDay();
                                         setIsPainting(true);
                                         setPaintAid(assistant.id);
                                         paintSlot(assistant.id, slot);
@@ -3272,6 +3387,21 @@ function paintSlot(aid: EntityId, slot: number) {
                       <span>Limpar Bloco</span>
                     </button>
 
+                    {/* Botão Desfazer (Ctrl + Z) */}
+                    <button
+                      type="button"
+                      onClick={undoLastDayEdit}
+                      disabled={!undoStackByDay[dayOffset]?.length}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-muted transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Desfazer última ação na grelha (Ctrl + Z)"
+                    >
+                      <RotateCcw size={12} />
+                      <span>Desfazer</span>
+                      <kbd className="ml-0.5 text-[9px] font-mono px-1 py-0.2 rounded bg-muted border border-border/80 text-muted-foreground">
+                        Ctrl+Z
+                      </kbd>
+                    </button>
+
                     {/* Botão Destacar Atividade (imediatamente à beira das ferramentas) */}
                     <button
                       type="button"
@@ -3683,7 +3813,7 @@ function paintSlot(aid: EntityId, slot: number) {
       {/* MODAL 2: VALIDAÇÃO E CONFIRMAÇÃO AO CONCLUIR EDIÇÃO                   */}
       {/* ===================================================================== */}
       <Dialog open={showFinishModal} onOpenChange={setShowFinishModal}>
-        <DialogContent className="w-full max-w-2xl p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl sm:max-w-2xl p-0 gap-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
           <DialogHeader className="px-6 py-4 border-b border-border bg-muted/10">
             <DialogTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
               <CheckCircle2 size={16} className="text-primary" />
@@ -3801,7 +3931,7 @@ function paintSlot(aid: EntityId, slot: number) {
             )}
           </div>
 
-          <DialogFooter className="px-6 py-4 border-t border-border bg-card flex items-center justify-between gap-3 w-full">
+          <DialogFooter className="px-6 py-4 border-t border-border bg-card flex flex-wrap items-center justify-between gap-3 w-full">
             <Button
               type="button"
               variant="outline"
@@ -3812,6 +3942,7 @@ function paintSlot(aid: EntityId, slot: number) {
                 setCopiedFromByDay({});
                 setConflictsByDay({});
                 baselineMatricesRef.current = {};
+    setUndoStackByDay({});
                 setShowFinishModal(false);
                 setEditMode(false);
               }}
@@ -3889,6 +4020,7 @@ function paintSlot(aid: EntityId, slot: number) {
                 setCopiedFromByDay({});
                 setConflictsByDay({});
                 baselineMatricesRef.current = {};
+    setUndoStackByDay({});
                 setShowDiscardConfirmModal(false);
                 setEditMode(false);
                 setIsPainting(false);
