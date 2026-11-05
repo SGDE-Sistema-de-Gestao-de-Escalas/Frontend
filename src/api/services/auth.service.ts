@@ -170,6 +170,18 @@ export const authService = {
   },
 
   /**
+   * Export own personal data as PDF (RGPD access & portability report)
+   * GET /api/me/export?format=pdf
+   */
+  async exportPersonalDataPdf(): Promise<Blob> {
+    const response = await apiClient.get<Blob>("/me/export", {
+      params: { format: "pdf" },
+      responseType: "blob",
+    });
+    return response.data;
+  },
+
+  /**
    * Get OAuth redirect authorization URL
    * GET /api/auth/{provider}/redirect
    */
