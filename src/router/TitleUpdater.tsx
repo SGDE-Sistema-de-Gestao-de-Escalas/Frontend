@@ -19,6 +19,7 @@ export const ROUTE_TITLES: Record<string, string> = {
   "/staff/account": "A Minha Conta",
   "/legacy": "Versão Anterior",
   "/legacy/staff": "Versão Anterior (Staff)",
+  "/404": "Página Não Encontrada",
 };
 
 export function getTitleForPath(pathname: string): string {

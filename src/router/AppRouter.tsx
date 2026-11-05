@@ -18,6 +18,7 @@ import Account from "../pages/Account";
 import StaffSchedule from "../pages/StaffSchedule";
 import StaffAbsences from "../pages/StaffAbsences";
 import LegacyApp from "../pages/LegacyApp";
+import NotFound from "../pages/NotFound";
 
 import TitleUpdater from "./TitleUpdater";
 import { Loader2 } from "lucide-react";
@@ -123,7 +124,14 @@ export default function AppRouter() {
       <Route path="/legacy/staff" element={<LegacyApp role="staff" />} />
 
       {/* Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route
+        path="/404"
+        element={role ? <NotFound /> : <Navigate to="/login" replace />}
+      />
+      <Route
+        path="*"
+        element={<Navigate to={role ? "/404" : "/login"} replace />}
+      />
     </Routes>
     </>
   );
