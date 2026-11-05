@@ -4,6 +4,7 @@ import {
   Save,
   Shield,
   Download,
+  FileText,
   X,
   XCircle,
   Eye,
@@ -94,6 +95,29 @@ export default function AccountProfilePage({
   const [requestingDeactivation, setRequestingDeactivation] = useState(false);
   const [deactivationReason, setDeactivationReason] = useState("");
   const [exportingData, setExportingData] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  async function handleExportPdf() {
+    setExportingPdf(true);
+    try {
+      const pdfBlob = await authService.exportPersonalDataPdf();
+      const blob = new Blob([pdfBlob], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ficha-dados-pessoais-${user?.id || "rgpd"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      notify.success("A sua Ficha de Dados Pessoais (PDF) foi descarregada com sucesso.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || "Não foi possível gerar o documento PDF com os seus dados pessoais.";
+      notify.error(msg, undefined, "Erro na Exportação");
+    } finally {
+      setExportingPdf(false);
+    }
+  }
 
   async function handleExportData() {
     setExportingData(true);
@@ -659,13 +683,31 @@ export default function AccountProfilePage({
               Portabilidade de Dados (RGPD)
             </h3>
             <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
-              Descarregue uma cópia integral de todos os seus dados pessoais e de registo guardados na plataforma (perfil de utilizador, dados profissionais e contactos de emergência) em formato estruturado JSON.
+              Descarregue uma cópia integral de todos os seus dados pessoais e de registo guardados na plataforma (perfil de utilizador, dados profissionais, morada e contactos de emergência) num documento PDF pronto a ler ou imprimir, ou em formato estruturado JSON (Artigos 15.º e 20.º do RGPD).
             </p>
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              disabled={exportingPdf || exportingData}
+              className="inline-flex items-center gap-2 px-4 py-2 mr-2.5 mb-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+            >
+              {exportingPdf ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  A gerar documento PDF...
+                </>
+              ) : (
+                <>
+                  <FileText size={14} />
+                  Descarregar Ficha de Dados Pessoais (PDF)
+                </>
+              )}
+            </button>
             <button
               type="button"
               onClick={handleExportData}
               disabled={exportingData}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-foreground text-sm font-medium hover:bg-muted/60 disabled:opacity-50 transition-colors shadow-xs"
+              className="inline-flex items-center gap-2 px-3.5 py-2 mb-2 rounded-lg border border-border text-muted-foreground hover:text-foreground text-xs font-medium hover:bg-muted/60 disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
             >
               {exportingData ? (
                 <>
@@ -675,7 +717,7 @@ export default function AccountProfilePage({
               ) : (
                 <>
                   <Download size={14} />
-                  Descarregar os Meus Dados (JSON)
+                  Formato Estruturado (JSON)
                 </>
               )}
             </button>
