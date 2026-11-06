@@ -1240,6 +1240,7 @@ export default function AbsenceManagement() {
                 <DateRangePicker
                   value={{ startDate: formStartDate, endDate: formEndDate }}
                   hasError={!!formErrors.startDate || !!formErrors.endDate}
+                  requireEndDate={true}
                   onChange={(range) => {
                     setFormStartDate(range.startDate);
                     setFormEndDate(range.endDate);
@@ -1249,9 +1250,14 @@ export default function AbsenceManagement() {
                   }}
                   className="w-full"
                 />
-                {(formErrors.startDate || formErrors.endDate) && (
+                {formErrors.startDate && (
                   <p className="text-[11px] text-destructive mt-1 font-medium">
-                    {formErrors.startDate || formErrors.endDate}
+                    {formErrors.startDate}
+                  </p>
+                )}
+                {formErrors.endDate && (
+                  <p className="text-[11px] text-destructive mt-1 font-medium">
+                    {formErrors.endDate}
                   </p>
                 )}
               </div>
