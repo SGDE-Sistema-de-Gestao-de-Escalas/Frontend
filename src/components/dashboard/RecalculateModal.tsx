@@ -3,13 +3,17 @@ import {
   AlertCircle,
   AlertTriangle,
   Building2,
+  Calendar,
   Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   Clock,
+  FastForward,
   Info,
+  ListChecks,
   Loader2,
+  SkipForward,
   Sparkles,
   Utensils,
   X,
@@ -224,22 +228,51 @@ export default function RecalculateModal({
     );
   }
 
-  // Lista de conflitos reais não satisfeitos e não ignorados
-  const conflicts: ScheduleConflictApi[] = useMemo(() => {
+  // Todos os défices reais ainda não cobertos por transferências aprovadas (usado nas métricas do Passo 3)
+  const unresolvedConflicts: ScheduleConflictApi[] = useMemo(() => {
     const raw = generationResult?.conflicts ?? [];
     return raw.filter((c) => {
-      const key = `${c.date}_${c.rule_id}_${c.period_start}`;
-      if (ignoredConflictKeys.has(key)) return false;
-      // Se já existe uma transferência aprovada que cobre este horário na mesma data, não volta a pedir
       if (approvedTransfers.some((t) => isConflictCoveredByTransfer(c, t))) {
         return false;
       }
       return true;
     });
-  }, [generationResult, ignoredConflictKeys, approvedTransfers]);
+  }, [generationResult, approvedTransfers]);
+
+  // Lista de conflitos reais não satisfeitos e não ignorados (fila de revisão no Passo 2)
+  const conflicts: ScheduleConflictApi[] = useMemo(() => {
+    return unresolvedConflicts.filter((c) => {
+      const key = `${c.date}_${c.rule_id}_${c.period_start}`;
+      return !ignoredConflictKeys.has(key);
+    });
+  }, [unresolvedConflicts, ignoredConflictKeys]);
 
   const activeConflict =
     conflicts[Math.min(currentConflictIdx, Math.max(0, conflicts.length - 1))];
+
+  const conflictsByDate = useMemo(() => {
+    const map = new Map<string, { conflict: ScheduleConflictApi; globalIdx: number }[]>();
+    conflicts.forEach((conflict, idx) => {
+      const list = map.get(conflict.date) ?? [];
+      list.push({ conflict, globalIdx: idx });
+      map.set(conflict.date, list);
+    });
+    return Array.from(map.entries()).map(([date, items]) => ({ date, items }));
+  }, [conflicts]);
+
+  const conflictsOnActiveDay = useMemo(() => {
+    if (!activeConflict) return [];
+    return conflicts.filter((c) => c.date === activeConflict.date);
+  }, [conflicts, activeConflict]);
+
+  const zeroCandidateConflictsCount = useMemo(() => {
+    return conflicts.filter(
+      (c) =>
+        (c.transfer_candidates ?? []).filter(
+          (cand) => !cand.is_absent && cand.selectable !== false
+        ).length === 0
+    ).length;
+  }, [conflicts]);
 
   const candidatesForActiveConflict: TransferCandidateApi[] =
     activeConflict?.transfer_candidates ?? [];
@@ -570,37 +603,85 @@ export default function RecalculateModal({
     }
   }
 
+  function handleSkipDayConflicts(dateToSkip: string) {
+    const newIgnored = new Set(ignoredConflictKeys);
+    conflicts
+      .filter((c) => c.date === dateToSkip)
+      .forEach((c) => {
+        newIgnored.add(`${c.date}_${c.rule_id}_${c.period_start}`);
+      });
+    setIgnoredConflictKeys(newIgnored);
+
+    const remaining = conflicts.filter((c) => c.date !== dateToSkip);
+    setSelectedSubstituteId(null);
+    setSubstituteSchoolFilter("all");
+    setTransferTimeMode("deficit");
+    setTransferCustomStart("");
+    setTransferCustomEnd("");
+
+    if (remaining.length === 0) {
+      setStep("done");
+      return;
+    }
+
+    setCurrentConflictIdx(0);
+  }
+
+  function handleSkipZeroCandidateConflicts() {
+    const newIgnored = new Set(ignoredConflictKeys);
+    conflicts.forEach((c) => {
+      const availCount = (c.transfer_candidates ?? []).filter(
+        (cand) => !cand.is_absent && cand.selectable !== false
+      ).length;
+      if (availCount === 0) {
+        newIgnored.add(`${c.date}_${c.rule_id}_${c.period_start}`);
+      }
+    });
+    setIgnoredConflictKeys(newIgnored);
+
+    const remaining = conflicts.filter((c) => {
+      const availCount = (c.transfer_candidates ?? []).filter(
+        (cand) => !cand.is_absent && cand.selectable !== false
+      ).length;
+      return availCount > 0;
+    });
+
+    setSelectedSubstituteId(null);
+    setSubstituteSchoolFilter("all");
+    setTransferTimeMode("deficit");
+    setTransferCustomStart("");
+    setTransferCustomEnd("");
+
+    if (remaining.length === 0) {
+      setStep("done");
+      return;
+    }
+
+    setCurrentConflictIdx(0);
+  }
+
+  function handleSkipAllConflicts() {
+    const newIgnored = new Set(ignoredConflictKeys);
+    conflicts.forEach((c) => {
+      newIgnored.add(`${c.date}_${c.rule_id}_${c.period_start}`);
+    });
+    setIgnoredConflictKeys(newIgnored);
+    setSelectedSubstituteId(null);
+    setSubstituteSchoolFilter("all");
+    setTransferTimeMode("deficit");
+    setTransferCustomStart("");
+    setTransferCustomEnd("");
+    setStep("done");
+  }
+
   async function handleFinalizeWithTransfers(
-    transfersToApply: (ApprovedTransferPayload & {
+    _transfersToApply: (ApprovedTransferPayload & {
       assistant_name: string;
       origin_school_name: string;
       period: string;
     })[]
   ) {
-    if (transfersToApply.length > 0 && generationResult) {
-      try {
-        const preserveLocked = strategy === "auto" && respectExceptions;
-        const updatedResult = await generateMutation.mutateAsync({
-          start_date: startDate,
-          end_date: endDate,
-          preserve_locked: preserveLocked,
-          idempotency_key: crypto.randomUUID(),
-          transfers: transfersToApply.map((t) => ({
-            assistant_id: t.assistant_id,
-            date: t.date,
-            rule_id: t.rule_id,
-            start_time: t.start_time,
-            end_time: t.end_time,
-            notes: t.notes,
-          })),
-        });
-        setGenerationResult(updatedResult);
-        onGenerated?.(updatedResult);
-      } catch {
-        // Mantém o resultado anterior
-      }
-    }
-
+    // As transferências aprovadas já foram recalculadas no passo de confirmação individual
     setStep("done");
   }
 
@@ -784,32 +865,107 @@ export default function RecalculateModal({
           {/* ========================================================= */}
           {step === "gap" && activeConflict && (
             <div className="space-y-4">
-              {/* Barra de Progresso e Navegação dos Défices */}
+              {/* Atalho Rápido quando existem défices sem nenhum candidato disponível */}
+              {conflicts.length > 1 && zeroCandidateConflictsCount > 0 && (
+                <div className="px-3 py-2 rounded-xl border border-amber-300/70 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/30 flex items-center justify-between gap-2 text-xs">
+                  <span className="text-amber-900 dark:text-amber-200 text-[11px]">
+                    Existem <strong>{zeroCandidateConflictsCount}</strong> défice(s) sem assistentes disponíveis noutras escolas.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleSkipZeroCandidateConflicts}
+                    className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-900 dark:text-amber-200 font-semibold text-[11px] shrink-0 transition-colors cursor-pointer"
+                  >
+                    Saltar sem candidatos ({zeroCandidateConflictsCount})
+                  </button>
+                </div>
+              )}
+
+              {/* Navegação Agrupada por Dia (Opção 2) */}
               {conflicts.length > 1 && (
-                <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-muted/40 border border-border/70 text-xs">
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-semibold text-foreground">
-                      Défice {currentConflictIdx + 1} de {conflicts.length}
+                <div className="space-y-2 p-3 rounded-xl bg-muted/30 border border-border/70 text-xs">
+                  <div className="flex items-center justify-between gap-2 text-[11px] pb-1 border-b border-border/50">
+                    <span className="font-semibold text-foreground flex items-center gap-1.5">
+                      <Calendar size={13} className="text-primary" />
+                      <span>
+                        Défice {currentConflictIdx + 1} de {conflicts.length} ({conflictsByDate.length}{" "}
+                        {conflictsByDate.length === 1 ? "dia afetado" : "dias afetados"})
+                      </span>
                     </span>
-                    <div className="flex items-center gap-1.5">
-                      {conflicts.map((_, idx) => (
-                        <div
-                          key={idx}
-                          className={`h-2 rounded-full transition-all ${
-                            idx === currentConflictIdx
-                              ? "w-6 bg-primary shadow-xs"
-                              : idx < currentConflictIdx
-                              ? "w-2.5 bg-emerald-500"
-                              : "w-2.5 bg-muted-foreground/30"
-                          }`}
-                        />
-                      ))}
-                    </div>
+                    {approvedTransfers.length > 0 && (
+                      <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                        ✓ {approvedTransfers.length} {approvedTransfers.length === 1 ? "designada" : "designadas"}
+                      </span>
+                    )}
                   </div>
-                  {approvedTransfers.length > 0 && (
-                    <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
-                      ✓ {approvedTransfers.length} {approvedTransfers.length === 1 ? "designada" : "designadas"}
-                    </span>
+
+                  <div className="flex items-center justify-between gap-2 flex-wrap pt-0.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {conflictsByDate.map(({ date, items }) => {
+                        const isActiveDate = activeConflict.date === date;
+                        return (
+                          <button
+                            key={date}
+                            type="button"
+                            onClick={() => {
+                              setCurrentConflictIdx(items[0].globalIdx);
+                              setSelectedSubstituteId(null);
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                              isActiveDate
+                                ? "bg-primary text-primary-foreground shadow-xs"
+                                : "bg-card text-muted-foreground hover:text-foreground border border-border"
+                            }`}
+                          >
+                            <span>{date.slice(5)}</span>
+                            <span
+                              className={`font-mono text-[10px] px-1.5 py-0.2 rounded-full ${
+                                isActiveDate
+                                  ? "bg-primary-foreground/20 text-primary-foreground"
+                                  : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {items.length}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {conflictsOnActiveDay.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleSkipDayConflicts(activeConflict.date)}
+                        className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <SkipForward size={12} />
+                        <span>Saltar dia {activeConflict.date.slice(5)} ({conflictsOnActiveDay.length})</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {conflictsOnActiveDay.length > 1 && (
+                    <div className="flex items-center gap-1.5 pt-1.5 border-t border-border/60 overflow-x-auto">
+                      {conflictsByDate
+                        .find((d) => d.date === activeConflict.date)
+                        ?.items.map(({ conflict, globalIdx }, idxInDay) => (
+                          <button
+                            key={`${conflict.date}_${conflict.rule_id}_${conflict.period_start}`}
+                            type="button"
+                            onClick={() => {
+                              setCurrentConflictIdx(globalIdx);
+                              setSelectedSubstituteId(null);
+                            }}
+                            className={`px-2 py-1 rounded-md text-[11px] font-mono transition-colors shrink-0 cursor-pointer ${
+                              globalIdx === currentConflictIdx
+                                ? "bg-primary/15 text-primary font-semibold border border-primary/30"
+                                : "text-muted-foreground hover:bg-muted"
+                            }`}
+                          >
+                            #{idxInDay + 1} {conflict.period_start}–{conflict.period_end}
+                          </button>
+                        ))}
+                    </div>
                   )}
                 </div>
               )}
@@ -1164,12 +1320,12 @@ export default function RecalculateModal({
               <div className="text-center space-y-1.5 py-1">
                 <div
                   className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2.5 shadow-xs ${
-                    conflicts.length === 0
+                    unresolvedConflicts.length === 0
                       ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                       : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
                   }`}
                 >
-                  {conflicts.length === 0 ? (
+                  {unresolvedConflicts.length === 0 ? (
                     <CheckCircle2 size={26} strokeWidth={2.2} />
                   ) : (
                     <AlertTriangle size={26} strokeWidth={2.2} />
@@ -1179,7 +1335,7 @@ export default function RecalculateModal({
                 <h4 className="text-base font-semibold text-foreground">
                   {isPublished
                     ? "Escala Publicada com Sucesso"
-                    : conflicts.length === 0
+                    : unresolvedConflicts.length === 0
                     ? "Escala Gerada com Sucesso"
                     : "Escala Gerada com Alertas de Cobertura"}
                 </h4>
@@ -1188,6 +1344,23 @@ export default function RecalculateModal({
                     ? "As alterações foram gravadas na base de dados e os horários já se encontram visíveis na plataforma."
                     : `Período calculado de ${startDate} a ${endDate} para ${currentSchool?.name ?? "a escola selecionada"}.`}
                 </p>
+
+                {!isPublished && unresolvedConflicts.length > 0 && (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIgnoredConflictKeys(new Set());
+                        setCurrentConflictIdx(0);
+                        setStep("gap");
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-300 text-[11px] font-semibold transition-colors cursor-pointer"
+                    >
+                      <ListChecks size={12} />
+                      <span>Rever Défices em Falta ({unresolvedConflicts.length})</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Cartões de Métricas (4 Colunas idênticas às métricas do CSV) */}
@@ -1214,12 +1387,12 @@ export default function RecalculateModal({
                   <div className="p-3 rounded-xl border border-border bg-card/60 text-center shadow-xs">
                     <p
                       className={`text-2xl font-bold font-mono ${
-                        conflicts.length === 0
+                        unresolvedConflicts.length === 0
                           ? "text-emerald-600 dark:text-emerald-400"
                           : "text-amber-600 dark:text-amber-400"
                       }`}
                     >
-                      {conflicts.length}
+                      {unresolvedConflicts.length}
                     </p>
                     <p className="text-[11px] font-medium text-muted-foreground mt-0.5">
                       Défices em Falta
@@ -1367,17 +1540,49 @@ export default function RecalculateModal({
           )}
 
           {step === "gap" && (
-            <div className="flex items-center justify-between w-full gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isRunning}
-                onClick={() => handleAdvanceFromConflict(null)}
-                className="cursor-pointer"
-              >
-                {conflicts.length > 1 ? "Saltar este Défice" : "Ignorar Défice e Concluir"}
-              </Button>
+            <div className="flex items-center justify-between w-full gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isRunning}
+                  onClick={() => handleAdvanceFromConflict(null)}
+                  className="cursor-pointer"
+                >
+                  {conflicts.length > 1 ? "Saltar este Défice" : "Ignorar Défice e Concluir"}
+                </Button>
+
+                {conflictsOnActiveDay.length > 1 && activeConflict && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isRunning}
+                    onClick={() => handleSkipDayConflicts(activeConflict.date)}
+                    className="cursor-pointer gap-1 text-muted-foreground hover:text-foreground"
+                    title={`Ignorar todos os ${conflictsOnActiveDay.length} défices do dia ${activeConflict.date}`}
+                  >
+                    <SkipForward size={13} />
+                    <span>Saltar Dia ({conflictsOnActiveDay.length})</span>
+                  </Button>
+                )}
+
+                {conflicts.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={isRunning}
+                    onClick={handleSkipAllConflicts}
+                    className="cursor-pointer gap-1 font-semibold"
+                    title="Ignorar todos os défices pendentes e avançar imediatamente para o resumo"
+                  >
+                    <FastForward size={13} />
+                    <span>Ignorar Todos ({conflicts.length}) e Concluir</span>
+                  </Button>
+                )}
+              </div>
 
               <Button
                 type="button"
