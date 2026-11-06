@@ -28,6 +28,7 @@ export interface DateRangePickerProps {
   allowClear?: boolean;
   maxDays?: number;
   selectWeekOnly?: boolean;
+  requireEndDate?: boolean;
   isDateDisabled?: (isoDate: string) => boolean;
   align?: "start" | "center" | "end";
   customTriggerLabel?: string;
@@ -113,6 +114,7 @@ export default function DateRangePicker({
   allowClear = true,
   maxDays,
   selectWeekOnly = false,
+  requireEndDate = false,
   isDateDisabled: customIsDateDisabled,
   align = "start",
   customTriggerLabel,
@@ -389,6 +391,7 @@ export default function DateRangePicker({
 
   function handleApply() {
     if (!draftStart) return;
+    if (requireEndDate && !draftEnd) return;
     let finalEnd = draftEnd;
     if (!finalEnd) {
       if (selectWeekOnly) {
@@ -422,6 +425,9 @@ export default function DateRangePicker({
       return `${value.startDate}  —  ${value.endDate}`;
     }
     if (value.startDate) {
+      if (requireEndDate && !value.endDate) {
+        return `${value.startDate}  —  (selecionar fim)`;
+      }
       return `Desde ${value.startDate}`;
     }
     return placeholder;
@@ -720,14 +726,20 @@ export default function DateRangePicker({
               </span>
             </div>
             <span className="text-muted-foreground shrink-0 select-none">—</span>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border bg-card shrink-0 whitespace-nowrap">
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border shrink-0 whitespace-nowrap transition-colors ${
+              requireEndDate && draftStart && !draftEnd
+                ? "border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                : "border-border bg-card text-foreground"
+            }`}>
               <span className="text-[10px] uppercase font-semibold text-muted-foreground select-none">
                 Fim
               </span>
-              <span className="font-mono font-medium text-foreground whitespace-nowrap">
+              <span className="font-mono font-medium whitespace-nowrap">
                 {draftEnd ||
                   (selectWeekOnly && draftStart
                     ? toIso(getSundayOfDate(parseFlexibleDate(draftStart) || new Date()))
+                    : requireEndDate && draftStart
+                    ? "Selecione o fim"
                     : "—")}
               </span>
             </div>
@@ -764,9 +776,15 @@ export default function DateRangePicker({
               </button>
             )}
 
+            {requireEndDate && draftStart && !draftEnd && (
+              <span className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium whitespace-nowrap shrink-0">
+                <AlertCircle size={12} /> Selecione o fim (ou clique no mesmo dia para 1 dia)
+              </span>
+            )}
+
             <button
               type="button"
-              disabled={!draftStart || isMaxDaysExceeded}
+              disabled={!draftStart || (requireEndDate && !draftEnd) || isMaxDaysExceeded}
               onClick={handleApply}
               className="flex items-center gap-1 px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors shadow-xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0 whitespace-nowrap"
             >

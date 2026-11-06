@@ -175,6 +175,7 @@ export default function QuickAbsenceModal({
                 value={{ startDate: start, endDate: end }}
                 hasError={!!dateErrors.start || !!dateErrors.end}
                 allowClear={false}
+                requireEndDate={true}
                 onChange={(range) => {
                   setStart(range.startDate);
                   setEnd(range.endDate);
@@ -184,9 +185,14 @@ export default function QuickAbsenceModal({
                 }}
                 className="w-full"
               />
-              {(dateErrors.start || dateErrors.end) && (
+              {dateErrors.start && (
                 <p className="text-[11px] text-destructive mt-1 font-medium">
-                  {dateErrors.start || dateErrors.end}
+                  {dateErrors.start}
+                </p>
+              )}
+              {dateErrors.end && (
+                <p className="text-[11px] text-destructive mt-1 font-medium">
+                  {dateErrors.end}
                 </p>
               )}
             </div>
