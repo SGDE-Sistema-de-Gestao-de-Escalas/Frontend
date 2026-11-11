@@ -1,6 +1,7 @@
 import { useSearchParams } from "react-router-dom";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
+  Camera,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -34,6 +35,7 @@ import ConfirmationModal from "../common/ConfirmationModal";
 import SearchableSelect from "../common/SearchableSelect";
 import AssistantSelect, { isAssistantActive } from "../common/AssistantSelect";
 import ActionTooltip from "../common/ActionTooltip";
+import CameraCaptureModal from "../common/CameraCaptureModal";
 import {
   useAbsencesList,
   useAbsenceCounts,
@@ -220,6 +222,41 @@ export default function AbsenceManagement() {
   const [formDocumentName, setFormDocumentName] = useState<string>("");
   const [formDocumentFile, setFormDocumentFile] = useState<File | null>(null);
   const [formRemoveDocument, setFormRemoveDocument] = useState<boolean>(false);
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const [cameraTarget, setCameraTarget] = useState<"form" | "selected" | null>(null);
+  const nativeCameraInputRef = useRef<HTMLInputElement>(null);
+
+  function triggerCameraCapture(target: "form" | "selected") {
+    setCameraTarget(target);
+    const isMobile =
+      typeof navigator !== "undefined" &&
+      (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      ) ||
+        (navigator.maxTouchPoints > 1 && !/Windows NT/.test(navigator.userAgent)));
+
+    // Em dispositivos móveis ou conexões sem HTTPS/SSL, abre diretamente a app da câmara do telemóvel
+    if (isMobile || !window.isSecureContext || !navigator?.mediaDevices?.getUserMedia) {
+      nativeCameraInputRef.current?.click();
+    } else {
+      setIsCameraModalOpen(true);
+    }
+  }
+
+  async function handleCameraCapture(file: File) {
+    if (cameraTarget === "form") {
+      setFormDocumentFile(file);
+      setFormDocumentName(file.name);
+      setFormRemoveDocument(false);
+    } else if (cameraTarget === "selected" && selectedAbsence) {
+      await uploadDocMutation.mutateAsync({
+        id: selectedAbsence.id,
+        file,
+      });
+    }
+    setIsCameraModalOpen(false);
+    setCameraTarget(null);
+  }
   const [formErrors, setFormErrors] = useState<{
     assistant?: string;
     absenceType?: string;
@@ -1045,24 +1082,34 @@ export default function AbsenceManagement() {
                     <div className="text-xs text-muted-foreground">
                       Nenhum documento comprovativo anexado até ao momento.
                     </div>
-                    <label className="text-[11px] text-primary font-medium hover:underline cursor-pointer flex items-center gap-1 flex-shrink-0">
-                      <Paperclip size={12} />
-                      <span>Anexar agora</span>
-                      <input
-                        type="file"
-                        className="hidden"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            await uploadDocMutation.mutateAsync({
-                              id: selectedAbsence.id,
-                              file,
-                            });
-                          }
-                        }}
-                      />
-                    </label>
+                    <div className="flex items-center gap-3">
+                      <label className="text-[11px] text-primary font-medium hover:underline cursor-pointer flex items-center gap-1 flex-shrink-0">
+                        <Paperclip size={12} />
+                        <span>Anexar ficheiro</span>
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              await uploadDocMutation.mutateAsync({
+                                id: selectedAbsence.id,
+                                file,
+                              });
+                            }
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => triggerCameraCapture("selected")}
+                        className="text-[11px] text-primary font-medium hover:underline cursor-pointer flex items-center gap-1 flex-shrink-0"
+                      >
+                        <Camera size={12} />
+                        <span>Tirar foto</span>
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1340,6 +1387,15 @@ export default function AbsenceManagement() {
                     accept=".pdf,.jpg,.jpeg,.png"
                   />
                 </label>
+                <button
+                  type="button"
+                  onClick={() => triggerCameraCapture("form")}
+                  className="px-2.5 py-2 rounded-lg border border-border bg-input-background text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors"
+                  title="Tirar foto com a câmara"
+                >
+                  <Camera size={13} className="text-primary" />
+                  <span className="hidden sm:inline">Tirar Foto</span>
+                </button>
                 {formDocumentName && (
                   <button
                     type="button"
@@ -1503,6 +1559,32 @@ export default function AbsenceManagement() {
             <XCircle size={22} className="text-destructive" />
           ) : undefined
         }
+      />
+
+      {/* Input nativo com capture para abrir diretamente a app de câmara do telemóvel sem certificados SSL */}
+      <input
+        ref={nativeCameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            handleCameraCapture(file);
+            e.target.value = "";
+          }
+        }}
+      />
+
+      {/* Modal de Captura de Foto para Comprovativo */}
+      <CameraCaptureModal
+        open={isCameraModalOpen}
+        onClose={() => {
+          setIsCameraModalOpen(false);
+          setCameraTarget(null);
+        }}
+        onCapture={handleCameraCapture}
       />
     </div>
   );
