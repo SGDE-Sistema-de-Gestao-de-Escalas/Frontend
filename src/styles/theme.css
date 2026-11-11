@@ -1,6 +1,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  color-scheme: light;
   --font-size: 15px;
   --background: #F4F5F7;
   --foreground: #1B1C21;
@@ -42,9 +43,16 @@
   --font-display: 'Lexend', system-ui, sans-serif;
   --font-body: 'Public Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+
+  /* Scrollbars integradas no tema (Modo Claro) */
+  --scrollbar-thumb: rgba(20, 22, 28, 0.20);
+  --scrollbar-thumb-hover: rgba(20, 22, 28, 0.35);
+  --scrollbar-thumb-active: #00B884;
+  --scrollbar-track: transparent;
 }
 
 .dark {
+  color-scheme: dark;
   --background: #0D0E11;
   --foreground: #E7E8EA;
   --card: #17181C;
@@ -81,6 +89,12 @@
   --sidebar-accent-foreground: #00C896;
   --sidebar-border: rgba(255, 255, 255, 0.06);
   --sidebar-ring: #00C896;
+
+  /* Scrollbars integradas no tema (Modo Escuro) */
+  --scrollbar-thumb: rgba(255, 255, 255, 0.20);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.35);
+  --scrollbar-thumb-active: #00C896;
+  --scrollbar-track: transparent;
 }
 
 @theme inline {
@@ -130,8 +144,47 @@
 }
 
 @layer base {
+  /* Suporte Padrão W3C de Scrollbars (Firefox, Chrome 121+, Safari 18.2+) */
+  html,
   * {
     @apply border-border outline-ring/50;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    scrollbar-width: thin;
+  }
+
+  /* Scrollbars Estilizadas e Arredondadas para Motores WebKit / Blink (Chrome, Edge, Opera, Safari) */
+  ::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    transition: background-color 0.15s ease-in-out;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:active {
+    background-color: var(--scrollbar-thumb-active);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
 
   body {

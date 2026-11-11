@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  Camera,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
@@ -25,8 +26,12 @@ import {
   useUploadAbsenceDocument,
   useUpdateAbsence,
 } from "../../hooks/api/useAbsences";
+import { useAbsenceTypesList } from "../../hooks/api/useAbsenceTypes";
 import absencesService from "../../api/services/absences.service";
 import { notify } from "../common/FeedbackNotification";
+import DateRangePicker, { type DateRange } from "../common/DateRangePicker";
+import SearchableSelect from "../common/SearchableSelect";
+import CameraCaptureModal from "../common/CameraCaptureModal";
 
 type StatusFilterTab = "all" | "pending" | "justified" | "unjustified";
 
@@ -35,7 +40,7 @@ export default function StaffAbsenceDetail() {
     string | number | null
   >(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilterTab>("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedAbsenceType, setSelectedAbsenceType] = useState<string>("");
   const [startDateFilter, setStartDateFilter] = useState("");
   const [endDateFilter, setEndDateFilter] = useState("");
 
@@ -43,6 +48,25 @@ export default function StaffAbsenceDetail() {
   const [detailJustification, setDetailJustification] = useState("");
   const [detailFile, setDetailFile] = useState<File | null>(null);
   const [isReplacingFile, setIsReplacingFile] = useState(false);
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const nativeCameraInputRef = useRef<HTMLInputElement>(null);
+
+  function handleTriggerCamera() {
+    const isMobile =
+      typeof navigator !== "undefined" &&
+      (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      ) ||
+        (navigator.maxTouchPoints > 1 && !/Windows NT/.test(navigator.userAgent)));
+
+    // Em dispositivos móveis ou ambientes sem HTTPS (onde o WebRTC na janela do browser é bloqueado),
+    // abre imediatamente a app nativa da câmara do telemóvel (sem exigir certificados SSL).
+    if (isMobile || !window.isSecureContext || !navigator?.mediaDevices?.getUserMedia) {
+      nativeCameraInputRef.current?.click();
+    } else {
+      setIsCameraModalOpen(true);
+    }
+  }
 
   // API Hooks
   const {
@@ -54,8 +78,35 @@ export default function StaffAbsenceDetail() {
   });
   const absences = absencesResult?.data || [];
 
+  const { data: absenceTypes = [] } = useAbsenceTypesList();
+
   const uploadDocMutation = useUploadAbsenceDocument();
   const updateMutation = useUpdateAbsence();
+
+  // Opções para o dropdown de motivos existentes
+  const absenceTypeOptions = useMemo(() => {
+    const list: { value: string; label: string }[] = [];
+
+    (absenceTypes || []).forEach((t) => {
+      if (t.name && !list.some((o) => o.label.toLowerCase() === t.name.toLowerCase())) {
+        list.push({ value: t.name, label: t.name });
+      }
+    });
+
+    absences.forEach((a) => {
+      const name = a.absence_type_name || a.absence_type?.name;
+      if (name && !list.some((o) => o.label.toLowerCase() === name.toLowerCase())) {
+        list.push({ value: name, label: name });
+      }
+    });
+
+    list.sort((a, b) => a.label.localeCompare(b.label, "pt"));
+
+    return [
+      { value: "", label: "Todos os motivos" },
+      ...list,
+    ];
+  }, [absenceTypes, absences]);
 
   // Ausência selecionada para a vista detalhada
   const selectedAbsenceDetail = absences.find(
@@ -98,21 +149,19 @@ export default function StaffAbsenceDetail() {
       if (startDateFilter && a.valid_from < startDateFilter) return false;
       if (endDateFilter && a.valid_until > endDateFilter) return false;
 
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+      if (selectedAbsenceType) {
+        const normSelected = selectedAbsenceType.toLowerCase();
         const reason = (
           a.absence_type_name ||
           a.absence_type?.name ||
-          a.justification ||
           ""
         ).toLowerCase();
-        const notes = (a.notes || "").toLowerCase();
-        if (!reason.includes(q) && !notes.includes(q)) return false;
+        if (reason !== normSelected) return false;
       }
 
       return true;
     });
-  }, [absences, statusFilter, startDateFilter, endDateFilter, searchQuery]);
+  }, [absences, statusFilter, startDateFilter, endDateFilter, selectedAbsenceType]);
 
   const renderStatusBadge = (s: string) => {
     const st = (s || "").toLowerCase();
@@ -241,25 +290,6 @@ export default function StaffAbsenceDetail() {
           <ChevronLeft size={16} />
           <span>Voltar à lista de ausências</span>
         </button>
-
-        {/* Aviso de Comprovativo Obrigatório */}
-        {selectedAbsenceDetail.requires_document && !hasExistingDoc && (
-          <div className="flex items-start gap-3 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-200 text-xs">
-            <AlertTriangle
-              size={18}
-              className="text-amber-600 flex-shrink-0 mt-0.5"
-            />
-            <div>
-              <p className="font-semibold">
-                Documento Comprovativo Obrigatório
-              </p>
-              <p className="opacity-90 mt-0.5">
-                Este tipo de ausência requer a apresentação de comprovativo
-                oficial (atestado médico, declaração de presença ou certidão).
-              </p>
-            </div>
-          </div>
-        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* Coluna 1: Informações Gerais da Ausência */}
@@ -425,40 +455,88 @@ export default function StaffAbsenceDetail() {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-dashed border-border hover:border-primary cursor-pointer transition-colors bg-muted/10 flex-1 truncate">
-                        <Upload
-                          size={14}
-                          className="text-muted-foreground flex-shrink-0"
-                        />
-                        <span className="text-xs text-muted-foreground flex-1 truncate">
-                          {detailFile
-                            ? `${detailFile.name} (${Math.round(
-                                detailFile.size / 1024
-                              )} KB)`
-                            : "Selecionar ficheiro (PDF, JPG, PNG até 5MB)..."}
-                        </span>
-                        <input
-                          type="file"
-                          className="hidden"
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) setDetailFile(f);
-                          }}
-                        />
-                      </label>
-                      {detailFile && (
+                    {detailFile ? (
+                      <div className="flex items-center gap-2.5 p-2.5 rounded-lg border border-border bg-card">
+                        {detailFile.type.startsWith("image/") ? (
+                          <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden border border-border/60">
+                            <img
+                              src={URL.createObjectURL(detailFile)}
+                              alt="Preview"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 text-primary">
+                            <FileText size={18} />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-foreground truncate">
+                            {detailFile.name}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {Math.round(detailFile.size / 1024)} KB · Pronto para submeter
+                          </p>
+                        </div>
                         <button
                           type="button"
                           onClick={() => setDetailFile(null)}
-                          className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-destructive transition-colors"
-                          title="Remover ficheiro selecionado"
+                          className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                          title="Remover ficheiro"
                         >
                           <X size={14} />
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        {/* Input nativo com capture para abrir logo a app da câmara do telemóvel sem exigir certificados SSL */}
+                        <input
+                          ref={nativeCameraInputRef}
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) {
+                              setDetailFile(f);
+                              e.target.value = "";
+                            }
+                          }}
+                        />
+
+                        {/* Opção 1: Escolher ficheiro */}
+                        <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-dashed border-border hover:border-primary cursor-pointer transition-colors bg-muted/10 flex-1 truncate">
+                          <Upload
+                            size={14}
+                            className="text-muted-foreground flex-shrink-0"
+                          />
+                          <span className="text-xs text-muted-foreground flex-1 truncate">
+                            Escolher ficheiro (PDF, JPG, PNG)...
+                          </span>
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) setDetailFile(f);
+                            }}
+                          />
+                        </label>
+
+                        {/* Opção 2: Tirar foto na hora */}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleTriggerCamera}
+                          className="text-xs gap-1.5 h-10 border-dashed border-border hover:border-primary shrink-0 cursor-pointer"
+                        >
+                          <Camera size={14} className="text-primary" />
+                          <span>Tirar Foto</span>
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -582,6 +660,13 @@ export default function StaffAbsenceDetail() {
             </Card>
           </div>
         </div>
+
+        {/* Modal de Captura de Foto para Justificação */}
+        <CameraCaptureModal
+          open={isCameraModalOpen}
+          onClose={() => setIsCameraModalOpen(false)}
+          onCapture={(file) => setDetailFile(file)}
+        />
       </div>
     );
   }
@@ -641,49 +726,43 @@ export default function StaffAbsenceDetail() {
         })}
       </div>
 
-      {/* Barra de Pesquisa e Filtro de Datas */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-        <div className="relative">
-          <Search
-            size={14}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Pesquisar por motivo..."
-            className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </div>
-
+      {/* Dropdown de Motivos Existentes e Filtro de Datas */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 items-center">
         <div>
-          <input
-            type="date"
-            value={startDateFilter}
-            onChange={(e) => setStartDateFilter(e.target.value)}
-            title="Data a partir de"
-            className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          <SearchableSelect
+            value={selectedAbsenceType}
+            onChange={(val) => setSelectedAbsenceType(val)}
+            options={absenceTypeOptions}
+            placeholder="Todos os motivos"
+            searchPlaceholder="Pesquisar motivo..."
+            emptyMessage="Nenhum motivo encontrado."
+            size="default"
+            className="w-full"
           />
         </div>
 
         <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={endDateFilter}
-            onChange={(e) => setEndDateFilter(e.target.value)}
-            title="Data até"
-            className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-          {(searchQuery || startDateFilter || endDateFilter) && (
+          <div className="flex-1">
+            <DateRangePicker
+              value={{ startDate: startDateFilter, endDate: endDateFilter }}
+              onChange={(range: DateRange) => {
+                setStartDateFilter(range.startDate);
+                setEndDateFilter(range.endDate);
+              }}
+              allowClear={true}
+              placeholder="Filtrar por período de ausência"
+              className="w-full"
+            />
+          </div>
+          {(selectedAbsenceType || startDateFilter || endDateFilter) && (
             <button
               type="button"
               onClick={() => {
-                setSearchQuery("");
+                setSelectedAbsenceType("");
                 setStartDateFilter("");
                 setEndDateFilter("");
               }}
-              className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors text-xs flex-shrink-0"
+              className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors text-xs flex-shrink-0 cursor-pointer"
               title="Limpar filtros"
             >
               <X size={14} />
@@ -855,6 +934,13 @@ export default function StaffAbsenceDetail() {
           </div>
         </>
       )}
+
+      {/* Modal de Captura de Foto para Justificação */}
+      <CameraCaptureModal
+        open={isCameraModalOpen}
+        onClose={() => setIsCameraModalOpen(false)}
+        onCapture={(file) => setDetailFile(file)}
+      />
     </div>
   );
 }

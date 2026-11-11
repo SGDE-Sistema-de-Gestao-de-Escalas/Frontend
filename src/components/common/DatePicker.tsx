@@ -8,6 +8,8 @@ export interface DatePickerPreset {
   value: string; // Formato YYYY-MM-DD
 }
 
+export type DatePickerScopeMode = "day" | "week" | "month";
+
 export interface DatePickerProps {
   value: string;
   onChange: (v: string) => void;
@@ -21,6 +23,14 @@ export interface DatePickerProps {
   isDateDisabled?: (isoDate: string) => boolean;
   getDayTooltip?: (isoDate: string) => string | undefined;
   presets?: DatePickerPreset[];
+  customTriggerLabel?: string;
+  align?: "start" | "center" | "end";
+  selectMonthOnly?: boolean;
+  scopeMode?: DatePickerScopeMode;
+  onScopeModeChange?: (mode: DatePickerScopeMode) => void;
+  allowedScopeModes?: DatePickerScopeMode[];
+  selectedWeekStart?: string; // YYYY-MM-DD
+  selectedWeekEnd?: string;   // YYYY-MM-DD
 }
 
 export function parseFlexibleDate(value: string | null | undefined): Date | null {
@@ -162,9 +172,20 @@ export default function DatePicker({
   isDateDisabled: customIsDateDisabled,
   getDayTooltip,
   presets,
+  customTriggerLabel,
+  align = "start",
+  selectMonthOnly = false,
+  scopeMode,
+  onScopeModeChange,
+  allowedScopeModes,
+  selectedWeekStart,
+  selectedWeekEnd,
 }: DatePickerProps) {
   const [open, setOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"days" | "months" | "years">("days");
+  const [viewMode, setViewMode] = useState<"days" | "months" | "years">(
+    selectMonthOnly || scopeMode === "month" ? "months" : "days"
+  );
+  const [hoveredWeekRow, setHoveredWeekRow] = useState<number | null>(null);
 
   const parsed = parseFlexibleDate(value);
   const today = new Date();
@@ -183,17 +204,17 @@ export default function DatePicker({
     }
   }, [value]);
 
-  // Reset viewMode to "days" whenever popover opens
+  // Reset viewMode whenever popover opens
   useEffect(() => {
     if (open) {
-      setViewMode("days");
+      setViewMode(selectMonthOnly || scopeMode === "month" ? "months" : "days");
       const p = parseFlexibleDate(value);
       if (p) {
         setViewYear(p.getFullYear());
         setViewMonth(p.getMonth());
       }
     }
-  }, [open, value]);
+  }, [open, value, selectMonthOnly, scopeMode]);
 
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
   const firstDow = new Date(viewYear, viewMonth, 1).getDay(); // 0=Sun
@@ -231,6 +252,20 @@ export default function DatePicker({
   }
 
   function selectDay(day: number) {
+    if (scopeMode === "week") {
+      const clickedDate = new Date(viewYear, viewMonth, day);
+      const dow = (clickedDate.getDay() + 6) % 7; // 0=Mon
+      const mon = new Date(clickedDate);
+      mon.setDate(mon.getDate() - dow);
+      const mm = String(mon.getMonth() + 1).padStart(2, "0");
+      const dd = String(mon.getDate()).padStart(2, "0");
+      const monIso = `${mon.getFullYear()}-${mm}-${dd}`;
+      if (checkDateDisabled(monIso)) return;
+      onChange(monIso);
+      setOpen(false);
+      return;
+    }
+
     const mm = String(viewMonth + 1).padStart(2, "0");
     const dd = String(day).padStart(2, "0");
     const iso = `${viewYear}-${mm}-${dd}`;
@@ -274,10 +309,10 @@ export default function DatePicker({
             ${className}`}
         >
           <Calendar size={13} className="text-muted-foreground flex-shrink-0" />
-          <span className={parsed ? "text-foreground font-mono" : "text-muted-foreground"}>
-            {parsed ? formatToIsoDate(value) : placeholder}
+          <span className={customTriggerLabel || parsed ? "text-foreground font-medium" : "text-muted-foreground"}>
+            {customTriggerLabel || (parsed ? formatToIsoDate(value) : placeholder)}
           </span>
-          {allowClear && parsed && !disabled && (
+          {allowClear && (parsed || customTriggerLabel) && !disabled && (
             <span
               role="button"
               tabIndex={0}
@@ -301,10 +336,37 @@ export default function DatePicker({
       </PopoverTrigger>
 
       <PopoverContent
-        align="start"
+        align={align}
         sideOffset={6}
         className="w-72 p-3 bg-card border border-border rounded-xl shadow-2xl ring-1 ring-black/5 z-[100]"
       >
+        {/* Seletor de Escopo de Visão (Dia / Semana / Mês) */}
+        {allowedScopeModes && allowedScopeModes.length > 1 && (
+          <div className="flex items-center bg-muted rounded-lg p-0.5 mb-2.5 border border-border/50">
+            {allowedScopeModes.map((scope) => (
+              <button
+                key={scope}
+                type="button"
+                onClick={() => {
+                  onScopeModeChange?.(scope);
+                  if (scope === "month") {
+                    setViewMode("months");
+                  } else {
+                    setViewMode("days");
+                  }
+                }}
+                className={`flex-1 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer ${
+                  (scopeMode ?? "day") === scope
+                    ? "bg-card text-foreground font-semibold shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {scope === "day" ? "Dia" : scope === "week" ? "Semana" : "Mês"}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Atalhos Rápidos de Seleção (se fornecidos) */}
         {presets && presets.length > 0 && (
           <div className="flex items-center gap-1.5 pb-2.5 mb-2.5 border-b border-border/50 flex-wrap">
@@ -420,7 +482,13 @@ export default function DatePicker({
                   onClick={() => {
                     if (disabledMonth) return;
                     setViewMonth(idx);
-                    setViewMode("days");
+                    if (selectMonthOnly) {
+                      const mm = String(idx + 1).padStart(2, "0");
+                      onChange(`${viewYear}-${mm}-01`);
+                      setOpen(false);
+                    } else {
+                      setViewMode("days");
+                    }
                   }}
                   className={`py-2 px-2 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
                     disabledMonth
@@ -498,11 +566,20 @@ export default function DatePicker({
                 const mm = String(viewMonth + 1).padStart(2, "0");
                 const dd = String(day).padStart(2, "0");
                 const iso = `${viewYear}-${mm}-${dd}`;
-                const isSelected = parsed
-                  ? parsed.getFullYear() === viewYear &&
-                    parsed.getMonth() === viewMonth &&
-                    parsed.getDate() === day
-                  : value === iso;
+                const weekRowIndex = Math.floor((firstDowMon + i) / 7);
+                const isInSelectedWeek =
+                  scopeMode === "week" &&
+                  Boolean(selectedWeekStart && selectedWeekEnd && iso >= selectedWeekStart && iso <= selectedWeekEnd);
+                const isHoveredWeek =
+                  scopeMode === "week" && hoveredWeekRow === weekRowIndex;
+                const isSelected =
+                  scopeMode === "week"
+                    ? isInSelectedWeek
+                    : parsed
+                    ? parsed.getFullYear() === viewYear &&
+                      parsed.getMonth() === viewMonth &&
+                      parsed.getDate() === day
+                    : value === iso;
                 const isToday =
                   today.getFullYear() === viewYear &&
                   today.getMonth() === viewMonth &&
@@ -515,12 +592,20 @@ export default function DatePicker({
                     type="button"
                     disabled={isDisabled}
                     onClick={() => selectDay(day)}
+                    onMouseEnter={() => {
+                      if (scopeMode === "week") setHoveredWeekRow(weekRowIndex);
+                    }}
+                    onMouseLeave={() => {
+                      if (scopeMode === "week") setHoveredWeekRow(null);
+                    }}
                     className={`w-full aspect-square flex items-center justify-center text-[11px] font-mono rounded-lg transition-colors
                       ${
                         isDisabled
                           ? "opacity-25 cursor-not-allowed text-muted-foreground line-through"
                           : isSelected
                           ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                          : isHoveredWeek
+                          ? "bg-primary/20 text-primary font-semibold"
                           : isToday
                           ? "bg-primary/10 text-primary font-semibold hover:bg-primary/20"
                           : "text-foreground hover:bg-muted cursor-pointer"
@@ -564,10 +649,22 @@ export default function DatePicker({
             disabled={checkDateDisabled(todayIso)}
             onClick={() => {
               if (!checkDateDisabled(todayIso)) {
-                onChange(todayIso);
+                if (scopeMode === "week") {
+                  const dow = (today.getDay() + 6) % 7;
+                  const mon = new Date(today);
+                  mon.setDate(mon.getDate() - dow);
+                  const mm = String(mon.getMonth() + 1).padStart(2, "0");
+                  const dd = String(mon.getDate()).padStart(2, "0");
+                  onChange(`${mon.getFullYear()}-${mm}-${dd}`);
+                } else if (scopeMode === "month") {
+                  const mm = String(today.getMonth() + 1).padStart(2, "0");
+                  onChange(`${today.getFullYear()}-${mm}-01`);
+                } else {
+                  onChange(todayIso);
+                }
                 setViewYear(today.getFullYear());
                 setViewMonth(today.getMonth());
-                setViewMode("days");
+                setViewMode(scopeMode === "month" ? "months" : "days");
                 setOpen(false);
               }
             }}
