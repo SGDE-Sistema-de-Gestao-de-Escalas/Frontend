@@ -11,7 +11,7 @@
       }
 
       .cls-4 {
-        fill: #ffffff;
+        fill: #E7E8EA;
       }
 
       .cls-2, .cls-5 {
@@ -67,3 +67,4 @@
     </g>
   </g>
 </svg>
+
