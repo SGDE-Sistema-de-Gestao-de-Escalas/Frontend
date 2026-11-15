@@ -21,6 +21,7 @@ import {
   validateNewPassword,
 } from "../../utils/passwordPolicy";
 import appIcon from "../../assets/icon.svg";
+import appIconDark from "../../assets/icon-dark.svg";
 
 interface LoginPageProps {
   onLogin?: (role: Role) => void;
@@ -271,7 +272,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 <img
                   src={appIcon}
                   alt="SGDE"
-                  className="w-full h-full object-contain"
+                  className="w-full h-full object-contain dark:hidden"
+                />
+                <img
+                  src={appIconDark}
+                  alt="SGDE"
+                  className="w-full h-full object-contain hidden dark:block"
                 />
               </div>
             )}

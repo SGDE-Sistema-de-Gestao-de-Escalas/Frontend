@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import logoHorizontal from "../../assets/logo-horizontal.svg";
+import logoHorizontalDark from "../../assets/logo-horizontal-dark.svg";
 
 export interface NavItemConfig {
   id: string;
@@ -64,12 +65,17 @@ export default function SidebarContent({
 
   return (
     <div className="flex flex-col h-full bg-sidebar select-none">
-      {/* SGDE Brand Logo Horizontal */}
+      {/* SGDE Brand Logo Horizontal (Light & Dark Mode) */}
       <div className="px-4 pt-5 pb-3 flex items-center justify-center flex-shrink-0 w-full">
         <img
           src={logoHorizontal}
           alt="SGDE - Sistema de Gestão de Escalas"
-          className="h-13 w-auto max-w-[210px] object-contain mx-auto"
+          className="h-13 w-auto max-w-[210px] object-contain mx-auto dark:hidden"
+        />
+        <img
+          src={logoHorizontalDark}
+          alt="SGDE - Sistema de Gestão de Escalas"
+          className="h-13 w-auto max-w-[210px] object-contain mx-auto hidden dark:block"
         />
       </div>
 

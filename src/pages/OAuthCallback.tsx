@@ -4,6 +4,7 @@ import { notify } from "../components/common/FeedbackNotification";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import appIcon from "../assets/icon.svg";
+import appIconDark from "../assets/icon-dark.svg";
 
 export default function OAuthCallback() {
   const [searchParams] = useSearchParams();
@@ -55,7 +56,8 @@ export default function OAuthCallback() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       <div className="flex flex-col items-center max-w-sm text-center">
         <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-6 shadow-sm">
-          <img src={appIcon} alt="SGDE" className="w-8 h-8" />
+          <img src={appIcon} alt="SGDE" className="w-8 h-8 dark:hidden" />
+          <img src={appIconDark} alt="SGDE" className="w-8 h-8 hidden dark:block" />
         </div>
 
         <Loader2 className="w-8 h-8 text-primary animate-spin mb-4" />
