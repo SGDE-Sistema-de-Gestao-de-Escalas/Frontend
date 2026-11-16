@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   AlertTriangle,
   Pencil,
@@ -18,6 +18,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "../ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import DatePicker, { formatToIsoDate, parseFlexibleDate } from "../common/DatePicker";
 import ConfirmationModal from "../common/ConfirmationModal";
 import { ActionTooltip } from "../common/ActionTooltip";
@@ -46,7 +53,51 @@ export default function HolidaysPage() {
   const { role } = useAuth();
   const isAdmin = role === "admin";
 
-  const { data: holidays = [], isLoading, isError, refetch } = useHolidaysList({ per_page: 100 });
+  const currentYear = new Date().getFullYear();
+
+  // Consulta todos os feriados registados
+  const {
+    data: allHolidays = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useHolidaysList({ per_page: 100 });
+
+  // Apenas os anos que possuem efetivamente registos na base de dados
+  const availableYears = useMemo(() => {
+    const yearsSet = new Set<number>();
+    allHolidays.forEach((h) => {
+      const y = parseInt(h.date?.slice(0, 4), 10);
+      if (!isNaN(y)) yearsSet.add(y);
+    });
+    return Array.from(yearsSet).sort((a, b) => a - b);
+  }, [allHolidays]);
+
+  // Default sendo o ano corrente (se tiver registos); caso contrário o ano mais recente com registos
+  const [selectedYear, setSelectedYear] = useState<number | "all">(currentYear);
+
+  // Sincroniza a seleção inicial para garantir que o ano selecionado existe nos registos
+  useEffect(() => {
+    if (availableYears.length > 0 && selectedYear !== "all") {
+      if (!availableYears.includes(selectedYear)) {
+        if (availableYears.includes(currentYear)) {
+          setSelectedYear(currentYear);
+        } else {
+          setSelectedYear(availableYears[0]);
+        }
+      }
+    }
+  }, [availableYears, selectedYear, currentYear]);
+
+  // Feriados filtrados pelo ano selecionado
+  const holidays = useMemo(() => {
+    if (selectedYear === "all") return allHolidays;
+    return allHolidays.filter((h) => {
+      const y = parseInt(h.date?.slice(0, 4), 10);
+      return y === selectedYear;
+    });
+  }, [allHolidays, selectedYear]);
+
   const createMutation = useCreateHoliday();
   const updateMutation = useUpdateHoliday();
   const deleteMutation = useDeleteHoliday();
@@ -65,7 +116,11 @@ export default function HolidaysPage() {
   function openAdd() {
     setEditingHolidayId(null);
     setNewName("");
-    setNewDate(todayStr);
+    if (selectedYear !== "all" && selectedYear !== currentYear) {
+      setNewDate(`${selectedYear}-01-01`);
+    } else {
+      setNewDate(todayStr);
+    }
     setNewDescription("");
     setFormErrors({});
     setShowAdd(true);
@@ -141,10 +196,13 @@ export default function HolidaysPage() {
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
-  // Próximos feriados ordenados por data futura
-  const upcomingHolidays = [...holidays]
-    .filter((h) => h.date >= todayStr)
-    .slice(0, 5);
+  // Próximos feriados ordenados por data futura (ou do ano selecionado se for passado)
+  const upcomingHolidays = useMemo(() => {
+    if (selectedYear === "all" || selectedYear >= currentYear) {
+      return [...holidays].filter((h) => h.date >= todayStr).slice(0, 5);
+    }
+    return [...holidays].slice(0, 5);
+  }, [holidays, selectedYear, currentYear, todayStr]);
 
   return (
     <div className="space-y-5">
@@ -164,7 +222,7 @@ export default function HolidaysPage() {
             <button
               type="button"
               onClick={() => setShowImport(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-foreground text-xs font-medium transition-colors shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-foreground text-xs font-medium transition-colors shadow-xs cursor-pointer"
             >
               <Sparkles size={13} className="text-primary" />
               Importar Feriados
@@ -173,7 +231,7 @@ export default function HolidaysPage() {
             <button
               type="button"
               onClick={openAdd}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors flex-shrink-0 shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors flex-shrink-0 shadow-xs cursor-pointer"
             >
               <Plus size={12} />
               Adicionar
@@ -184,11 +242,66 @@ export default function HolidaysPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
+          {/* Barra de Filtro por Ano */}
+          <div className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-border bg-card shadow-xs flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 pl-1">
+                <Calendar size={14} className="text-primary" />
+                <span>Ano:</span>
+              </span>
+
+              {/* Seletor dropdown do Ano */}
+              <Select
+                value={selectedYear === "all" ? "all" : String(selectedYear)}
+                onValueChange={(val) =>
+                  setSelectedYear(val === "all" ? "all" : parseInt(val, 10))
+                }
+              >
+                <SelectTrigger className="h-8 w-40 text-xs bg-muted/40 border-border font-medium">
+                  <SelectValue placeholder="Selecionar ano" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableYears.length > 1 && (
+                    <SelectItem value="all">Todos os Anos</SelectItem>
+                  )}
+                  {availableYears.length === 0 ? (
+                    <SelectItem value={String(currentYear)} disabled>
+                      {currentYear} (Sem registos)
+                    </SelectItem>
+                  ) : (
+                    availableYears.map((y) => (
+                      <SelectItem key={y} value={String(y)}>
+                        {y} {y === currentYear ? "(Ano Atual)" : ""}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Contador de feriados no ano */}
+            <div className="text-xs text-muted-foreground pr-1">
+              {!isLoading && (
+                <span>
+                  <strong className="font-semibold text-foreground">
+                    {holidays.length}
+                  </strong>{" "}
+                  {holidays.length === 1 ? "feriado" : "feriados"}
+                  {selectedYear !== "all"
+                    ? ` em ${selectedYear}`
+                    : " no total"}
+                </span>
+              )}
+            </div>
+          </div>
+
           {/* Loading */}
           {isLoading && (
             <Card className="p-12 border-border bg-card flex flex-col items-center justify-center text-muted-foreground gap-3">
               <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              <span className="text-xs">A carregar feriados do calendário...</span>
+              <span className="text-xs">
+                A carregar feriados {selectedYear !== "all" ? `de ${selectedYear}` : ""}...
+              </span>
             </Card>
           )}
 
@@ -212,18 +325,26 @@ export default function HolidaysPage() {
           {!isLoading && !isError && holidays.length === 0 && (
             <div className="p-8 text-center border border-dashed border-border rounded-xl bg-card/50 flex flex-col items-center justify-center">
               <Calendar size={28} className="mx-auto text-muted-foreground/50 mb-2" />
-              <p className="text-sm font-medium text-foreground">Nenhum feriado registado</p>
+              <p className="text-sm font-medium text-foreground">
+                {selectedYear !== "all"
+                  ? `Nenhum feriado registado em ${selectedYear}`
+                  : "Nenhum feriado registado"}
+              </p>
               <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-                Ainda não existem feriados configurados no sistema. Adicione feriados manualmente ou utilize a importação automática de Portugal.
+                {selectedYear !== "all"
+                  ? `Ainda não existem feriados configurados para o ano de ${selectedYear}. Adicione feriados manualmente ou importe automaticamente os feriados nacionais e municipais.`
+                  : "Ainda não existem feriados configurados no sistema. Adicione feriados manualmente ou utilize a importação automática de Portugal."}
               </p>
               {isAdmin && (
                 <button
                   type="button"
                   onClick={() => setShowImport(true)}
-                  className="mt-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs"
+                  className="mt-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-xs cursor-pointer"
                 >
                   <Sparkles size={12} />
-                  Importar Feriados Nacionais e Municipais
+                  <span>
+                    Importar Feriados {selectedYear !== "all" ? `de ${selectedYear}` : "Nacionais e Municipais"}
+                  </span>
                 </button>
               )}
             </div>
@@ -422,11 +543,17 @@ export default function HolidaysPage() {
         <div className="space-y-4">
           <Card className="p-5 border-border bg-card">
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-              Próximos Feriados
+              {selectedYear === "all" || selectedYear === currentYear
+                ? "Próximos Feriados"
+                : `Feriados em ${selectedYear}`}
             </h4>
             <div className="space-y-3">
               {upcomingHolidays.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Sem feriados futuros agendados.</p>
+                <p className="text-xs text-muted-foreground">
+                  {selectedYear !== "all" && selectedYear < currentYear
+                    ? `Nenhum feriado registado em ${selectedYear}.`
+                    : "Sem feriados futuros agendados."}
+                </p>
               ) : (
                 upcomingHolidays.map((h) => (
                   <div key={h.id} className="flex items-start gap-3">
@@ -486,6 +613,7 @@ export default function HolidaysPage() {
       <ImportHolidaysModal
         open={showImport}
         onOpenChange={setShowImport}
+        defaultYear={selectedYear !== "all" ? selectedYear : currentYear}
         onSuccess={() => refetch()}
       />
     </div>
