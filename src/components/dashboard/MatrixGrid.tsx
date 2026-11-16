@@ -118,6 +118,70 @@ interface DayRuleConfig {
   daysOfWeek: number[]; // 0 = Seg ... 4 = Sex
   priorityNames: string[];
   isFallback?: boolean;
+  activityTypeId?: string | null;
+}
+
+function isSlotMatchingRule(
+  slotState: BlockState | undefined,
+  slotMeta: MergedScheduleBlockMeta | SlotEntryMetadata | undefined,
+  rule: DayRuleConfig
+): boolean {
+  if (!slotState || slotState === "off" || slotState === "absent" || slotState === "lunch") {
+    return false;
+  }
+
+  // Regra de Fallback (ex: Apoio Escola)
+  if (rule.isFallback) {
+    if (slotMeta?.isFallback) return true;
+    if (
+      slotMeta?.activityName &&
+      rule.title &&
+      slotMeta.activityName.trim().toLowerCase() === rule.title.trim().toLowerCase()
+    ) {
+      return true;
+    }
+    // Se não tiver metadados de atividade específica e tiver o mesmo state, conta como fallback
+    if (!slotMeta?.activityName && !slotMeta?.ruleId && !slotMeta?.activityTypeId && slotState === rule.state) {
+      return true;
+    }
+    return false;
+  }
+
+  // Regras específicas (Obrigatória / Facultativa):
+  // 1. Se o bloco está expressamente marcado como fallback, não conta para uma regra específica
+  if (slotMeta?.isFallback) {
+    return false;
+  }
+
+  // 2. Correspondência exata por ruleId
+  if (slotMeta?.ruleId && rule.id && String(slotMeta.ruleId) === String(rule.id)) {
+    return true;
+  }
+
+  // 3. Correspondência exata por activityTypeId
+  if (
+    slotMeta?.activityTypeId &&
+    rule.activityTypeId &&
+    String(slotMeta.activityTypeId) === String(rule.activityTypeId)
+  ) {
+    return true;
+  }
+
+  // 4. Correspondência por nome da atividade / título da regra
+  if (slotMeta?.activityName && rule.title) {
+    const metaName = slotMeta.activityName.trim().toLowerCase();
+    const ruleName = rule.title.trim().toLowerCase();
+    if (metaName === ruleName) {
+      return true;
+    }
+  }
+
+  // 5. Fallback por BlockState genérico apenas se o bloco não tiver metadados específicos de outra atividade
+  if (!slotMeta?.activityName && !slotMeta?.activityTypeId && !slotMeta?.ruleId) {
+    return slotState === rule.state;
+  }
+
+  return false;
 }
 
 interface MatrixGridProps {
@@ -460,6 +524,7 @@ const [publishModalState, setPublishModalState] = useState<{
           .sort((a, b) => a.priority - b.priority)
           .map((a) => `${a.priority}º ${a.name.split(" ")[0]}`),
         isFallback: false,
+        activityTypeId: rule.activity_type_id ? String(rule.activity_type_id) : (actType?.id ? String(actType.id) : null),
       };
     });
 
@@ -492,6 +557,7 @@ const [publishModalState, setPublishModalState] = useState<{
       daysOfWeek: [0, 1, 2, 3, 4],
       priorityNames: ["Todos os Assistentes"],
       isFallback: true,
+      activityTypeId: primaryFallback ? String(primaryFallback.id) : null,
     });
 
     return rules;
@@ -1081,11 +1147,14 @@ function paintSlot(aid: EntityId, slot: number) {
                 mapActivityToBlockState(at.name, at.is_fallback) === paintType
             );
 
-        const isFallbackAct = Boolean(activeRule?.isFallback || matchedAct?.is_fallback || paintType === "work");
+        const isFallbackAct = activeRule
+          ? Boolean(activeRule.isFallback)
+          : Boolean(matchedAct?.is_fallback || (!matchedAct && paintType === "work"));
+
         assistantMeta[slot] = {
           activityName: activeRule?.title || matchedAct?.name || (isFallbackAct ? "Apoio Escola" : defaultLabel) || "Atividade",
           activityColor: matchedAct?.color || (isFallbackAct ? "#3B82F6" : undefined),
-          activityTypeId: matchedAct?.id || null,
+          activityTypeId: matchedAct?.id || activeRule?.activityTypeId || null,
           ruleId: activeRule?.isFallback ? null : (activeRule?.id ? String(activeRule.id) : null),
           isFallback: isFallbackAct,
         };
@@ -1324,10 +1393,20 @@ function paintSlot(aid: EntityId, slot: number) {
   }, [workingAssistants, fixedShiftBoundsByAssistant, effectiveMatrix, viewStartSlot, viewEndSlot]);
 
   // Evaluate rules & warnings for any given dayOffset + matrix
-  function evaluateDaySchedule(targetOffset: number, mat: ScheduleMatrix) {
+  function evaluateDaySchedule(
+    targetOffset: number,
+    mat: ScheduleMatrix,
+    targetSlotMeta?: Record<EntityId, Record<number, MergedScheduleBlockMeta>>
+  ) {
     const info = getDateInfo(targetOffset);
     const targetStatus = getStatusForIsoDate(info.isoDate);
     const rules = getRulesForDow(info.dow);
+    const activeMeta =
+      targetSlotMeta ??
+      (targetOffset === dayOffset
+        ? effectiveSlotMetaByAssistant
+        : slotMetaByAssistant);
+
     const workingOnDay = activeAssistants.filter((a) => {
       // 1. Assistente externo cedido temporariamente a esta escola
       if (a.is_temporary_transfer) {
@@ -1388,7 +1467,8 @@ function paintSlot(aid: EntityId, slot: number) {
         let countAtSlot = 0;
         workingOnDay.forEach((a) => {
           const st = mat[a.id]?.[s];
-          if (st === rule.state) {
+          const m = activeMeta?.[a.id]?.[s];
+          if (isSlotMatchingRule(st, m, rule)) {
             countAtSlot++;
             assignedNamesSet.add(a.name.split(" ")[0]);
           }
@@ -1402,7 +1482,11 @@ function paintSlot(aid: EntityId, slot: number) {
       if (rule.isFallback) {
         workingOnDay.forEach((a) => {
           const row = mat[a.id] || [];
-          if (row.some((st) => st === rule.state)) {
+          const aMeta = activeMeta?.[a.id];
+          const hasFallback = row.some((st, s) =>
+            isSlotMatchingRule(st, aMeta?.[s], rule)
+          );
+          if (hasFallback) {
             totalAssignedAnySlot++;
           }
         });
@@ -1716,10 +1800,16 @@ function paintSlot(aid: EntityId, slot: number) {
   }
 
   const { ruleEvaluations, liveWarnings } = useMemo(
-    () => evaluateDaySchedule(dayOffset, effectiveMatrix),
+    () =>
+      evaluateDaySchedule(
+        dayOffset,
+        effectiveMatrix,
+        effectiveSlotMetaByAssistant
+      ),
     [
       dayOffset,
       effectiveMatrix,
+      effectiveSlotMetaByAssistant,
       activeAssistants,
       dayRulesCatalog,
       absencesRes,
@@ -1800,7 +1890,24 @@ function paintSlot(aid: EntityId, slot: number) {
           });
         }
 
-        const evalResult = evaluateDaySchedule(offset, draft);
+        const draftMetaForOffset: Record<
+          EntityId,
+          Record<number, MergedScheduleBlockMeta>
+        > = {};
+        if (draftDayMeta) {
+          activeAssistants.forEach((a) => {
+            draftMetaForOffset[a.id] = {
+              ...(baseDayMeta[a.id] || {}),
+              ...(draftDayMeta[a.id] || {}),
+            };
+          });
+        }
+
+        const evalResult = evaluateDaySchedule(
+          offset,
+          draft,
+          draftDayMeta ? draftMetaForOffset : baseDayMeta
+        );
         const copiedMeta = copiedFromByDay[offset];
         const copiedFromInfo = copiedMeta
           ? getDateInfo(copiedMeta.sourceOffset)
@@ -2320,7 +2427,9 @@ function paintSlot(aid: EntityId, slot: number) {
                             hoveredLockTarget.slot >= b.start &&
                             hoveredLockTarget.slot < b.start + b.count;
 
-                          const isMatchesSpotlight = b.state === paintType;
+                          const isMatchesSpotlight = highlightedRule
+                            ? isSlotMatchingRule(b.state, b.meta, highlightedRule)
+                            : b.state === paintType;
                           const spotlightClass = isSpotlightActive
                             ? isMatchesSpotlight
                               ? "opacity-100 ring-2 ring-white/80 shadow-sm z-10"
@@ -3088,7 +3197,8 @@ function paintSlot(aid: EntityId, slot: number) {
                       {ruleEvaluations.map((rule) => {
                         const isRuleSelected = highlightedRuleId === rule.id;
                         const matchesPaintActivity =
-                          paintType !== "off" && rule.state === paintType;
+                          paintType !== "off" &&
+                          (highlightedRuleId ? isRuleSelected : rule.state === paintType);
                         const isDimmedBySpotlight =
                           isSpotlightActive && !matchesPaintActivity;
 
@@ -3663,8 +3773,9 @@ function paintSlot(aid: EntityId, slot: number) {
                                   b.count
                                 );
 
-                                const isMatchesSpotlight =
-                                  b.state === paintType;
+                                const isMatchesSpotlight = highlightedRule
+                                  ? isSlotMatchingRule(b.state, b.meta, highlightedRule)
+                                  : b.state === paintType;
                                 const spotlightClass = isSpotlightActive
                                   ? isMatchesSpotlight
                                     ? "opacity-85 ring-1 ring-destructive"
