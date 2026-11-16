@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   AlertTriangle,
   Camera,
@@ -31,7 +31,6 @@ import absencesService from "../../api/services/absences.service";
 import { notify } from "../common/FeedbackNotification";
 import DateRangePicker, { type DateRange } from "../common/DateRangePicker";
 import SearchableSelect from "../common/SearchableSelect";
-import CameraCaptureModal from "../common/CameraCaptureModal";
 
 type StatusFilterTab = "all" | "pending" | "justified" | "unjustified";
 
@@ -48,25 +47,6 @@ export default function StaffAbsenceDetail() {
   const [detailJustification, setDetailJustification] = useState("");
   const [detailFile, setDetailFile] = useState<File | null>(null);
   const [isReplacingFile, setIsReplacingFile] = useState(false);
-  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
-  const nativeCameraInputRef = useRef<HTMLInputElement>(null);
-
-  function handleTriggerCamera() {
-    const isMobile =
-      typeof navigator !== "undefined" &&
-      (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-        navigator.userAgent
-      ) ||
-        (navigator.maxTouchPoints > 1 && !/Windows NT/.test(navigator.userAgent)));
-
-    // Em dispositivos móveis ou ambientes sem HTTPS (onde o WebRTC na janela do browser é bloqueado),
-    // abre imediatamente a app nativa da câmara do telemóvel (sem exigir certificados SSL).
-    if (isMobile || !window.isSecureContext || !navigator?.mediaDevices?.getUserMedia) {
-      nativeCameraInputRef.current?.click();
-    } else {
-      setIsCameraModalOpen(true);
-    }
-  }
 
   // API Hooks
   const {
@@ -489,22 +469,6 @@ export default function StaffAbsenceDetail() {
                       </div>
                     ) : (
                       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                        {/* Input nativo com capture para abrir logo a app da câmara do telemóvel sem exigir certificados SSL */}
-                        <input
-                          ref={nativeCameraInputRef}
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          className="hidden"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) {
-                              setDetailFile(f);
-                              e.target.value = "";
-                            }
-                          }}
-                        />
-
                         {/* Opção 1: Escolher ficheiro */}
                         <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-dashed border-border hover:border-primary cursor-pointer transition-colors bg-muted/10 flex-1 truncate">
                           <Upload
@@ -525,16 +489,24 @@ export default function StaffAbsenceDetail() {
                           />
                         </label>
 
-                        {/* Opção 2: Tirar foto na hora */}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={handleTriggerCamera}
-                          className="text-xs gap-1.5 h-10 border-dashed border-border hover:border-primary shrink-0 cursor-pointer"
-                        >
+                        {/* Opção 2: Tirar foto na hora (abre diretamente a app da câmara) */}
+                        <label className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium border border-dashed border-border hover:border-primary rounded-lg cursor-pointer bg-background hover:bg-muted/30 transition-colors shrink-0 h-10">
                           <Camera size={14} className="text-primary" />
                           <span>Tirar Foto</span>
-                        </Button>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) {
+                                setDetailFile(f);
+                                e.target.value = "";
+                              }
+                            }}
+                          />
+                        </label>
                       </div>
                     )}
                   </div>
@@ -661,12 +633,6 @@ export default function StaffAbsenceDetail() {
           </div>
         </div>
 
-        {/* Modal de Captura de Foto para Justificação */}
-        <CameraCaptureModal
-          open={isCameraModalOpen}
-          onClose={() => setIsCameraModalOpen(false)}
-          onCapture={(file) => setDetailFile(file)}
-        />
       </div>
     );
   }
@@ -934,13 +900,6 @@ export default function StaffAbsenceDetail() {
           </div>
         </>
       )}
-
-      {/* Modal de Captura de Foto para Justificação */}
-      <CameraCaptureModal
-        open={isCameraModalOpen}
-        onClose={() => setIsCameraModalOpen(false)}
-        onCapture={(file) => setDetailFile(file)}
-      />
     </div>
   );
 }
