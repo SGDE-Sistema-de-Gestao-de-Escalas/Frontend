@@ -199,6 +199,7 @@ interface MatrixGridProps {
   queryStartDate?: string;
   queryEndDate?: string;
   onRequestRecalculate?: () => void;
+  editModeTrigger?: number;
 }
 
 function cloneMatrix(m: ScheduleMatrix): ScheduleMatrix {
@@ -248,11 +249,19 @@ export default function MatrixGrid({
   queryStartDate,
   queryEndDate,
   onRequestRecalculate,
+  editModeTrigger,
 }: MatrixGridProps) {
   const { selectedSchoolId, selectedSchool, agrupamento } = useSchool();
   const { role } = useAuth();
   const isAdmin = role === "admin";
   const [editMode, setEditMode] = useState(false);
+
+  // Ativar modo de edição automaticamente quando solicitado externamente (ex: através do banner de alertas)
+  useEffect(() => {
+    if (editModeTrigger) {
+      setEditMode(true);
+    }
+  }, [editModeTrigger]);
   // Persisted/confirmed schedules per dayOffset
   const [savedMatricesByDay, setSavedMatricesByDay] = useState<
     Record<number, ScheduleMatrix>
@@ -2695,7 +2704,7 @@ function paintSlot(aid: EntityId, slot: number) {
 
   return (
     <TooltipProvider delayDuration={60}>
-      <Card className="overflow-hidden border-border bg-card shadow-xs">
+      <Card id="interactive-matrix-card" className="overflow-hidden border-border bg-card shadow-xs">
         {/* Top Header */}
         <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3 flex-wrap">

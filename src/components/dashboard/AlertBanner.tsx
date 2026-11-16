@@ -8,6 +8,7 @@ import {
   Calendar,
   ArrowRight,
   Clock,
+  Edit2,
 } from "lucide-react";
 import { Badge } from "../ui/badge";
 import type {
@@ -319,11 +320,11 @@ export default function AlertBanner({
                         <button
                           type="button"
                           onClick={() => onSelectDate(group.date)}
-                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-xs"
-                          title={`Abrir ${group.dayName} no editor`}
+                          className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-xs"
+                          title={`Abrir editor e editar escala de ${group.dayName}`}
                         >
-                          <span>Ver no Editor</span>
-                          <ArrowRight size={12} />
+                          <Edit2 size={12} />
+                          <span>Editar Escala</span>
                         </button>
                       )}
                     </div>

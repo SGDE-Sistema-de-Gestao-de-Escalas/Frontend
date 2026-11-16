@@ -114,6 +114,7 @@ export default function DashboardSection({
   const [recalcDates, setRecalcDates] = useState<{ start?: string; end?: string }>({});
   const [lastGenerationResult, setLastGenerationResult] =
     useState<GenerateScheduleResponse | null>(null);
+  const [editModeTrigger, setEditModeTrigger] = useState<number>(0);
 
   const [searchParams] = useSearchParams();
   const dateParam = searchParams.get("date");
@@ -413,6 +414,13 @@ export default function DashboardSection({
           const targetOffset = getOffsetFromIsoDate(isoDate);
           setDayOffset(targetOffset);
           setViewMode("day");
+          setEditModeTrigger(Date.now());
+          setTimeout(() => {
+            const el = document.getElementById("interactive-matrix-card");
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+          }, 80);
         }}
         conflicts={lastGenerationResult?.conflicts}
         pendingRecalculations={pendingRecalculations}
@@ -434,6 +442,7 @@ export default function DashboardSection({
           lunchBlocksByDate={lastGenerationResult?.lunch_blocks}
           queryStartDate={queryStartDate}
           queryEndDate={queryEndDate}
+          editModeTrigger={editModeTrigger}
           onRequestRecalculate={() => {
             setRecalcDates({
               start: activeDashboardDate,
