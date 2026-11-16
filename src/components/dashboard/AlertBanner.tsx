@@ -55,21 +55,18 @@ export default function AlertBanner({
   const [dismissed, setDismissed] = useState(false);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
-  if (dismissed) return null;
-
   const hasPending = Boolean(
     pendingRecalculations?.has_pending &&
       pendingRecalculations.affected_dates.length > 0
   );
   const hasGenerationConflicts = Boolean(conflicts && conflicts.length > 0);
 
-  // Se não há pendências na BD nem défices da última geração, não renderiza
-  if (!hasPending && !hasGenerationConflicts) {
-    return null;
-  }
-
-  // Agrupamento estruturado por dia
+  // Agrupamento estruturado por dia (executado sempre no mesmo ponto de hooks)
   const dayGroups = useMemo(() => {
+    if (!hasPending && !hasGenerationConflicts) {
+      return [];
+    }
+
     const map = new Map<string, { alerts: AlertItem[]; seenKeys: Set<string> }>();
 
     function getOrCreateGroup(date: string) {
@@ -189,6 +186,11 @@ export default function AlertBanner({
   const affectedDates = pendingRecalculations?.affected_dates ?? dayGroups.map((d) => d.date);
   const daysCount = dayGroups.length;
   const totalAlertsCount = dayGroups.reduce((acc, g) => acc + g.alerts.length, 0);
+
+  // Saída antecipada segura APÓS todos os hooks terem sido executados incondicionalmente
+  if (dismissed) return null;
+  if (!hasPending && !hasGenerationConflicts) return null;
+  if (dayGroups.length === 0) return null;
 
   return (
     <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 overflow-hidden shadow-xs transition-all">
