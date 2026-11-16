@@ -101,6 +101,14 @@ export function getScheduleTypeStatus(
 
 const WEEK_DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
+function computeLunchDuration(start?: string, end?: string): number {
+  if (!start || !end) return 60;
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const diff = (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0));
+  return diff > 0 ? diff : 60;
+}
+
 interface AssistantScheduleManagerProps {
   assistantId?: EntityId;
 }
@@ -421,7 +429,7 @@ export default function AssistantScheduleManager({
               ? {
                   start: lunchStart,
                   end: lunchEnd,
-                  duration: parseInt(lunchDuration, 10) || 30,
+                  duration: computeLunchDuration(lunchStart, lunchEnd),
                 }
               : undefined,
           }
@@ -440,7 +448,7 @@ export default function AssistantScheduleManager({
                 ? {
                     start: lunchStart,
                     end: lunchEnd,
-                    duration: parseInt(lunchDuration, 10) || 30,
+                    duration: computeLunchDuration(lunchStart, lunchEnd),
                   }
                 : undefined,
             },
@@ -451,7 +459,7 @@ export default function AssistantScheduleManager({
                 ? {
                     start: shiftBLunchStart,
                     end: shiftBLunchEnd,
-                    duration: parseInt(shiftBLunchDuration, 10) || 30,
+                    duration: computeLunchDuration(shiftBLunchStart, shiftBLunchEnd),
                   }
                 : undefined,
             },
@@ -1052,16 +1060,23 @@ export default function AssistantScheduleManager({
                   {/* Lunch */}
                   <div className="border-t border-border/60 pt-4">
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Pausa de almoço
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Pausa de almoço
+                        </p>
+                        {lunchEnabled && (
+                          <span className="text-[11px] text-muted-foreground font-mono">
+                            ({computeLunchDuration(lunchStart, lunchEnd)} min)
+                          </span>
+                        )}
+                      </div>
                       <Switch
                         checked={lunchEnabled}
                         onCheckedChange={setLunchEnabled}
                       />
                     </div>
                     {lunchEnabled && (
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="text-xs text-muted-foreground block mb-1.5">
                             Início do Almoço
@@ -1081,27 +1096,6 @@ export default function AssistantScheduleManager({
                             onChange={setLunchEnd}
                             className="w-full"
                           />
-                        </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground block mb-1.5">
-                            Duração Efetiva
-                          </label>
-                          <div className="flex gap-1">
-                            {["30", "45", "60"].map((m) => (
-                              <button
-                                key={m}
-                                type="button"
-                                onClick={() => setLunchDuration(m)}
-                                className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                                  lunchDuration === m
-                                    ? "bg-primary text-primary-foreground border-primary"
-                                    : "border-border text-muted-foreground hover:text-foreground"
-                                }`}
-                              >
-                                {m}m
-                              </button>
-                            ))}
-                          </div>
                         </div>
                       </div>
                     )}
@@ -1435,59 +1429,42 @@ export default function AssistantScheduleManager({
                         {/* Pausa de almoço */}
                         <div className="border-t border-border/60 pt-4">
                           <div className="flex items-center justify-between mb-3">
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                              Pausa de almoço
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                Pausa de almoço
+                              </p>
+                              {isLunch && (
+                                <span className="text-[10px] text-muted-foreground font-mono">
+                                  ({computeLunchDuration(lunchS, lunchE)} min)
+                                </span>
+                              )}
+                            </div>
                             <Switch
                               checked={isLunch}
                               onCheckedChange={setIsLunch}
                             />
                           </div>
                           {isLunch && (
-                            <div className="space-y-3">
-                              <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                  <label className="text-[10px] text-muted-foreground block mb-1">
-                                    Início do Almoço
-                                  </label>
-                                  <TimePicker
-                                    value={lunchS}
-                                    onChange={setLunchS}
-                                    className="w-full"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-[10px] text-muted-foreground block mb-1">
-                                    Fim do Almoço
-                                  </label>
-                                  <TimePicker
-                                    value={lunchE}
-                                    onChange={setLunchE}
-                                    className="w-full"
-                                  />
-                                </div>
-                              </div>
-
+                            <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <label className="text-[10px] text-muted-foreground block mb-1">
-                                  Duração Efetiva
+                                  Início do Almoço
                                 </label>
-                                <div className="flex gap-1.5 w-full">
-                                  {["30", "45", "60"].map((m) => (
-                                    <button
-                                      key={m}
-                                      type="button"
-                                      onClick={() => setLunchD(m)}
-                                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                                        lunchD === m
-                                          ? "bg-primary text-primary-foreground border-primary font-semibold shadow-xs"
-                                          : "border-border text-muted-foreground hover:text-foreground"
-                                      }`}
-                                    >
-                                      {m}m
-                                    </button>
-                                  ))}
-                                </div>
+                                <TimePicker
+                                  value={lunchS}
+                                  onChange={setLunchS}
+                                  className="w-full"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-muted-foreground block mb-1">
+                                  Fim do Almoço
+                                </label>
+                                <TimePicker
+                                  value={lunchE}
+                                  onChange={setLunchE}
+                                  className="w-full"
+                                />
                               </div>
                             </div>
                           )}

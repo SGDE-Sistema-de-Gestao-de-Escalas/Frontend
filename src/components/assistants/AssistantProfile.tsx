@@ -80,6 +80,14 @@ const NUM_TO_DAY_MAP: Record<number, string> = {
   6: "Dom",
 };
 
+function computeLunchDuration(start?: string, end?: string): number {
+  if (!start || !end) return 60;
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const diff = (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0));
+  return diff > 0 ? diff : 60;
+}
+
 interface ExceptionRule {
   id: string;
   tipo: string;
@@ -465,7 +473,7 @@ export default function AssistantProfile({
       lunch_start: exceptionLunchEnabled ? exceptionLunchStart : null,
       lunch_end: exceptionLunchEnabled ? exceptionLunchEnd : null,
       lunch_duration_minutes: exceptionLunchEnabled
-        ? parseInt(exceptionLunchDuration, 10) || 30
+        ? computeLunchDuration(exceptionLunchStart, exceptionLunchEnd)
         : null,
     };
 
@@ -1478,16 +1486,23 @@ export default function AssistantProfile({
                     {/* Pausa de almoço */}
                     <div className="col-span-2 border-t border-border/60 pt-3">
                       <div className="flex items-center justify-between mb-3">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                          Pausa de almoço
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            Pausa de almoço
+                          </p>
+                          {exceptionLunchEnabled && (
+                            <span className="text-[11px] text-muted-foreground font-mono">
+                              ({computeLunchDuration(exceptionLunchStart, exceptionLunchEnd)} min)
+                            </span>
+                          )}
+                        </div>
                         <Switch
                           checked={exceptionLunchEnabled}
                           onCheckedChange={setExceptionLunchEnabled}
                         />
                       </div>
                       {exceptionLunchEnabled && (
-                        <div className="grid grid-cols-3 gap-2.5">
+                        <div className="grid grid-cols-2 gap-3">
                           <div>
                             <label className="text-[11px] text-muted-foreground block mb-1">
                               Início do Almoço
@@ -1507,27 +1522,6 @@ export default function AssistantProfile({
                               onChange={setExceptionLunchEnd}
                               className="w-full"
                             />
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-muted-foreground block mb-1">
-                              Duração Efetiva
-                            </label>
-                            <div className="flex gap-1">
-                              {["30", "45", "60"].map((m) => (
-                                <button
-                                  key={m}
-                                  type="button"
-                                  onClick={() => setExceptionLunchDuration(m)}
-                                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                                    exceptionLunchDuration === m
-                                      ? "bg-primary text-primary-foreground border-primary font-semibold"
-                                      : "border-border text-muted-foreground hover:text-foreground"
-                                  }`}
-                                >
-                                  {m}m
-                                </button>
-                              ))}
-                            </div>
                           </div>
                         </div>
                       )}

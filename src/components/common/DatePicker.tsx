@@ -338,7 +338,7 @@ export default function DatePicker({
       <PopoverContent
         align={align}
         sideOffset={6}
-        className="w-72 p-3 bg-card border border-border rounded-xl shadow-2xl ring-1 ring-black/5 z-[100]"
+        className="w-72 p-3 bg-card border border-border rounded-xl shadow-2xl ring-1 ring-black/5 z-[150]"
       >
         {/* Seletor de Escopo de Visão (Dia / Semana / Mês) */}
         {allowedScopeModes && allowedScopeModes.length > 1 && (
