@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -38,6 +38,7 @@ interface ImportHolidaysModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  defaultYear?: number;
 }
 
 function formatHolidayFullDate(dateStr: string) {
@@ -67,6 +68,7 @@ export default function ImportHolidaysModal({
   open,
   onOpenChange,
   onSuccess,
+  defaultYear,
 }: ImportHolidaysModalProps) {
   const currentYear = new Date().getFullYear();
 
@@ -74,9 +76,15 @@ export default function ImportHolidaysModal({
   const [step, setStep] = useState<"config" | "preview" | "result">("config");
 
   // Step 1 Form state
-  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+  const [selectedYear, setSelectedYear] = useState<number>(defaultYear || currentYear);
   const [selectedMunicipality, setSelectedMunicipality] = useState<string>("");
   const [includeCarnival, setIncludeCarnival] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (open && defaultYear) {
+      setSelectedYear(defaultYear);
+    }
+  }, [open, defaultYear]);
 
   // Step 2 Selection state
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
@@ -259,11 +267,22 @@ export default function ImportHolidaysModal({
                       <SelectValue placeholder="Selecione o ano" />
                     </SelectTrigger>
                     <SelectContent>
-                      {[currentYear - 1, currentYear, currentYear + 1, currentYear + 2].map((y) => (
-                        <SelectItem key={y} value={String(y)}>
-                          {y} {y === currentYear ? "(Ano Atual)" : ""}
-                        </SelectItem>
-                      ))}
+                      {Array.from(
+                        new Set([
+                          currentYear - 2,
+                          currentYear - 1,
+                          currentYear,
+                          currentYear + 1,
+                          currentYear + 2,
+                          selectedYear,
+                        ])
+                      )
+                        .sort((a, b) => a - b)
+                        .map((y) => (
+                          <SelectItem key={y} value={String(y)}>
+                            {y} {y === currentYear ? "(Ano Atual)" : ""}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   <p className="text-[11px] text-muted-foreground mt-1">
