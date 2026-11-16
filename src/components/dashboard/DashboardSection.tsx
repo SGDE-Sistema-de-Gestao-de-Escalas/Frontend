@@ -409,6 +409,11 @@ export default function DashboardSection({
           }
           setShowRecalcModal(true);
         }}
+        onSelectDate={(isoDate) => {
+          const targetOffset = getOffsetFromIsoDate(isoDate);
+          setDayOffset(targetOffset);
+          setViewMode("day");
+        }}
         conflicts={lastGenerationResult?.conflicts}
         pendingRecalculations={pendingRecalculations}
         hasGeneratedClean={
