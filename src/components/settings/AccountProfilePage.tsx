@@ -32,6 +32,7 @@ export default function AccountProfilePage({
 }: AccountProfilePageProps) {
   const { user, role: contextRole, refreshProfile, updateUserLocal, isLoading } = useAuth();
   const role = propRole || contextRole || "admin";
+  const hasPassword = user.has_password !== false;
 
   const [activeTab, setActiveTab] = useState<
     "profile" | "security" | "privacy"
@@ -304,7 +305,7 @@ export default function AccountProfilePage({
       new_password_confirmation?: string;
     } = {};
 
-    if (!curr) {
+    if (hasPassword && !curr) {
       errors.current_password = "A password atual é obrigatória.";
     }
     const newPasswordError = validateNewPassword(next);
@@ -326,15 +327,29 @@ export default function AccountProfilePage({
     setSavingPassword(true);
 
     try {
-      const res = await authService.changePassword({
-        current_password: curr,
+      const payload: {
+        new_password: string;
+        new_password_confirmation: string;
+        current_password?: string;
+      } = {
         new_password: next,
         new_password_confirmation: nextConf,
-      });
-      notify.success(res?.message || "Password atualizada com sucesso.");
+      };
+      if (hasPassword) {
+        payload.current_password = curr;
+      }
+
+      const res = await authService.changePassword(payload);
+      notify.success(
+        res?.message ||
+          (hasPassword
+            ? "Password atualizada com sucesso."
+            : "Password definida com sucesso.")
+      );
       setCurrentPassword("");
       setNewPassword("");
       setNewPasswordConfirmation("");
+      await refreshProfile();
     } catch (err: any) {
       const backendErrors = err?.response?.data?.errors;
       if (backendErrors) {
@@ -346,7 +361,9 @@ export default function AccountProfilePage({
       } else {
         const errorMsg =
           err?.response?.data?.message ||
-          "Não foi possível atualizar a password. Verifique os dados introduzidos.";
+          (hasPassword
+            ? "Não foi possível atualizar a password. Verifique os dados introduzidos."
+            : "Não foi possível definir a password. Verifique os dados introduzidos.");
         notify.error(errorMsg);
       }
     } finally {
@@ -486,43 +503,58 @@ export default function AccountProfilePage({
               </div>
 
               {emailChanged && (
-                <div>
-                  <label className="text-xs font-medium text-foreground block mb-1.5">
-                    Password atual <span className="text-destructive">*</span>
-                  </label>
-                  <input
-                    type="password"
-                    autoComplete="current-password"
-                    value={emailChangePassword}
-                    onChange={(e) => {
-                      setEmailChangePassword(e.target.value);
-                      if (profileErrors.current_password) {
-                        setProfileErrors((prev) => ({ ...prev, current_password: undefined }));
-                      }
-                    }}
-                    placeholder="Confirme com a sua password atual"
-                    className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
-                      profileErrors.current_password
-                        ? "border-destructive focus:ring-destructive"
-                        : "border-border focus:ring-ring"
-                    }`}
-                  />
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Para mudar o email tem de confirmar a sua password.
-                  </p>
-                  {profileErrors.current_password && (
-                    <p className="text-[11px] text-destructive mt-1 font-medium">
-                      {profileErrors.current_password}
+                !hasPassword ? (
+                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
+                    <p className="font-medium">Definição de palavra-passe necessária</p>
+                    <p className="mt-1">
+                      A sua conta ainda não tem uma palavra-passe definida. Para alterar o seu email, defina primeiro uma palavra-passe no separador <strong>Segurança</strong>.
                     </p>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-xs font-medium text-foreground block mb-1.5">
+                      Password atual <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      value={emailChangePassword}
+                      onChange={(e) => {
+                        setEmailChangePassword(e.target.value);
+                        if (profileErrors.current_password) {
+                          setProfileErrors((prev) => ({ ...prev, current_password: undefined }));
+                        }
+                      }}
+                      placeholder="Confirme com a sua password atual"
+                      className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                        profileErrors.current_password
+                          ? "border-destructive focus:ring-destructive"
+                          : "border-border focus:ring-ring"
+                      }`}
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Para mudar o email tem de confirmar a sua password.
+                    </p>
+                    {profileErrors.current_password && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {profileErrors.current_password}
+                      </p>
+                    )}
+                  </div>
+                )
               )}
             </div>
 
             <button
               type="button"
               onClick={handleSaveProfile}
-              disabled={savingProfile || !firstName.trim() || !lastName.trim() || !email.trim() || (emailChanged && !emailChangePassword)}
+              disabled={
+                savingProfile ||
+                !firstName.trim() ||
+                !lastName.trim() ||
+                !email.trim() ||
+                (emailChanged && (!hasPassword || !emailChangePassword))
+              }
               className="mt-5 flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 disabled:opacity-40 transition-colors shadow-xs"
             >
               {savingProfile ? (
@@ -543,45 +575,52 @@ export default function AccountProfilePage({
 
       {activeTab === "security" && (
         <Card className="p-5">
-          <h3 className="text-sm font-semibold text-foreground mb-4">
-            Alterar Password
+          <h3 className="text-sm font-semibold text-foreground mb-1">
+            {hasPassword ? "Alterar Password" : "Definir Password"}
           </h3>
+          <p className="text-xs text-muted-foreground mb-4">
+            {hasPassword
+              ? "Recomendamos que utilize uma password forte com letras, números e símbolos."
+              : "A sua conta ainda não tem uma password definida. Defina uma password para poder entrar também diretamente com o seu email e password, além da autenticação por Google."}
+          </p>
           <div className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-foreground block mb-1.5">
-                Password Atual <span className="text-destructive">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type={showCurrentPass ? "text" : "password"}
-                  value={currentPassword}
-                  onChange={(e) => {
-                    setCurrentPassword(e.target.value);
-                    if (passwordErrors.current_password) {
-                      setPasswordErrors((prev) => ({ ...prev, current_password: undefined }));
-                    }
-                  }}
-                  placeholder="Introduza a sua password atual"
-                  className={`w-full px-3 py-2 pr-10 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
-                    passwordErrors.current_password
-                      ? "border-destructive focus:ring-destructive"
-                      : "border-border focus:ring-ring"
-                  }`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowCurrentPass(!showCurrentPass)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showCurrentPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+            {hasPassword && (
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1.5">
+                  Password Atual <span className="text-destructive">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showCurrentPass ? "text" : "password"}
+                    value={currentPassword}
+                    onChange={(e) => {
+                      setCurrentPassword(e.target.value);
+                      if (passwordErrors.current_password) {
+                        setPasswordErrors((prev) => ({ ...prev, current_password: undefined }));
+                      }
+                    }}
+                    placeholder="Introduza a sua password atual"
+                    className={`w-full px-3 py-2 pr-10 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                      passwordErrors.current_password
+                        ? "border-destructive focus:ring-destructive"
+                        : "border-border focus:ring-ring"
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPass(!showCurrentPass)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showCurrentPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {passwordErrors.current_password && (
+                  <p className="text-[11px] text-destructive mt-1 font-medium">
+                    {passwordErrors.current_password}
+                  </p>
+                )}
               </div>
-              {passwordErrors.current_password && (
-                <p className="text-[11px] text-destructive mt-1 font-medium">
-                  {passwordErrors.current_password}
-                </p>
-              )}
-            </div>
+            )}
 
             <div>
               <label className="text-xs font-medium text-foreground block mb-1.5">
@@ -657,18 +696,18 @@ export default function AccountProfilePage({
           <button
             type="button"
             onClick={handleChangePassword}
-            disabled={savingPassword || !currentPassword || !newPassword || !newPasswordConfirmation}
+            disabled={savingPassword || (hasPassword && !currentPassword) || !newPassword || !newPasswordConfirmation}
             className="mt-5 flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 disabled:opacity-40 transition-colors shadow-xs"
           >
             {savingPassword ? (
               <>
                 <Loader2 size={14} className="animate-spin" />
-                A atualizar...
+                {hasPassword ? "A atualizar..." : "A guardar..."}
               </>
             ) : (
               <>
                 <Shield size={14} />
-                Atualizar Password
+                {hasPassword ? "Atualizar Password" : "Definir Password"}
               </>
             )}
           </button>

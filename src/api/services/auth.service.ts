@@ -17,6 +17,8 @@ export interface AuthUser {
   assistant_id?: string | number | null;
   school_id?: string | number | null;
   school_name?: string | null;
+  has_password?: boolean;
+  provider?: string | null;
 }
 
 export interface BackendLoginResponse {
@@ -105,7 +107,7 @@ export const authService = {
   },
 
   async changePassword(data: {
-    current_password: string;
+    current_password?: string;
     new_password: string;
     new_password_confirmation: string;
   }): Promise<{ message: string }> {
