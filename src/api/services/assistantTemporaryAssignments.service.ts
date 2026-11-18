@@ -10,12 +10,17 @@ export interface AssistantTemporaryAssignmentApi {
   valid_from: string;
   valid_until: string | null;
   notes?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
   created_at?: string;
   updated_at?: string;
   assistant?: {
     id: string;
     internal_number?: string;
     school_id?: string;
+    name?: string;
+    first_name?: string;
+    last_name?: string;
     user?: {
       id: string;
       first_name: string;
