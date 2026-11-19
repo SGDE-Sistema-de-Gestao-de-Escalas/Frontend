@@ -2802,7 +2802,7 @@ function paintSlot(aid: EntityId, slot: number) {
     <TooltipProvider delayDuration={60}>
       <Card id="interactive-matrix-card" className="overflow-hidden border-border bg-card shadow-xs">
         {/* Top Header */}
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+        <div className="px-4 py-3 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3 flex-wrap">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -2929,7 +2929,7 @@ function paintSlot(aid: EntityId, slot: number) {
             )}
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap">
             {/* GRUPO 1: FERRAMENTAS DE HORÁRIO, IMPRESSÃO E EXPORTAÇÃO */}
             {!isDayLoading &&
               !editMode &&
@@ -2947,10 +2947,11 @@ function paintSlot(aid: EntityId, slot: number) {
                           initialDocModel: "wall",
                         })
                       }
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
+                      className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium text-foreground/80 hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
                     >
                       <Printer size={12} />
-                      <span>Imprimir / Exportar</span>
+                      <span className="hidden sm:inline">Imprimir / Exportar</span>
+                      <span className="sm:hidden">Imprimir</span>
                     </button>
                   )}
                 </div>
@@ -2971,10 +2972,11 @@ function paintSlot(aid: EntityId, slot: number) {
                             preselectedDate: dayInfo.isoDate,
                           })
                         }
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold hover:brightness-110 transition-all cursor-pointer"
+                        className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold hover:brightness-110 transition-all cursor-pointer"
                       >
                         <Send size={11} />
-                        Publicar Dia
+                        <span className="hidden sm:inline">Publicar Dia</span>
+                        <span className="sm:hidden">Publicar</span>
                       </button>
                     </ActionTooltip>
 
@@ -3034,10 +3036,11 @@ function paintSlot(aid: EntityId, slot: number) {
                           preselectedDate: undefined,
                         })
                       }
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-border bg-card text-foreground hover:bg-muted hover:border-primary/40 transition-colors cursor-pointer"
+                      className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold border border-border bg-card text-foreground hover:bg-muted hover:border-primary/40 transition-colors cursor-pointer"
                     >
                       <Send size={11} />
-                      Publicar Escalas ({allDraftDays.length})
+                      <span className="hidden sm:inline">Publicar Escalas ({allDraftDays.length})</span>
+                      <span className="sm:hidden">Publicar ({allDraftDays.length})</span>
                     </button>
                   </ActionTooltip>
                 ) : null}
@@ -3053,7 +3056,8 @@ function paintSlot(aid: EntityId, slot: number) {
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
                 >
                   <RotateCcw size={11} />
-                  Repor Dia
+                  <span className="hidden sm:inline">Repor Dia</span>
+                  <span className="sm:hidden">Repor</span>
                 </button>
               </ActionTooltip>
             )}
@@ -3072,7 +3076,7 @@ function paintSlot(aid: EntityId, slot: number) {
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-border text-muted-foreground hover:text-destructive hover:border-destructive/30 hover:bg-destructive/10 transition-colors cursor-pointer"
                 >
                   <X size={11} />
-                  Cancelar
+                  <span>Cancelar</span>
                 </button>
               </ActionTooltip>
             )}
@@ -3089,22 +3093,39 @@ function paintSlot(aid: EntityId, slot: number) {
                   type="button"
                   disabled={!editMode && isPastDay}
                   onClick={handleClickFinishButton}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                  className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                     editMode
                       ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold"
-                      : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
+                      : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40 bg-card"
                   }`}
                 >
                   <Edit2 size={11} />
-                  {editMode
-                    ? modifiedDaysSummary.length > 0
-                      ? `Sair da Edição (${modifiedDaysSummary.length} ${
-                          modifiedDaysSummary.length === 1
-                            ? "dia alterado"
-                            : "dias alterados"
-                        })`
-                      : "Sair da Edição"
-                    : "Editar Escala"}
+                  {editMode ? (
+                    modifiedDaysSummary.length > 0 ? (
+                      <>
+                        <span className="hidden sm:inline">
+                          Sair da Edição ({modifiedDaysSummary.length} {
+                            modifiedDaysSummary.length === 1
+                              ? "dia alterado"
+                              : "dias alterados"
+                          })
+                        </span>
+                        <span className="sm:hidden">
+                          Sair ({modifiedDaysSummary.length})
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="hidden sm:inline">Sair da Edição</span>
+                        <span className="sm:hidden">Sair</span>
+                      </>
+                    )
+                  ) : (
+                    <>
+                      <span className="hidden sm:inline">Editar Escala</span>
+                      <span className="sm:hidden">Editar</span>
+                    </>
+                  )}
                 </button>
               </ActionTooltip>
             )}
