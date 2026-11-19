@@ -9,9 +9,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Columns2,
-  LayoutGrid,
-  List,
   Loader2,
   Sparkles,
 } from "lucide-react";
@@ -1113,7 +1110,6 @@ export function StaffMonthView({
   targetAssistantId,
   targetAssistantName,
   targetSchoolId,
-  monthStyle = "google",
 }: {
   monthOffset: number;
   onSelectDay: (o: number) => void;
@@ -1121,7 +1117,6 @@ export function StaffMonthView({
   targetAssistantId?: EntityId;
   targetAssistantName?: string;
   targetSchoolId?: EntityId;
-  monthStyle?: "google" | "master-detail" | "agenda";
 }) {
   const { user } = useAuth();
   const effectiveAssistantId = targetAssistantId ?? user.assistant_id ?? undefined;
@@ -1304,7 +1299,7 @@ export function StaffMonthView({
       if (d.hasWork) {
         workDaysCount++;
         totalWorkSlots += d.activeSlots;
-      } else if (!d.hasAbsent) {
+      } else if (!d.hasAbsent && d.pubInfo.isPublished && !d.isClosed) {
         restDaysCount++;
       }
     });
@@ -1374,9 +1369,15 @@ export function StaffMonthView({
         </div>
       ) : !dayItem.pubInfo.isPublished ? (
         <div className="flex items-center gap-2 py-1">
-          <span className="inline-block w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />
-          <p className="text-xs text-amber-600 font-medium">
-            A escala para este dia ainda não foi gerada ou publicada pela direção.
+          <span
+            className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
+              !dayItem.pubInfo.hasSchedule ? "bg-muted-foreground/60" : "bg-amber-500"
+            }`}
+          />
+          <p className="text-xs text-muted-foreground font-medium">
+            {!dayItem.pubInfo.hasSchedule
+              ? "A escala para este dia ainda não foi gerada pela direção escolar."
+              : "A escala para este dia está em preparação e ainda não foi publicada."}
           </p>
         </div>
       ) : dayItem.blocks.length > 0 ? (
@@ -1452,274 +1453,113 @@ export function StaffMonthView({
         ))}
       </div>
 
-      {/* =========================================================================
-          OPÇÃO 1: "Dashboard Operacional Moderno" (Grelha Estilo Google Calendar)
-         ========================================================================= */}
-      {monthStyle === "google" && (
-        <Card className="overflow-hidden border-border bg-card shadow-xs">
-          {/* Cabeçalho DOW */}
-          <div className="grid grid-cols-7 border-b border-border bg-muted/30">
-            {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((d, i) => (
-              <div
-                key={i}
-                className="text-center text-[11px] font-semibold text-muted-foreground py-2 border-r border-border/40 last:border-r-0"
-              >
-                {d}
-              </div>
-            ))}
-          </div>
-
-          {/* Grelha de Células do Calendário */}
-          <div className="grid grid-cols-7">
-            {Array.from({ length: month.firstDow }, (_, i) => (
-              <div
-                key={`pre-${i}`}
-                className="min-h-[82px] border-r border-b border-border/30 bg-muted/10"
-              />
-            ))}
-            {monthDaysData.map((d) => (
-              <button
-                key={d.dayNum}
-                type="button"
-                onClick={() => setSelectedDayOffset(d.offset)}
-                className={`min-h-[82px] p-1.5 text-left border-r border-b border-border/30 transition-colors flex flex-col justify-between cursor-pointer ${
-                  d.isSelected
-                    ? "bg-accent/10 ring-2 ring-accent inset-0 z-1"
-                    : d.isToday
-                    ? "bg-accent/5 font-semibold"
-                    : "hover:bg-muted/40"
-                } ${d.isClosed ? "bg-muted/15" : ""}`}
-              >
-                <div className="flex items-center justify-between w-full">
-                  <span
-                    className={`text-xs font-mono rounded-full w-5 h-5 flex items-center justify-center ${
-                      d.isToday
-                        ? "bg-accent text-accent-foreground font-bold"
-                        : "text-foreground"
-                    }`}
-                  >
-                    {d.dayNum}
-                  </span>
-                  {d.isTransfer && (
-                    <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 font-semibold">
-                      Outra Escola
-                    </span>
-                  )}
-                </div>
-
-                {/* Conteúdo Informativo da Célula */}
-                <div className="w-full mt-1 space-y-0.5">
-                  {d.isClosed ? (
-                    <span className="block text-[10px] text-muted-foreground/60 truncate font-sans">
-                      {d.dayStatus.title || "Encerrado"}
-                    </span>
-                  ) : d.hasAbsent ? (
-                    <span className="inline-flex items-center gap-1 w-full text-[10px] px-1.5 py-0.5 rounded bg-destructive/15 text-destructive font-medium truncate">
-                      <span className="w-1.5 h-1.5 rounded-full bg-destructive flex-shrink-0" />
-                      Ausência
-                    </span>
-                  ) : d.hasWork ? (
-                    <div className="w-full text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-foreground font-mono font-medium truncate flex items-center justify-between">
-                      <span>{d.entryTime}</span>
-                      <span className="text-muted-foreground">·</span>
-                      <span>{d.exitTime}</span>
-                    </div>
-                  ) : (
-                    <span className="block text-[10px] text-muted-foreground/50 truncate font-sans">
-                      Descanso
-                    </span>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
-
-          {/* Legenda */}
-          <div className="flex flex-wrap items-center gap-4 px-4 py-3 border-t border-border/60 bg-muted/10">
-            {[
-              { color: "bg-accent", label: "Com Turno Marcado" },
-              { color: "bg-destructive", label: "Ausência / Falta" },
-              { color: "bg-amber-500", label: "Colocação Noutra Escola" },
-              { color: "bg-muted-foreground/40", label: "Encerrado / Folga" },
-            ].map((l) => (
-              <div key={l.label} className="flex items-center gap-1.5">
-                <div className={`w-2.5 h-2.5 rounded-full ${l.color}`} />
-                <span className="text-[11px] text-muted-foreground">
-                  {l.label}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* =========================================================================
-          OPÇÃO 2: "Layout Híbrido Master-Detail" (Calendário Compacto + Painel Lateral)
-         ========================================================================= */}
-      {monthStyle === "master-detail" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-          {/* Lado Esquerdo: Calendário */}
-          <Card className="lg:col-span-7 p-4 border-border bg-card shadow-xs">
-            <div className="grid grid-cols-7 mb-2">
-              {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((d, i) => (
-                <div
-                  key={i}
-                  className="text-center text-[11px] font-semibold text-muted-foreground py-1"
-                >
-                  {d}
-                </div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-7 gap-1">
-              {Array.from({ length: month.firstDow }, (_, i) => (
-                <div key={`pre-${i}`} />
-              ))}
-              {monthDaysData.map((d) => (
-                <button
-                  key={d.dayNum}
-                  type="button"
-                  onClick={() => setSelectedDayOffset(d.offset)}
-                  className={`min-h-[50px] rounded-lg p-1.5 flex flex-col items-center justify-between text-xs font-mono transition-all border cursor-pointer ${
-                    d.isSelected
-                      ? "ring-2 ring-accent border-accent bg-accent/15 font-bold shadow-xs"
-                      : d.isToday
-                      ? "border-accent/60 bg-accent/5 font-bold"
-                      : "border-border/40 hover:bg-muted/50"
-                  } ${d.isClosed ? "opacity-60 bg-muted/20" : ""}`}
-                >
-                  <span>{d.dayNum}</span>
-                  <div className="flex items-center gap-1 mt-0.5">
-                    {d.hasWork && <span className="w-2 h-2 rounded-full bg-accent" />}
-                    {d.hasAbsent && <span className="w-2 h-2 rounded-full bg-destructive" />}
-                    {d.isTransfer && <span className="w-2 h-2 rounded-full bg-amber-500" />}
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {/* Legenda compacta */}
-            <div className="flex flex-wrap items-center gap-3 mt-4 pt-3 border-t border-border/60">
-              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-accent" /> Turno
-              </span>
-              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-destructive" /> Falta
-              </span>
-              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-amber-500" /> Transferência
-              </span>
-            </div>
-          </Card>
-
-          {/* Lado Direito: Detalhe do Dia Selecionado */}
-          <div className="lg:col-span-5">
-            {selectedDayData ? (
-              renderDayDetailCard(selectedDayData)
-            ) : (
-              <Card className="p-6 border-border bg-card text-center text-muted-foreground text-xs">
-                Selecione um dia no calendário para ver o detalhe de tarefas.
-              </Card>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          OPÇÃO 3: "Estilo Agenda / Timeline de Turnos" (Cards Diários Verticais)
-         ========================================================================= */}
-      {monthStyle === "agenda" && (
-        <div className="space-y-2.5">
-          {monthDaysData.map((d) => (
-            <Card
-              key={d.dayNum}
-              className={`p-3 border-border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                d.isToday ? "border-accent/60 bg-accent/5 ring-1 ring-accent/30" : "bg-card hover:bg-muted/30"
-              }`}
+      {/* Grelha de Calendário Mensal */}
+      <Card className="overflow-hidden border-border bg-card shadow-xs">
+        {/* Cabeçalho DOW */}
+        <div className="grid grid-cols-7 border-b border-border bg-muted/30">
+          {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((d, i) => (
+            <div
+              key={i}
+              className="text-center text-[11px] font-semibold text-muted-foreground py-2 border-r border-border/40 last:border-r-0"
             >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center font-mono ${
-                    d.isToday
-                      ? "bg-accent text-accent-foreground font-bold"
-                      : "bg-muted text-foreground"
-                  }`}
-                >
-                  <span className="text-[10px] uppercase font-semibold leading-none">
-                    {d.info.dayName.slice(0, 3)}
-                  </span>
-                  <span className="text-sm font-bold leading-none mt-0.5">
-                    {d.dayNum}
-                  </span>
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-foreground">
-                      {d.info.dateStr}
-                    </p>
-                    {d.isTransfer && (
-                      <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30">
-                        {d.schoolName || "Outra Escola"}
-                      </Badge>
-                    )}
-                  </div>
-
-                  {d.isClosed ? (
-                    <p className="text-xs text-muted-foreground">
-                      {d.dayStatus.title || "Estabelecimento encerrado"}
-                    </p>
-                  ) : d.hasAbsent ? (
-                    <p className="text-xs text-destructive font-medium">
-                      Ausência registada
-                    </p>
-                  ) : d.hasWork ? (
-                    <p className="text-xs text-muted-foreground font-mono">
-                      Turno: <strong className="text-foreground">{d.entryTime} – {d.exitTime}</strong> ({d.workload})
-                    </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground/60">
-                      Dia de descanso
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {d.hasWork && (
-                <div className="flex items-center gap-2">
-                  <div className="flex flex-wrap gap-1 max-w-xs">
-                    {d.blocks.slice(0, 3).map((b, bi) => (
-                      <span
-                        key={bi}
-                        className="text-[10px] px-2 py-0.5 rounded bg-muted font-medium text-foreground"
-                      >
-                        {b.activityName || BLOCK_STYLES[b.state]?.label || "Tarefa"}
-                      </span>
-                    ))}
-                    {d.blocks.length > 3 && (
-                      <span className="text-[10px] px-1 text-muted-foreground">
-                        +{d.blocks.length - 3}
-                      </span>
-                    )}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onSelectDay(d.offset)}
-                    className="text-xs h-8"
-                  >
-                    Ver dia
-                  </Button>
-                </div>
-              )}
-            </Card>
+              {d}
+            </div>
           ))}
         </div>
-      )}
 
-      {/* Painel de Preview do Dia Selecionado (apenas para o estilo "google" onde a grelha ocupa o ecrã todo) */}
-      {monthStyle === "google" && selectedDayData && renderDayDetailCard(selectedDayData)}
+        {/* Grelha de Células do Calendário */}
+        <div className="grid grid-cols-7">
+          {Array.from({ length: month.firstDow }, (_, i) => (
+            <div
+              key={`pre-${i}`}
+              className="min-h-[82px] border-r border-b border-border/30 bg-muted/10"
+            />
+          ))}
+          {monthDaysData.map((d) => (
+            <button
+              key={d.dayNum}
+              type="button"
+              onClick={() => setSelectedDayOffset(d.offset)}
+              className={`min-h-[82px] p-1.5 text-left border-r border-b border-border/30 transition-colors flex flex-col justify-between cursor-pointer ${
+                d.isSelected
+                  ? "bg-accent/10 ring-2 ring-accent inset-0 z-1"
+                  : d.isToday
+                  ? "bg-accent/5 font-semibold"
+                  : "hover:bg-muted/40"
+              } ${d.isClosed ? "bg-muted/15" : ""}`}
+            >
+              <div className="flex items-center justify-between w-full">
+                <span
+                  className={`text-xs font-mono rounded-full w-5 h-5 flex items-center justify-center ${
+                    d.isToday
+                      ? "bg-accent text-accent-foreground font-bold"
+                      : "text-foreground"
+                  }`}
+                >
+                  {d.dayNum}
+                </span>
+                {d.isTransfer && (
+                  <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 font-semibold">
+                    Outra Escola
+                  </span>
+                )}
+              </div>
+
+              {/* Conteúdo Informativo da Célula */}
+              <div className="w-full mt-1 space-y-0.5">
+                {d.isClosed ? (
+                  <span className="block text-[10px] text-muted-foreground/60 truncate font-sans">
+                    {d.dayStatus.title || "Encerrado"}
+                  </span>
+                ) : d.hasAbsent ? (
+                  <span className="inline-flex items-center gap-1 w-full text-[10px] px-1.5 py-0.5 rounded bg-destructive/15 text-destructive font-medium truncate">
+                    <span className="w-1.5 h-1.5 rounded-full bg-destructive flex-shrink-0" />
+                    Ausência
+                  </span>
+                ) : !d.pubInfo.hasSchedule ? (
+                  <span className="inline-flex items-center text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded border border-border/50 font-sans truncate">
+                    Não gerada
+                  </span>
+                ) : !d.pubInfo.isPublished ? (
+                  <span className="inline-flex items-center text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 font-sans truncate">
+                    Em preparação
+                  </span>
+                ) : d.hasWork ? (
+                  <div className="w-full text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-foreground font-mono font-medium truncate flex items-center justify-between">
+                    <span>{d.entryTime}</span>
+                    <span className="text-muted-foreground">·</span>
+                    <span>{d.exitTime}</span>
+                  </div>
+                ) : (
+                  <span className="block text-[10px] text-muted-foreground/50 truncate font-sans">
+                    Descanso
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Legenda */}
+        <div className="flex flex-wrap items-center gap-4 px-4 py-3 border-t border-border/60 bg-muted/10">
+          {[
+            { color: "bg-accent", label: "Com Turno Marcado" },
+            { color: "bg-destructive", label: "Ausência / Falta" },
+            { color: "bg-amber-500", label: "Colocação Noutra Escola" },
+            { color: "bg-muted-foreground/40", label: "Não Gerada / Encerrado" },
+          ].map((l) => (
+            <div key={l.label} className="flex items-center gap-1.5">
+              <div className={`w-2.5 h-2.5 rounded-full ${l.color}`} />
+              <span className="text-[11px] text-muted-foreground">
+                {l.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Painel de Preview do Dia Selecionado */}
+      {selectedDayData && renderDayDetailCard(selectedDayData)}
     </div>
   );
 }
@@ -1743,7 +1583,6 @@ export default function StaffScheduleSection({
   const [dayOffset, setDayOffset] = useState(0);
   const [weekStart, setWeekStart] = useState(() => getMondayOffsetFromDayOffset(0));
   const [monthOffset, setMonthOffset] = useState(3);
-  const [monthStyle, setMonthStyle] = useState<"google" | "master-detail" | "agenda">("google");
   const info = getDateInfo(dayOffset);
 
   function prevNav() {
@@ -1844,53 +1683,8 @@ export default function StaffScheduleSection({
             </p>
           </div>
 
-          {/* Controlos: Escolha de estilo (no Mês), DatePicker com escolha Dia/Semana/Mês e [ < ] [ Hoje ] [ > ] */}
+          {/* Controlos: DatePicker com escolha Dia/Semana/Mês e [ < ] [ Hoje ] [ > ] */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Opções de Apresentação Mensal (apenas no modo Mês para experimentar os 3 designs) */}
-            {viewMode === "month" && (
-              <div className="flex items-center bg-muted rounded-lg p-0.5 border border-border/50">
-                <button
-                  type="button"
-                  onClick={() => setMonthStyle("google")}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                    monthStyle === "google"
-                      ? "bg-card shadow-xs text-foreground font-semibold"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  title="Opção 1: Grelha Completa (Estilo Google Calendar)"
-                >
-                  <LayoutGrid size={13} />
-                  <span className="hidden sm:inline">Grelha</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMonthStyle("master-detail")}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                    monthStyle === "master-detail"
-                      ? "bg-card shadow-xs text-foreground font-semibold"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  title="Opção 2: Dividido (Calendário + Painel de Detalhes do Dia)"
-                >
-                  <Columns2 size={13} />
-                  <span className="hidden sm:inline">Dividido</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMonthStyle("agenda")}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                    monthStyle === "agenda"
-                      ? "bg-card shadow-xs text-foreground font-semibold"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  title="Opção 3: Agenda / Lista Vertical Dia-a-Dia"
-                >
-                  <List size={13} />
-                  <span className="hidden sm:inline">Agenda</span>
-                </button>
-              </div>
-            )}
-
             {/* DatePicker Unificado: escolhe a data e permite alternar entre Dia / Semana / Mês diretamente */}
             <DatePicker
               value={currentIsoDate}
@@ -1944,7 +1738,6 @@ export default function StaffScheduleSection({
         <StaffMonthView
           monthOffset={monthOffset}
           onSelectDay={navToDay}
-          monthStyle={monthStyle}
           onChangeMonth={(d) =>
             setMonthOffset((m) =>
               Math.max(0, Math.min(m + d, monthsList.length - 1))

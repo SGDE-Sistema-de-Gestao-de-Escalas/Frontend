@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, X, Check } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Button } from "../ui/button";
 import ActionTooltip from "./ActionTooltip";
 
 export interface DatePickerPreset {
@@ -296,6 +297,24 @@ export default function DatePicker({
     today.getMonth() + 1
   ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
+  const displayBottomType =
+    scopeMode === "month" ? "Mês" : scopeMode === "week" ? "Semana" : "Data";
+
+  const displayBottomLabel = useMemo(() => {
+    if (scopeMode === "month") {
+      return `${MONTH_NAMES[viewMonth]} ${viewYear}`;
+    }
+    if (scopeMode === "week" && selectedWeekStart && selectedWeekEnd) {
+      return `${selectedWeekStart} → ${selectedWeekEnd}`;
+    }
+    if (parsed) {
+      const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+      const dd = String(parsed.getDate()).padStart(2, "0");
+      return `${parsed.getFullYear()}-${mm}-${dd}`;
+    }
+    return value || "—";
+  }, [scopeMode, viewMonth, viewYear, selectedWeekStart, selectedWeekEnd, parsed, value]);
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -338,38 +357,40 @@ export default function DatePicker({
       <PopoverContent
         align={align}
         sideOffset={6}
-        className="w-72 p-3 bg-card border border-border rounded-xl shadow-2xl ring-1 ring-black/5 z-[150]"
+        className="w-auto p-0 bg-card border border-border rounded-2xl shadow-2xl ring-1 ring-black/5 z-[150] overflow-hidden"
       >
         {/* Seletor de Escopo de Visão (Dia / Semana / Mês) */}
         {allowedScopeModes && allowedScopeModes.length > 1 && (
-          <div className="flex items-center bg-muted rounded-lg p-0.5 mb-2.5 border border-border/50">
-            {allowedScopeModes.map((scope) => (
-              <button
-                key={scope}
-                type="button"
-                onClick={() => {
-                  onScopeModeChange?.(scope);
-                  if (scope === "month") {
-                    setViewMode("months");
-                  } else {
-                    setViewMode("days");
-                  }
-                }}
-                className={`flex-1 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer ${
-                  (scopeMode ?? "day") === scope
-                    ? "bg-card text-foreground font-semibold shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {scope === "day" ? "Dia" : scope === "week" ? "Semana" : "Mês"}
-              </button>
-            ))}
+          <div className="px-3.5 pt-3.5 pb-0">
+            <div className="flex items-center bg-muted rounded-lg p-0.5 border border-border/50">
+              {allowedScopeModes.map((scope) => (
+                <button
+                  key={scope}
+                  type="button"
+                  onClick={() => {
+                    onScopeModeChange?.(scope);
+                    if (scope === "month") {
+                      setViewMode("months");
+                    } else {
+                      setViewMode("days");
+                    }
+                  }}
+                  className={`flex-1 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer ${
+                    (scopeMode ?? "day") === scope
+                      ? "bg-card text-foreground font-semibold shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {scope === "day" ? "Dia" : scope === "week" ? "Semana" : "Mês"}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
         {/* Atalhos Rápidos de Seleção (se fornecidos) */}
         {presets && presets.length > 0 && (
-          <div className="flex items-center gap-1.5 pb-2.5 mb-2.5 border-b border-border/50 flex-wrap">
+          <div className="px-3.5 pt-3 flex items-center gap-1.5 flex-wrap">
             <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mr-0.5">
               Atalhos:
             </span>
@@ -381,7 +402,6 @@ export default function DatePicker({
                   type="button"
                   onClick={() => {
                     onChange(p.value);
-                    setOpen(false);
                   }}
                   className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-colors cursor-pointer ${
                     isSelected
@@ -396,282 +416,304 @@ export default function DatePicker({
           </div>
         )}
 
-        {/* Header com Navegação Interativa de Mês e Ano */}
-        <div className="flex items-center justify-between mb-3 pb-2 border-b border-border/50">
-          <button
-            type="button"
-            onClick={() => {
-              if (viewMode === "years") setViewYear((y) => y - 12);
-              else if (viewMode === "months") setViewYear((y) => y - 1);
-              else prevMonth();
-            }}
-            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            aria-label="Anterior"
-          >
-            <ChevronLeft size={14} />
-          </button>
-
-          <div className="flex items-center gap-1">
-            {/* Botão Seletor de Mês */}
+        {/* Área Principal do Calendário */}
+        <div className="p-3.5 min-w-[280px]">
+          {/* Header com Navegação Interativa de Mês e Ano */}
+          <div className="flex items-center justify-between mb-3">
             <button
               type="button"
-              onClick={() => setViewMode(viewMode === "months" ? "days" : "months")}
-              className={`px-2 py-1 rounded-md text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
-                viewMode === "months"
-                  ? "bg-primary text-primary-foreground font-bold"
-                  : "text-foreground hover:bg-muted"
-              }`}
-              title="Selecionar mês"
+              disabled={
+                (viewMode === "days" && minYear !== undefined && minMonth !== undefined && (viewYear < minYear || (viewYear === minYear && viewMonth <= minMonth))) ||
+                (viewMode === "months" && minYear !== undefined && viewYear <= minYear) ||
+                (viewMode === "years" && minYear !== undefined && decadeStart <= minYear)
+              }
+              onClick={() => {
+                if (viewMode === "years") setViewYear((y) => y - 12);
+                else if (viewMode === "months") setViewYear((y) => y - 1);
+                else prevMonth();
+              }}
+              className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer disabled:opacity-30 disabled:pointer-events-none"
+              title="Anterior"
             >
-              <span>{MONTH_NAMES[viewMonth]}</span>
-              <ChevronDown
-                size={11}
-                className={`transition-transform duration-200 ${
-                  viewMode === "months" ? "rotate-180" : ""
-                }`}
-              />
+              <ChevronLeft size={16} />
             </button>
 
-            {/* Botão Seletor de Ano */}
-            <button
-              type="button"
-              onClick={() => setViewMode(viewMode === "years" ? "days" : "years")}
-              className={`px-2 py-1 rounded-md text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
-                viewMode === "years"
-                  ? "bg-primary text-primary-foreground font-bold"
-                  : "text-foreground hover:bg-muted"
-              }`}
-              title="Selecionar ano"
-            >
-              <span>{viewMode === "years" ? `${decadeStart}–${decadeStart + 11}` : viewYear}</span>
-              <ChevronDown
-                size={11}
-                className={`transition-transform duration-200 ${
-                  viewMode === "years" ? "rotate-180" : ""
+            <div className="flex items-center gap-1.5 text-xs font-semibold">
+              {/* Botão Seletor de Mês */}
+              <button
+                type="button"
+                onClick={() => setViewMode(viewMode === "months" ? "days" : "months")}
+                className={`px-2 py-1 rounded-md transition-colors hover:bg-muted cursor-pointer ${
+                  viewMode === "months"
+                    ? "bg-muted text-primary font-bold"
+                    : "text-foreground"
                 }`}
-              />
-            </button>
-          </div>
+                title="Selecionar mês"
+              >
+                {MONTH_NAMES[viewMonth]}
+              </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              if (viewMode === "years") setViewYear((y) => y + 12);
-              else if (viewMode === "months") setViewYear((y) => y + 1);
-              else nextMonth();
-            }}
-            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            aria-label="Seguinte"
-          >
-            <ChevronRight size={14} />
-          </button>
-        </div>
-
-        {/* 1. Vista de Seleção de Meses (Grelha 3x4) */}
-        {viewMode === "months" && (
-          <div className="grid grid-cols-3 gap-1.5 py-1">
-            {MONTH_SHORT.map((mShort, idx) => {
-              const isSelected = viewMonth === idx;
-              const isCurrentMonth = today.getMonth() === idx && today.getFullYear() === viewYear;
-              const disabledMonth = isMonthDisabled(idx);
-              return (
-                <button
-                  key={mShort}
-                  type="button"
-                  disabled={disabledMonth}
-                  onClick={() => {
-                    if (disabledMonth) return;
-                    setViewMonth(idx);
-                    if (selectMonthOnly) {
-                      const mm = String(idx + 1).padStart(2, "0");
-                      onChange(`${viewYear}-${mm}-01`);
-                      setOpen(false);
-                    } else {
-                      setViewMode("days");
-                    }
-                  }}
-                  className={`py-2 px-2 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
-                    disabledMonth
-                      ? "opacity-30 pointer-events-none cursor-not-allowed"
-                      : isSelected
-                      ? "bg-primary text-primary-foreground font-bold shadow-xs"
-                      : isCurrentMonth
-                      ? "bg-primary/10 text-primary font-semibold hover:bg-primary/20"
-                      : "text-foreground hover:bg-muted"
-                  }`}
-                >
-                  {mShort}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* 2. Vista de Seleção de Anos (Grelha 3x4 com navegação de década) */}
-        {viewMode === "years" && (
-          <div className="grid grid-cols-3 gap-1.5 py-1">
-            {yearsList.map((yr) => {
-              const isSelected = viewYear === yr;
-              const isCurrentYear = today.getFullYear() === yr;
-              const disabledYear = isYearDisabled(yr);
-              return (
-                <button
-                  key={yr}
-                  type="button"
-                  disabled={disabledYear}
-                  onClick={() => {
-                    if (disabledYear) return;
-                    setViewYear(yr);
-                    setViewMode("months");
-                  }}
-                  className={`py-2 px-1 text-xs font-mono font-medium rounded-lg transition-colors cursor-pointer ${
-                    disabledYear
-                      ? "opacity-30 pointer-events-none cursor-not-allowed"
-                      : isSelected
-                      ? "bg-primary text-primary-foreground font-bold shadow-xs"
-                      : isCurrentYear
-                      ? "bg-primary/10 text-primary font-semibold hover:bg-primary/20"
-                      : "text-foreground hover:bg-muted"
-                  }`}
-                >
-                  {yr}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* 3. Vista Padrão de Dias */}
-        {viewMode === "days" && (
-          <>
-            {/* Cabeçalho dos dias da semana */}
-            <div className="grid grid-cols-7 mb-1">
-              {DAY_LABELS.map((d) => (
-                <div
-                  key={d}
-                  className="text-center text-[9px] font-semibold text-muted-foreground uppercase py-1"
-                >
-                  {d}
-                </div>
-              ))}
+              {/* Botão Seletor de Ano */}
+              <button
+                type="button"
+                onClick={() => setViewMode(viewMode === "years" ? "days" : "years")}
+                className={`px-2 py-1 rounded-md transition-colors hover:bg-muted cursor-pointer ${
+                  viewMode === "years"
+                    ? "bg-muted text-primary font-bold"
+                    : "text-foreground"
+                }`}
+                title="Selecionar ano"
+              >
+                {viewMode === "years" ? `${decadeStart}–${decadeStart + 11}` : viewYear}
+              </button>
             </div>
 
-            {/* Grelha do calendário */}
-            <div className="grid grid-cols-7 gap-y-0.5">
-              {Array.from({ length: firstDowMon }).map((_, i) => (
-                <div key={`pre-${i}`} />
-              ))}
-              {Array.from({ length: daysInMonth }, (_, i) => {
-                const day = i + 1;
-                const mm = String(viewMonth + 1).padStart(2, "0");
-                const dd = String(day).padStart(2, "0");
-                const iso = `${viewYear}-${mm}-${dd}`;
-                const weekRowIndex = Math.floor((firstDowMon + i) / 7);
-                const isInSelectedWeek =
-                  scopeMode === "week" &&
-                  Boolean(selectedWeekStart && selectedWeekEnd && iso >= selectedWeekStart && iso <= selectedWeekEnd);
-                const isHoveredWeek =
-                  scopeMode === "week" && hoveredWeekRow === weekRowIndex;
-                const isSelected =
-                  scopeMode === "week"
-                    ? isInSelectedWeek
-                    : parsed
-                    ? parsed.getFullYear() === viewYear &&
-                      parsed.getMonth() === viewMonth &&
-                      parsed.getDate() === day
-                    : value === iso;
-                const isToday =
-                  today.getFullYear() === viewYear &&
-                  today.getMonth() === viewMonth &&
-                  today.getDate() === day;
-                const isDisabled = checkDateDisabled(iso);
-                const dayTooltip = getDayTooltip?.(iso);
+            <button
+              type="button"
+              disabled={
+                (viewMode === "days" && maxYear !== undefined && maxMonth !== undefined && (viewYear > maxYear || (viewYear === maxYear && viewMonth >= maxMonth))) ||
+                (viewMode === "months" && maxYear !== undefined && viewYear >= maxYear) ||
+                (viewMode === "years" && maxYear !== undefined && decadeStart + 11 >= maxYear)
+              }
+              onClick={() => {
+                if (viewMode === "years") setViewYear((y) => y + 12);
+                else if (viewMode === "months") setViewYear((y) => y + 1);
+                else nextMonth();
+              }}
+              className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer disabled:opacity-30 disabled:pointer-events-none"
+              title="Seguinte"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
 
-                const btn = (
+          {/* 1. Vista de Seleção de Meses (Grelha 3x4) */}
+          {viewMode === "months" && (
+            <div className="grid grid-cols-3 gap-1.5 py-2">
+              {MONTH_SHORT.map((mShort, idx) => {
+                const isSelected = viewMonth === idx;
+                const isCurrentMonth = today.getMonth() === idx && today.getFullYear() === viewYear;
+                const disabledMonth = isMonthDisabled(idx);
+                return (
                   <button
+                    key={mShort}
                     type="button"
-                    disabled={isDisabled}
-                    onClick={() => selectDay(day)}
-                    onMouseEnter={() => {
-                      if (scopeMode === "week") setHoveredWeekRow(weekRowIndex);
+                    disabled={disabledMonth}
+                    onClick={() => {
+                      if (disabledMonth) return;
+                      setViewMonth(idx);
+                      if (selectMonthOnly || scopeMode === "month") {
+                        const mm = String(idx + 1).padStart(2, "0");
+                        onChange(`${viewYear}-${mm}-01`);
+                      } else {
+                        setViewMode("days");
+                      }
                     }}
-                    onMouseLeave={() => {
-                      if (scopeMode === "week") setHoveredWeekRow(null);
-                    }}
-                    className={`w-full aspect-square flex items-center justify-center text-[11px] font-mono rounded-lg transition-colors
-                      ${
-                        isDisabled
-                          ? "opacity-25 cursor-not-allowed text-muted-foreground line-through"
-                          : isSelected
-                          ? "bg-primary text-primary-foreground font-bold shadow-xs"
-                          : isHoveredWeek
-                          ? "bg-primary/20 text-primary font-semibold"
-                          : isToday
-                          ? "bg-primary/10 text-primary font-semibold hover:bg-primary/20"
-                          : "text-foreground hover:bg-muted cursor-pointer"
-                      }`}
+                    className={`py-2 px-1 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
+                      disabledMonth
+                        ? "opacity-30 pointer-events-none cursor-not-allowed"
+                        : isSelected
+                        ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                        : isCurrentMonth
+                        ? "bg-primary/10 text-primary font-semibold hover:bg-primary/20"
+                        : "text-foreground hover:bg-muted"
+                    }`}
                   >
-                    {day}
+                    {mShort}
                   </button>
-                );
-
-                return dayTooltip ? (
-                  <ActionTooltip key={day} content={dayTooltip}>
-                    {btn}
-                  </ActionTooltip>
-                ) : (
-                  <React.Fragment key={day}>{btn}</React.Fragment>
                 );
               })}
             </div>
-          </>
-        )}
-
-        {/* Rodapé */}
-        <div className="mt-2.5 pt-2 border-t border-border flex items-center justify-between">
-          {allowClear ? (
-            <button
-              type="button"
-              onClick={() => {
-                onChange("");
-                setOpen(false);
-              }}
-              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            >
-              Limpar
-            </button>
-          ) : (
-            <span />
           )}
 
-          <button
-            type="button"
-            disabled={checkDateDisabled(todayIso)}
-            onClick={() => {
-              if (!checkDateDisabled(todayIso)) {
-                if (scopeMode === "week") {
-                  const dow = (today.getDay() + 6) % 7;
-                  const mon = new Date(today);
-                  mon.setDate(mon.getDate() - dow);
-                  const mm = String(mon.getMonth() + 1).padStart(2, "0");
-                  const dd = String(mon.getDate()).padStart(2, "0");
-                  onChange(`${mon.getFullYear()}-${mm}-${dd}`);
-                } else if (scopeMode === "month") {
-                  const mm = String(today.getMonth() + 1).padStart(2, "0");
-                  onChange(`${today.getFullYear()}-${mm}-01`);
-                } else {
-                  onChange(todayIso);
-                }
-                setViewYear(today.getFullYear());
-                setViewMonth(today.getMonth());
-                setViewMode(scopeMode === "month" ? "months" : "days");
-                setOpen(false);
-              }
-            }}
-            className="text-[10px] text-primary hover:text-primary/80 font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-          >
-            Hoje
-          </button>
+          {/* 2. Vista de Seleção de Anos (Grelha 3x4 com navegação de década) */}
+          {viewMode === "years" && (
+            <div className="grid grid-cols-3 gap-1.5 py-2">
+              {yearsList.map((yr) => {
+                const isSelected = viewYear === yr;
+                const isCurrentYear = today.getFullYear() === yr;
+                const disabledYear = isYearDisabled(yr);
+                return (
+                  <button
+                    key={yr}
+                    type="button"
+                    disabled={disabledYear}
+                    onClick={() => {
+                      if (disabledYear) return;
+                      setViewYear(yr);
+                      setViewMode("months");
+                    }}
+                    className={`py-2 px-1 text-xs font-mono font-medium rounded-lg transition-colors cursor-pointer ${
+                      disabledYear
+                        ? "opacity-30 pointer-events-none cursor-not-allowed"
+                        : isSelected
+                        ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                        : isCurrentYear
+                        ? "bg-primary/10 text-primary font-semibold hover:bg-primary/20"
+                        : "text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {yr}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 3. Vista Padrão de Dias */}
+          {viewMode === "days" && (
+            <>
+              {/* Cabeçalho dos dias da semana */}
+              <div className="grid grid-cols-7 mb-1">
+                {DAY_LABELS.map((d) => (
+                  <div
+                    key={d}
+                    className="text-center text-[9px] font-semibold text-muted-foreground uppercase py-1"
+                  >
+                    {d}
+                  </div>
+                ))}
+              </div>
+
+              {/* Grelha do calendário com Ribbon contínuo para Semanas */}
+              <div className="grid grid-cols-7 gap-y-1">
+                {Array.from({ length: firstDowMon }).map((_, i) => (
+                  <div key={`pre-${i}`} className="h-7" />
+                ))}
+                {Array.from({ length: daysInMonth }, (_, i) => {
+                  const day = i + 1;
+                  const mm = String(viewMonth + 1).padStart(2, "0");
+                  const dd = String(day).padStart(2, "0");
+                  const iso = `${viewYear}-${mm}-${dd}`;
+                  const weekRowIndex = Math.floor((firstDowMon + i) / 7);
+                  const dowMon = (firstDowMon + i) % 7; // 0=Mon ... 6=Sun
+
+                  const isInSelectedWeek =
+                    scopeMode === "week" &&
+                    Boolean(selectedWeekStart && selectedWeekEnd && iso >= selectedWeekStart && iso <= selectedWeekEnd);
+                  const isHoveredWeek =
+                    scopeMode === "week" && hoveredWeekRow === weekRowIndex;
+
+                  const isStartOfWeek =
+                    scopeMode === "week" &&
+                    isInSelectedWeek &&
+                    (iso === selectedWeekStart || dowMon === 0 || day === 1);
+                  const isEndOfWeek =
+                    scopeMode === "week" &&
+                    isInSelectedWeek &&
+                    (iso === selectedWeekEnd || dowMon === 6 || day === daysInMonth);
+
+                  const isSelected =
+                    scopeMode === "week"
+                      ? isInSelectedWeek
+                      : parsed
+                      ? parsed.getFullYear() === viewYear &&
+                        parsed.getMonth() === viewMonth &&
+                        parsed.getDate() === day
+                      : value === iso;
+
+                  const isToday =
+                    today.getFullYear() === viewYear &&
+                    today.getMonth() === viewMonth &&
+                    today.getDate() === day;
+                  const isDisabled = checkDateDisabled(iso);
+                  const dayTooltip = getDayTooltip?.(iso);
+
+                  const btn = (
+                    <div
+                      className={`h-7 relative flex items-center justify-center ${
+                        scopeMode === "week" && isInSelectedWeek && !isStartOfWeek && !isEndOfWeek
+                          ? "bg-primary/10"
+                          : ""
+                      } ${scopeMode === "week" && isStartOfWeek ? "rounded-l-lg bg-primary/10" : ""} ${
+                        scopeMode === "week" && isEndOfWeek ? "rounded-r-lg bg-primary/10" : ""
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        disabled={isDisabled}
+                        onClick={() => selectDay(day)}
+                        onMouseEnter={() => {
+                          if (scopeMode === "week") setHoveredWeekRow(weekRowIndex);
+                        }}
+                        onMouseLeave={() => {
+                          if (scopeMode === "week") setHoveredWeekRow(null);
+                        }}
+                        className={`w-7 h-7 text-xs rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                          isDisabled
+                            ? "opacity-30 cursor-not-allowed pointer-events-none line-through"
+                            : scopeMode === "week"
+                            ? isStartOfWeek || isEndOfWeek
+                              ? "bg-primary text-primary-foreground font-bold shadow-xs z-10"
+                              : isInSelectedWeek
+                              ? "text-primary font-medium hover:bg-primary/20"
+                              : isHoveredWeek
+                              ? "bg-primary/15 text-primary font-semibold"
+                              : isToday
+                              ? "border border-primary text-primary font-semibold hover:bg-primary/10"
+                              : "text-foreground hover:bg-muted"
+                            : isSelected
+                            ? "bg-primary text-primary-foreground font-bold shadow-xs z-10"
+                            : isToday
+                            ? "border border-primary text-primary font-semibold hover:bg-primary/10"
+                            : "text-foreground hover:bg-muted"
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    </div>
+                  );
+
+                  return dayTooltip ? (
+                    <ActionTooltip key={day} content={dayTooltip}>
+                      {btn}
+                    </ActionTooltip>
+                  ) : (
+                    <React.Fragment key={day}>{btn}</React.Fragment>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Barra Inferior com Badge de Seleção, Limpar e Aplicar */}
+        <div className="p-3 bg-muted/20 border-t border-border flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-1.5 text-xs">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border bg-card whitespace-nowrap">
+              <span className="text-[10px] uppercase font-semibold text-muted-foreground select-none">
+                {displayBottomType}
+              </span>
+              <span className="font-mono font-medium text-foreground whitespace-nowrap">
+                {displayBottomLabel}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {allowClear && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange("");
+                  setOpen(false);
+                }}
+                className="px-2.5 py-1 rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                Limpar
+              </button>
+            )}
+
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setOpen(false)}
+              className="gap-1.5 text-xs font-semibold px-4 py-1.5 h-8 rounded-xl shadow-xs bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
+            >
+              <Check size={13} />
+              <span>Aplicar</span>
+            </Button>
+          </div>
         </div>
       </PopoverContent>
     </Popover>
