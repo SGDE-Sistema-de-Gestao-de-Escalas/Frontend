@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import {
   AlertTriangle,
   ArrowDownLeft,
+  ArrowUpRight,
   ArrowRight,
   Building2,
   Calendar,
@@ -442,9 +443,16 @@ const [publishModalState, setPublishModalState] = useState<{
       ) {
         existingIds.add(String(tr.assistant_id));
         const asstUser = tr.assistant?.user;
-        const fullName = asstUser
+        const nameFromUser = asstUser
           ? `${asstUser.first_name} ${asstUser.last_name}`.trim()
-          : `Assistente #${tr.assistant_id.slice(0, 6)}`;
+          : "";
+        const nameFromResource =
+          tr.assistant?.name?.trim() ||
+          `${tr.assistant?.first_name ?? ""} ${tr.assistant?.last_name ?? ""}`.trim();
+        const fullName =
+          nameFromUser ||
+          nameFromResource ||
+          `Assistente #${tr.assistant_id.slice(0, 6)}`;
         list.push({
           id: tr.assistant_id,
           name: fullName,
@@ -1211,6 +1219,48 @@ function paintSlot(aid: EntityId, slot: number) {
   // Find next open future day for default picker value
 
 
+  function findOutgoingTransfer(
+    assistantId: string | number,
+    isoDate: string
+  ) {
+    return temporaryAssignments.find(
+      (tr) =>
+        String(tr.assistant_id) === String(assistantId) &&
+        String(tr.origin_school_id) === String(selectedSchoolId) &&
+        tr.valid_from <= isoDate &&
+        (!tr.valid_until || tr.valid_until >= isoDate)
+    );
+  }
+
+  function getTransferWindow(tr: { start_time?: string | null; end_time?: string | null }) {
+    if (!tr.start_time || !tr.end_time) return null;
+    const startSlot = timeToSlotIndex(tr.start_time);
+    const endSlot = timeToSlotIndex(tr.end_time);
+    return endSlot > startSlot ? { startSlot, endSlot } : null;
+  }
+
+  function isPartialOutgoingTransfer(
+    tr: { start_time?: string | null; end_time?: string | null },
+    assistantId: string | number
+  ) {
+    const win = getTransferWindow(tr);
+    if (!win) return false;
+    const fb = fixedShiftBoundsByAssistant[assistantId];
+    if (!fb) return true;
+    return win.startSlot > fb.startSlot || win.endSlot < fb.endSlot;
+  }
+
+  function isSlotInPartialTransfer(
+    assistantId: string | number,
+    isoDate: string,
+    slot: number
+  ) {
+    const tr = findOutgoingTransfer(assistantId, isoDate);
+    if (!tr || !isPartialOutgoingTransfer(tr, assistantId)) return false;
+    const win = getTransferWindow(tr);
+    return !!win && slot >= win.startSlot && slot < win.endSlot;
+  }
+
   // Split assistants into Working vs. Absent Today (at the bottom, disabled)
   const { workingAssistants, absentAssistants } = useMemo(() => {
     const working: typeof activeAssistants = [];
@@ -1252,15 +1302,12 @@ function paintSlot(aid: EntityId, slot: number) {
       }
 
       // 2. Se for um assistente desta escola mas tiver transferência de saída hoje para outra escola:
-      const outgoingTransfer = temporaryAssignments.find(
-        (tr) =>
-          String(tr.assistant_id) === String(a.id) &&
-          String(tr.origin_school_id) === String(selectedSchoolId) &&
-          tr.valid_from <= dayInfo.isoDate &&
-          (!tr.valid_until || tr.valid_until >= dayInfo.isoDate)
-      );
+      const outgoingTransfer = findOutgoingTransfer(a.id, dayInfo.isoDate);
 
-      if (outgoingTransfer) {
+      if (
+        outgoingTransfer &&
+        !isPartialOutgoingTransfer(outgoingTransfer, a.id)
+      ) {
         const destName =
           outgoingTransfer.destination_school?.name || "outra escola";
         const reason = `Transferido(a) temporariamente para ${destName}`;
@@ -1436,14 +1483,10 @@ function paintSlot(aid: EntityId, slot: number) {
       }
 
       // 2. Assistente desta escola com transferência de saída hoje para outra escola
-      const isTransferredOut = temporaryAssignments.some(
-        (tr) =>
-          String(tr.assistant_id) === String(a.id) &&
-          String(tr.origin_school_id) === String(selectedSchoolId) &&
-          tr.valid_from <= info.isoDate &&
-          (!tr.valid_until || tr.valid_until >= info.isoDate)
-      );
-      if (isTransferredOut) return false;
+      const outgoingToday = findOutgoingTransfer(a.id, info.isoDate);
+      if (outgoingToday && !isPartialOutgoingTransfer(outgoingToday, a.id)) {
+        return false;
+      }
 
       // 3. Ausência de dia completo (ou turno completo coberto pela ausência)
       const absInfo = checkAssistantAbsenceOnDate(
@@ -1745,7 +1788,10 @@ function paintSlot(aid: EntityId, slot: number) {
         if (endSlot > startSlot) {
           const gapSlots: number[] = [];
           for (let s = startSlot; s < endSlot; s++) {
-          if (row[s] === "off") {
+          if (
+            row[s] === "off" &&
+            !isSlotInPartialTransfer(a.id, info.isoDate, s)
+          ) {
             gapSlots.push(s);
           }
         }
@@ -2178,6 +2224,24 @@ function paintSlot(aid: EntityId, slot: number) {
                       }`
                     : "";
 
+                  const partialTransfer = (() => {
+                    const tr = findOutgoingTransfer(assistant.id, dayInfo.isoDate);
+                    if (!tr || !isPartialOutgoingTransfer(tr, assistant.id)) {
+                      return null;
+                    }
+                    const win = getTransferWindow(tr);
+                    if (!win) return null;
+                    const startSlot = Math.max(win.startSlot, viewStartSlot);
+                    const endSlot = Math.min(win.endSlot, viewEndSlot);
+                    if (endSlot <= startSlot) return null;
+                    return {
+                      startSlot,
+                      endSlot,
+                      rangeStr: `${TIME_SLOTS[win.startSlot]}–${TIME_SLOTS[win.endSlot]}`,
+                      destName: tr.destination_school?.name || "outra escola",
+                    };
+                  })();
+
                   return (
                     <div
                       key={assistant.id}
@@ -2220,6 +2284,15 @@ function paintSlot(aid: EntityId, slot: number) {
                               >
                                 <span className="inline-flex items-center text-blue-600 dark:text-blue-400 shrink-0">
                                   <ArrowDownLeft size={11} />
+                                </span>
+                              </ActionTooltip>
+                            )}
+                            {partialTransfer && (
+                              <ActionTooltip
+                                content={`Cedência temporária para ${partialTransfer.destName} (${partialTransfer.rangeStr})`}
+                              >
+                                <span className="inline-flex items-center text-blue-600 dark:text-blue-400 shrink-0">
+                                  <ArrowUpRight size={11} />
                                 </span>
                               </ActionTooltip>
                             )}
@@ -2289,6 +2362,29 @@ function paintSlot(aid: EntityId, slot: number) {
                             />
                           ))}
                         </div>
+
+                        {partialTransfer && (
+                          <div
+                            className="absolute inset-y-1 bg-blue-500/10 border border-dashed border-blue-500/40 rounded-lg flex items-center justify-center px-2 pointer-events-none z-0 overflow-hidden"
+                            style={{
+                              left: `${
+                                ((partialTransfer.startSlot - viewStartSlot) /
+                                  viewSlotsCount) *
+                                100
+                              }%`,
+                              width: `${
+                                ((partialTransfer.endSlot -
+                                  partialTransfer.startSlot) /
+                                  viewSlotsCount) *
+                                100
+                              }%`,
+                            }}
+                          >
+                            <span className="text-[10px] font-medium text-blue-700 dark:text-blue-300 truncate">
+                              Cedência temporária para {partialTransfer.destName} · {partialTransfer.rangeStr}
+                            </span>
+                          </div>
+                        )}
 
                         {/* In Edit Mode: Shift Background Container Frame (Verde) */}
                         {canEditCurrentDay &&

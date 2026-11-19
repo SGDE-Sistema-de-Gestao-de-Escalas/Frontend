@@ -14,6 +14,8 @@ export interface UserProfile {
   assistant_id?: number | string | null;
   school_id?: number | string | null;
   school_name?: string | null;
+  has_password?: boolean;
+  provider?: string | null;
 }
 
 interface AuthContextType {
@@ -39,6 +41,8 @@ const EMPTY_USER: UserProfile = {
   role: "admin",
   roleLabel: "",
   email: "",
+  has_password: true,
+  provider: null,
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -74,6 +78,8 @@ function mapAuthUserToProfile(authUser: AuthUser): UserProfile {
     assistant_id: authUser.assistant_id,
     school_id: authUser.school_id,
     school_name: authUser.school_name,
+    has_password: authUser.has_password ?? true,
+    provider: authUser.provider || null,
   };
 }
 
