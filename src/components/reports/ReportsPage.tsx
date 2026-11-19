@@ -511,11 +511,11 @@ export default function ReportsPage() {
           </div>
 
           {/* Abas de Navegação entre Visão Geral e Carga Horária */}
-          <div className="flex items-center gap-2 border-b border-border pb-1">
+          <div className="flex items-center gap-2 border-b border-border pb-1 overflow-x-auto no-scrollbar flex-nowrap -mx-4 px-4 sm:mx-0 sm:px-0">
             <button
               type="button"
               onClick={() => setActiveTab("overview")}
-              className={`px-3.5 py-1.5 text-xs font-semibold rounded-t-lg transition-colors cursor-pointer border-b-2 ${
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-t-lg transition-colors cursor-pointer border-b-2 shrink-0 whitespace-nowrap ${
                 activeTab === "overview"
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -526,7 +526,7 @@ export default function ReportsPage() {
             <button
               type="button"
               onClick={() => setActiveTab("workload")}
-              className={`px-3.5 py-1.5 text-xs font-semibold rounded-t-lg transition-colors cursor-pointer border-b-2 ${
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-t-lg transition-colors cursor-pointer border-b-2 shrink-0 whitespace-nowrap ${
                 activeTab === "workload"
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"

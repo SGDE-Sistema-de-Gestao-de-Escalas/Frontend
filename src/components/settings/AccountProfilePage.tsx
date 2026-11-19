@@ -395,7 +395,7 @@ export default function AccountProfilePage({
         </p>
       </div>
 
-      <div className="flex gap-1 border-b border-border mb-6">
+      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto no-scrollbar flex-nowrap -mx-4 px-4 sm:mx-0 sm:px-0">
         {[
           { id: "profile", label: "Perfil" },
           { id: "security", label: "Segurança" },
@@ -407,7 +407,7 @@ export default function AccountProfilePage({
             onClick={() =>
               setActiveTab(t.id as "profile" | "security" | "privacy")
             }
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            className={`px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 -mb-px shrink-0 whitespace-nowrap transition-colors cursor-pointer ${
               activeTab === t.id
                 ? "border-accent text-accent"
                 : "border-transparent text-muted-foreground hover:text-foreground"

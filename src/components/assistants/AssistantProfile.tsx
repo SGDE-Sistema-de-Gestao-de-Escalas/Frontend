@@ -795,7 +795,7 @@ export default function AssistantProfile({
       ) : null}
 
       {/* Tabs */}
-      <div className="flex gap-px border-b border-border mb-6">
+      <div className="flex gap-px border-b border-border mb-6 overflow-x-auto no-scrollbar flex-nowrap -mx-4 px-4 sm:mx-0 sm:px-0">
         {[
           { id: "info" as const, label: "Informações Gerais", icon: <User size={13} /> },
           { id: "schedule" as const, label: "Horários & Exceções", icon: <Clock size={13} /> },
@@ -804,7 +804,7 @@ export default function AssistantProfile({
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2.5 text-xs sm:text-sm font-medium transition-colors border-b-2 -mb-px shrink-0 whitespace-nowrap cursor-pointer ${
               activeTab === tab.id
                 ? "border-primary text-primary bg-primary/5 font-semibold"
                 : "border-transparent text-muted-foreground hover:text-foreground"
