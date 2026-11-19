@@ -19,6 +19,8 @@ export interface AuthUser {
   school_name?: string | null;
   internal_number?: string | null;
   mecanografico?: string | null;
+  deactivation_requested?: boolean;
+  deactivation_requested_at?: string | null;
   has_password?: boolean;
   provider?: string | null;
 }

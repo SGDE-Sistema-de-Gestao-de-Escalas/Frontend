@@ -9,6 +9,8 @@ import {
   XCircle,
   Eye,
   EyeOff,
+  Clock,
+  CheckCircle,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { Role } from "../../types";
@@ -152,8 +154,12 @@ export default function AccountProfilePage({
       const res = await authService.requestDeactivation(deactivationReason.trim() || undefined);
       setShowRgpdConfirm(false);
       setDeactivationReason("");
+      updateUserLocal({
+        deactivation_requested: true,
+        deactivation_requested_at: (res as any)?.deactivation_requested_at || new Date().toISOString(),
+      });
       notify.success(
-        res?.message || "Pedido de desativação submetido com sucesso. Os administradores foram notificados por email."
+        res?.message || "Pedido de anonimização submetido com sucesso. Enviámos um comprovativo para o seu email e notificámos os administradores."
       );
     } catch (err: any) {
       setShowRgpdConfirm(false);
@@ -880,6 +886,40 @@ export default function AccountProfilePage({
                 )}
               </button>
             </Card>
+          ) : user.deactivation_requested || user.deactivation_requested_at ? (
+            <Card className="p-5 border-amber-500/30 bg-amber-500/5">
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="p-1.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <Clock size={16} />
+                </span>
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Pedido de Anonimização Pendente
+                  </h3>
+                  <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                    Em análise pela administração escolar
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+                Submeteu um pedido formal de anonimização e desativação dos seus dados cadastrais
+                {user.deactivation_requested_at && (
+                  <> em <strong className="text-foreground">{new Date(user.deactivation_requested_at).toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</strong></>
+                )}. A administração da sua instituição foi notificada diretamente por email e através da plataforma para validar o processo.
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border bg-muted/40 text-muted-foreground text-xs font-medium cursor-not-allowed"
+                >
+                  <CheckCircle size={14} className="text-amber-500" />
+                  Pedido Submetido (Não é possível reenviar)
+                </button>
+              </div>
+            </Card>
           ) : (
             <Card className="p-5">
               <h3 className="text-sm font-semibold text-foreground mb-2">
@@ -895,7 +935,7 @@ export default function AccountProfilePage({
                   setShowRgpdConfirm(true);
                 }}
                 disabled={requestingDeactivation}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#C8291A]/30 text-[#C8291A] text-sm font-medium hover:bg-[#FEF2F2] disabled:opacity-50 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#C8291A]/30 text-[#C8291A] text-sm font-medium hover:bg-[#FEF2F2] dark:hover:bg-[#C8291A]/10 disabled:opacity-50 transition-colors"
               >
                 {requestingDeactivation ? (
                   <>
@@ -919,14 +959,14 @@ export default function AccountProfilePage({
         open={showRgpdConfirm}
         onClose={() => setShowRgpdConfirm(false)}
         onConfirm={handleRequestDeactivation}
-        title="Solicitar Desativação e Eliminação de Dados (RGPD)"
+        title="Solicitar Anonimização e Desativação de Dados (RGPD)"
         description={
           <div className="space-y-3">
             <p>
               Tem a certeza que pretende solicitar a desativação da sua conta e a anonimização dos seus dados pessoais?
             </p>
             <p className="text-xs text-muted-foreground">
-              Os administradores da sua instituição serão notificados por email com o seu pedido para dar seguimento ao processo legal e operacional de desativação.
+              Receberá um email de comprovativo do pedido e os administradores da sua instituição serão notificados de imediato na plataforma e por email para dar seguimento ao processo.
             </p>
             <div>
               <label className="text-xs font-medium text-foreground block mb-1">
