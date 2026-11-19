@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { Card } from "../ui/card";
 import { useAssistantsList } from "../../hooks/api/useAssistants";
 import { useSchedulesList } from "../../hooks/api/useSchedules";
@@ -127,28 +127,7 @@ export default function MonthDashboardView({
 
   return (
     <div className="space-y-4">
-      {/* Legend */}
-      <Card className="px-4 py-3 flex items-center gap-6 border-border bg-card flex-wrap">
-        <span className="text-xs text-muted-foreground font-medium">
-          Cobertura:
-        </span>
-        {[
-          { dot: "bg-[#0E7C59]", label: "Cobertura normal (≥ 80%)" },
-          { dot: "bg-[#D97706]", label: "Cobertura parcial (50% – 79%)" },
-          { dot: "bg-destructive", label: "Abaixo de 50%" },
-          { dot: "bg-muted-foreground/40", label: "Escala ainda não gerada" },
-        ].map((l) => (
-          <div key={l.label} className="flex items-center gap-1.5">
-            <div className={`w-2 h-2 rounded-full ${l.dot}`} />
-            <span className="text-xs text-muted-foreground">{l.label}</span>
-          </div>
-        ))}
-        <span className="ml-auto text-xs text-muted-foreground hidden sm:block">
-          Clique num dia para ver a matriz completa
-        </span>
-      </Card>
-
-      <Card className="overflow-hidden border-border bg-card">
+      <Card className="overflow-hidden border-border bg-card shadow-xs">
         {/* Month navigation */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <button
@@ -296,6 +275,31 @@ export default function MonthDashboardView({
               />
             ));
           })()}
+        </div>
+
+        {/* Legenda de Cobertura Mensal (no fundo do cartão) */}
+        <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between flex-wrap gap-4 text-xs animate-in fade-in-50 duration-200">
+          <div className="flex items-center gap-2 text-foreground font-semibold">
+            <Info size={14} className="text-primary" />
+            <span>Legenda de Cobertura:</span>
+          </div>
+          <div className="flex items-center gap-4 flex-wrap text-xs">
+            {[
+              { color: "bg-[#0E7C59]", label: "Cobertura normal (≥ 80%)" },
+              { color: "bg-[#D97706]", label: "Cobertura parcial (50% – 79%)" },
+              { color: "bg-destructive", label: "Abaixo de 50%" },
+              { color: "bg-muted-foreground/40", label: "Escala não gerada" },
+            ].map((l) => (
+              <div key={l.label} className="flex items-center gap-1.5">
+                <div
+                  className={`w-3.5 h-3.5 rounded-sm shadow-2xs flex-shrink-0 ${l.color}`}
+                />
+                <span className="text-foreground/90 font-medium">
+                  {l.label}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </Card>
     </div>

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Lock } from "lucide-react";
+import { Lock, Info } from "lucide-react";
 import type { BlockState, EntityId } from "../../types";
 import { Card } from "../ui/card";
 import {
@@ -144,37 +144,6 @@ export default function WeekMatrixView({
   return (
     <TooltipProvider delayDuration={60}>
       <Card className="overflow-hidden border-border bg-card shadow-xs">
-        {/* Legend */}
-        <div className="px-4 py-2.5 border-b border-border bg-muted/20 flex items-center gap-4 flex-wrap">
-          {(
-            [
-              "collection",
-              "work",
-              "surveillance",
-              "cleaning",
-              "delivery",
-              "lunch",
-              "absent",
-            ] as BlockState[]
-          ).map((s) => (
-            <div key={s} className="flex items-center gap-1.5">
-              <div
-                className={`w-3 h-3 rounded-sm ${BLOCK_STYLES[s].bg} flex items-center justify-center`}
-              >
-                {BLOCK_STYLES[s].locked && (
-                  <Lock size={6} className="text-white/70" />
-                )}
-              </div>
-              <span className="text-[10px] text-muted-foreground">
-                {BLOCK_STYLES[s].label}
-              </span>
-            </div>
-          ))}
-          <span className="ml-auto text-[10px] text-muted-foreground hidden sm:block">
-            Clique num dia para vista diária · Clique num nome para horário detalhado
-          </span>
-        </div>
-
         <div className="overflow-x-auto">
           <div style={{ minWidth: 740 }}>
             {/* Day column headers */}
@@ -461,6 +430,40 @@ export default function WeekMatrixView({
                 </div>
               ))
             )}
+          </div>
+        </div>
+
+        {/* Legenda de Atividades (modo de visualização semanal no fundo) */}
+        <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between flex-wrap gap-4 text-xs animate-in fade-in-50 duration-200">
+          <div className="flex items-center gap-2 text-foreground font-semibold">
+            <Info size={14} className="text-primary" />
+            <span>Legenda de Atividades:</span>
+          </div>
+          <div className="flex items-center gap-4 flex-wrap text-xs">
+            {(
+              [
+                "collection",
+                "work",
+                "surveillance",
+                "cleaning",
+                "delivery",
+                "lunch",
+                "absent",
+              ] as BlockState[]
+            ).map((s) => (
+              <div key={s} className="flex items-center gap-1.5">
+                <div
+                  className={`w-3.5 h-3.5 rounded-sm shadow-2xs flex items-center justify-center flex-shrink-0 ${BLOCK_STYLES[s].bg}`}
+                >
+                  {BLOCK_STYLES[s].locked && (
+                    <Lock size={7} className="text-white/80" />
+                  )}
+                </div>
+                <span className="text-foreground/90 font-medium">
+                  {BLOCK_STYLES[s].label}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </Card>
