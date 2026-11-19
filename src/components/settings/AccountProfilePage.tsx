@@ -415,160 +415,248 @@ export default function AccountProfilePage({
       {activeTab === "profile" && (
         <div className="space-y-4">
           <Card className="p-5">
-            <h3 className="text-sm font-semibold text-foreground mb-4">
-              Dados Pessoais
-            </h3>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-foreground block mb-1.5">
-                    Primeiro Nome <span className="text-destructive">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={firstName}
-                    onChange={(e) => {
-                      setFirstName(e.target.value);
-                      if (profileErrors.first_name) {
-                        setProfileErrors((prev) => ({ ...prev, first_name: undefined }));
-                      }
-                    }}
-                    placeholder="Ex: Miguel"
-                    className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
-                      profileErrors.first_name
-                        ? "border-destructive focus:ring-destructive"
-                        : "border-border focus:ring-ring"
-                    }`}
-                  />
-                  {profileErrors.first_name && (
-                    <p className="text-[11px] text-destructive mt-1 font-medium">
-                      {profileErrors.first_name}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-foreground">
+                Dados Pessoais
+              </h3>
+              {role === "staff" && (
+                <span className="text-[11px] font-medium text-muted-foreground bg-muted/60 px-2.5 py-0.5 rounded-full border border-border">
+                  Apenas Leitura
+                </span>
+              )}
+            </div>
+
+            {role === "staff" ? (
+              <div className="space-y-4">
+                {/* Banner Informativo */}
+                <div className="p-3.5 rounded-xl bg-muted/30 border border-border flex items-start gap-3">
+                  <Shield className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <div className="text-xs text-muted-foreground leading-relaxed">
+                    <p className="font-semibold text-foreground mb-0.5">
+                      Identificação Gerida Institucionalmente
                     </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-foreground block mb-1.5">
-                    Último Nome <span className="text-destructive">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={lastName}
-                    onChange={(e) => {
-                      setLastName(e.target.value);
-                      if (profileErrors.last_name) {
-                        setProfileErrors((prev) => ({ ...prev, last_name: undefined }));
-                      }
-                    }}
-                    placeholder="Ex: Silva"
-                    className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
-                      profileErrors.last_name
-                        ? "border-destructive focus:ring-destructive"
-                        : "border-border focus:ring-ring"
-                    }`}
-                  />
-                  {profileErrors.last_name && (
-                    <p className="text-[11px] text-destructive mt-1 font-medium">
-                      {profileErrors.last_name}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-foreground block mb-1.5">
-                  Email Institucional <span className="text-destructive">*</span>
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (profileErrors.email) {
-                      setProfileErrors((prev) => ({ ...prev, email: undefined }));
-                    }
-                  }}
-                  placeholder="utilizador@sgde.pt"
-                  className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
-                    profileErrors.email
-                      ? "border-destructive focus:ring-destructive"
-                      : "border-border focus:ring-ring"
-                  }`}
-                />
-                {profileErrors.email && (
-                  <p className="text-[11px] text-destructive mt-1 font-medium">
-                    {profileErrors.email}
-                  </p>
-                )}
-              </div>
-
-              {emailChanged && (
-                !hasPassword ? (
-                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
-                    <p className="font-medium">Definição de palavra-passe necessária</p>
-                    <p className="mt-1">
-                      A sua conta ainda não tem uma palavra-passe definida. Para alterar o seu email, defina primeiro uma palavra-passe no separador <strong>Segurança</strong>.
+                    <p>
+                      Os seus dados de identificação e email institucional são geridos exclusivamente pela administração escolar para assegurar a consistência dos registos em toda a plataforma. Se necessitar de atualizar o seu nome ou email, por favor solicite a retificação junto da direção ou dos administradores escolares.
                     </p>
                   </div>
-                ) : (
+                </div>
+
+                {/* Dados Informativos em Cartões de Leitura */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
+                      Primeiro Nome
+                    </span>
+                    <span className="text-sm font-semibold text-foreground">
+                      {firstName || user.first_name || "—"}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
+                      Último Nome
+                    </span>
+                    <span className="text-sm font-semibold text-foreground">
+                      {lastName || user.last_name || "—"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
+                      Email Institucional
+                    </span>
+                    <span className="text-sm font-mono font-medium text-foreground">
+                      {email || user.email || "—"}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
+                      N.º Mecanográfico
+                    </span>
+                    <span className="text-sm font-mono font-semibold text-foreground">
+                      {user.mecanografico || user.internal_number || "—"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="p-3 rounded-lg border border-border/40 bg-muted/10">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-0.5">
+                      Perfil de Acesso
+                    </span>
+                    <span className="text-xs font-semibold text-foreground">
+                      Assistente Operacional
+                    </span>
+                  </div>
+
+                  {user.school_name && (
+                    <div className="p-3 rounded-lg border border-border/40 bg-muted/10">
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-0.5">
+                        Escola Principal
+                      </span>
+                      <span className="text-xs font-semibold text-foreground">
+                        {user.school_name}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-medium text-foreground block mb-1.5">
-                      Password atual <span className="text-destructive">*</span>
+                      Primeiro Nome <span className="text-destructive">*</span>
                     </label>
                     <input
-                      type="password"
-                      autoComplete="current-password"
-                      value={emailChangePassword}
+                      type="text"
+                      value={firstName}
                       onChange={(e) => {
-                        setEmailChangePassword(e.target.value);
-                        if (profileErrors.current_password) {
-                          setProfileErrors((prev) => ({ ...prev, current_password: undefined }));
+                        setFirstName(e.target.value);
+                        if (profileErrors.first_name) {
+                          setProfileErrors((prev) => ({ ...prev, first_name: undefined }));
                         }
                       }}
-                      placeholder="Confirme com a sua password atual"
+                      placeholder="Ex: Miguel"
                       className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
-                        profileErrors.current_password
+                        profileErrors.first_name
                           ? "border-destructive focus:ring-destructive"
                           : "border-border focus:ring-ring"
                       }`}
                     />
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Para mudar o email tem de confirmar a sua password.
-                    </p>
-                    {profileErrors.current_password && (
+                    {profileErrors.first_name && (
                       <p className="text-[11px] text-destructive mt-1 font-medium">
-                        {profileErrors.current_password}
+                        {profileErrors.first_name}
                       </p>
                     )}
                   </div>
-                )
-              )}
-            </div>
 
-            <button
-              type="button"
-              onClick={handleSaveProfile}
-              disabled={
-                savingProfile ||
-                !firstName.trim() ||
-                !lastName.trim() ||
-                !email.trim() ||
-                (emailChanged && (!hasPassword || !emailChangePassword))
-              }
-              className="mt-5 flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 disabled:opacity-40 transition-colors shadow-xs"
-            >
-              {savingProfile ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" />
-                  A guardar...
-                </>
-              ) : (
-                <>
-                  <Save size={14} />
-                  Guardar Alterações
-                </>
-              )}
-            </button>
+                  <div>
+                    <label className="text-xs font-medium text-foreground block mb-1.5">
+                      Último Nome <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => {
+                        setLastName(e.target.value);
+                        if (profileErrors.last_name) {
+                          setProfileErrors((prev) => ({ ...prev, last_name: undefined }));
+                        }
+                      }}
+                      placeholder="Ex: Silva"
+                      className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                        profileErrors.last_name
+                          ? "border-destructive focus:ring-destructive"
+                          : "border-border focus:ring-ring"
+                      }`}
+                    />
+                    {profileErrors.last_name && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {profileErrors.last_name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1.5">
+                    Email Institucional <span className="text-destructive">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (profileErrors.email) {
+                        setProfileErrors((prev) => ({ ...prev, email: undefined }));
+                      }
+                    }}
+                    placeholder="utilizador@sgde.pt"
+                    className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                      profileErrors.email
+                        ? "border-destructive focus:ring-destructive"
+                        : "border-border focus:ring-ring"
+                    }`}
+                  />
+                  {profileErrors.email && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {profileErrors.email}
+                    </p>
+                  )}
+                </div>
+
+                {emailChanged && (
+                  !hasPassword ? (
+                    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
+                      <p className="font-medium">Definição de palavra-passe necessária</p>
+                      <p className="mt-1">
+                        A sua conta ainda não tem uma palavra-passe definida. Para alterar o seu email, defina primeiro uma palavra-passe no separador <strong>Segurança</strong>.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1.5">
+                        Password atual <span className="text-destructive">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        autoComplete="current-password"
+                        value={emailChangePassword}
+                        onChange={(e) => {
+                          setEmailChangePassword(e.target.value);
+                          if (profileErrors.current_password) {
+                            setProfileErrors((prev) => ({ ...prev, current_password: undefined }));
+                          }
+                        }}
+                        placeholder="Confirme com a sua password atual"
+                        className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                          profileErrors.current_password
+                            ? "border-destructive focus:ring-destructive"
+                            : "border-border focus:ring-ring"
+                        }`}
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Para mudar o email tem de confirmar a sua password.
+                      </p>
+                      {profileErrors.current_password && (
+                        <p className="text-[11px] text-destructive mt-1 font-medium">
+                          {profileErrors.current_password}
+                        </p>
+                      )}
+                    </div>
+                  )
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSaveProfile}
+                  disabled={
+                    savingProfile ||
+                    !firstName.trim() ||
+                    !lastName.trim() ||
+                    !email.trim() ||
+                    (emailChanged && (!hasPassword || !emailChangePassword))
+                  }
+                  className="mt-5 flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 disabled:opacity-40 transition-colors shadow-xs"
+                >
+                  {savingProfile ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      A guardar...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={14} />
+                      Guardar Alterações
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </Card>
         </div>
       )}

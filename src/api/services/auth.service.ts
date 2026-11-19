@@ -17,6 +17,8 @@ export interface AuthUser {
   assistant_id?: string | number | null;
   school_id?: string | number | null;
   school_name?: string | null;
+  internal_number?: string | null;
+  mecanografico?: string | null;
   has_password?: boolean;
   provider?: string | null;
 }
