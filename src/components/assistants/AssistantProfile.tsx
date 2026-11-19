@@ -666,18 +666,18 @@ export default function AssistantProfile({
         </button>
       )}
 
-      <div className="flex items-start justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
             <span className="text-base font-bold text-primary font-mono">
               {resolvedInitials}
             </span>
           </div>
-          <div>
-            <h2 className="text-xl font-semibold text-foreground">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xl font-semibold text-foreground truncate">
               {resolvedName}
             </h2>
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex items-center gap-1.5 sm:gap-2 mt-1 flex-wrap">
               <Badge
                 variant="outline"
                 className={
@@ -706,11 +706,11 @@ export default function AssistantProfile({
               {currentShiftDetails && (
                 <Badge
                   variant="outline"
-                  className={
+                  className={`hidden sm:inline-flex items-center gap-1.5 font-medium text-xs py-0.5 px-2.5 ${
                     currentShiftDetails.isRotating
-                      ? "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30 flex items-center gap-1.5 font-medium text-xs py-0.5 px-2.5"
-                      : "bg-primary/10 text-primary border-primary/30 flex items-center gap-1.5 font-medium text-xs py-0.5 px-2.5"
-                  }
+                      ? "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30"
+                      : "bg-primary/10 text-primary border-primary/30"
+                  }`}
                 >
                   <Clock size={12} className="shrink-0" />
                   <span>{currentShiftDetails.label}</span>
@@ -725,18 +725,53 @@ export default function AssistantProfile({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Mobile Full-Width Shift Details */}
+        {currentShiftDetails && (
+          <div
+            className={`sm:hidden w-full flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3.5 py-2.5 rounded-lg border text-xs shadow-2xs ${
+              currentShiftDetails.isRotating
+                ? "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30"
+                : "bg-primary/10 text-primary border-primary/30"
+            }`}
+          >
+            <div className="flex items-center gap-2 font-medium">
+              <Clock size={14} className="shrink-0" />
+              <span>{currentShiftDetails.label}</span>
+            </div>
+            {currentShiftDetails.lunch && (
+              <span className="text-[11px] opacity-85 font-normal">
+                {currentShiftDetails.lunch}
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-start sm:justify-end shrink-0">
           {!isDeletedOrAnonymized && (
             <>
-              <ActionTooltip content={currentIsActive ? "Inativar Assistente" : "Reativar Assistente"}><button type="button" onClick={() => setShowStatusModal(true)} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors cursor-pointer ${currentIsActive ? "border-amber-500/30 text-amber-600 hover:bg-amber-500/10" : "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"}`}>{currentIsActive ? <UserX size={14} /> : <UserCheck size={14} />}{currentIsActive ? "Inativar" : "Reativar"}</button></ActionTooltip>
+              <ActionTooltip content={currentIsActive ? "Inativar Assistente" : "Reativar Assistente"}>
+                <button
+                  type="button"
+                  onClick={() => setShowStatusModal(true)}
+                  className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs sm:text-sm font-medium transition-colors cursor-pointer ${
+                    currentIsActive
+                      ? "border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
+                      : "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+                  }`}
+                >
+                  {currentIsActive ? <UserX size={14} className="shrink-0" /> : <UserCheck size={14} className="shrink-0" />}
+                  <span>{currentIsActive ? "Inativar" : "Reativar"}</span>
+                </button>
+              </ActionTooltip>
 
               <button
                 type="button"
                 onClick={() => setEditing(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border text-xs sm:text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors cursor-pointer"
               >
-                <Edit2 size={13} />
-                Editar Perfil
+                <Edit2 size={13} className="shrink-0" />
+                <span className="hidden sm:inline">Editar Perfil</span>
+                <span className="sm:hidden">Editar</span>
               </button>
 
               <ActionTooltip
@@ -750,14 +785,14 @@ export default function AssistantProfile({
                   type="button"
                   disabled={assistant?.can_delete === false}
                   onClick={() => setShowDeleteModal(true)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                  className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs sm:text-sm transition-colors ${
                     assistant?.can_delete === false
                       ? "opacity-40 cursor-not-allowed border-border text-muted-foreground bg-muted/20"
                       : "border-destructive/20 text-destructive hover:bg-destructive/10 cursor-pointer"
                   }`}
                 >
-                  <Trash2 size={13} />
-                  Eliminar
+                  <Trash2 size={13} className="shrink-0" />
+                  <span>Eliminar</span>
                 </button>
               </ActionTooltip>
             </>
@@ -773,9 +808,9 @@ export default function AssistantProfile({
           </span>
         </div>
       ) : assistant?.deleted_at ? (
-        <div className="flex items-center justify-between gap-3 p-3.5 mb-6 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400 text-sm flex-wrap">
-          <div className="flex items-center gap-3">
-            <AlertTriangle size={18} className="shrink-0" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 mb-6 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400 text-sm">
+          <div className="flex items-start sm:items-center gap-3">
+            <AlertTriangle size={18} className="shrink-0 mt-0.5 sm:mt-0" />
             <div>
               <p className="font-semibold">Registo Eliminado</p>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -786,7 +821,7 @@ export default function AssistantProfile({
           <button
             type="button"
             onClick={() => setShowAnonymizeModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 text-xs font-medium transition-colors ml-auto shadow-xs"
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 text-xs font-medium transition-colors w-full sm:w-auto shrink-0 shadow-xs cursor-pointer"
           >
             <ShieldAlert size={13} />
             Anonimizar Agora
