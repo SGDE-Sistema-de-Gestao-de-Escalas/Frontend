@@ -1081,21 +1081,6 @@ export default function RecalculateModal({
                               <p className={`text-xs font-semibold truncate ${isSelected ? "text-primary" : "text-foreground"}`}>
                                 {c.name}
                               </p>
-                              <span
-                                className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
-                                  isDisabled
-                                    ? "bg-muted text-muted-foreground"
-                                    : c.causes_origin_shortfall
-                                    ? "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300"
-                                    : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300"
-                                }`}
-                              >
-                                {c.is_absent
-                                  ? "Indisponível"
-                                  : c.causes_origin_shortfall
-                                  ? `Score ${c.score}% · Afeta origem`
-                                  : `Score ${c.score}% · Livre na origem`}
-                              </span>
                             </div>
 
                             <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5 truncate">

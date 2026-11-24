@@ -256,7 +256,7 @@ export default function AlertBanner({
         <div className="border-t border-destructive/15 p-3.5 bg-background/50 space-y-2">
           <div className="flex items-center justify-between text-xs text-muted-foreground px-1 mb-1">
             <span className="font-medium text-foreground">Dias com Pendências a Resolver:</span>
-            <span className="hidden sm:inline">Clique em "Ver no Editor" para abrir o dia na matriz</span>
+            <span className="hidden sm:inline">Clique em "Editar Escala" para abrir o dia na matriz</span>
           </div>
 
           <div className="max-h-80 overflow-y-auto pr-1 space-y-2">

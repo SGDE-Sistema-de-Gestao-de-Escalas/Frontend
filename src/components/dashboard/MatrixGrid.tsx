@@ -84,6 +84,7 @@ import type {
   LunchBlockApi,
   SaveScheduleDayPayload,
   SaveScheduleDayEntryPayload,
+  ScheduleConflictApi,
 } from "../../api/services/schedules.service";
 import PublishSchedulesModal from "./PublishSchedulesModal";
 import {
@@ -201,6 +202,10 @@ interface MatrixGridProps {
   queryEndDate?: string;
   onRequestRecalculate?: () => void;
   editModeTrigger?: number;
+  onManualEditsSaved?: (
+    savedDates: string[],
+    remainingConflicts: ScheduleConflictApi[]
+  ) => void;
 }
 
 function cloneMatrix(m: ScheduleMatrix): ScheduleMatrix {
@@ -251,6 +256,7 @@ export default function MatrixGrid({
   queryEndDate,
   onRequestRecalculate,
   editModeTrigger,
+  onManualEditsSaved,
 }: MatrixGridProps) {
   const { selectedSchoolId, selectedSchool, agrupamento } = useSchool();
   const { role } = useAuth();
@@ -2062,6 +2068,51 @@ function paintSlot(aid: EntityId, slot: number) {
 
     try {
       await saveDaysMutation.mutateAsync({ days: daysToSave });
+
+      // Reavaliar regras obrigatórias dos dias guardados para atualizar/limpar o banner de défices
+      const savedDates: string[] = [];
+      const updatedConflictsForSavedDays: ScheduleConflictApi[] = [];
+
+      offsets.forEach((offset) => {
+        const date = getIsoDateFromOffset(offset);
+        savedDates.push(date);
+        const matrix = draftMatricesByDay[offset];
+        const draftDayMeta = draftSlotMetaByDay[offset];
+        const mergedMeta: Record<EntityId, Record<number, MergedScheduleBlockMeta>> = {};
+
+        activeAssistants.forEach((a) => {
+          mergedMeta[a.id] = {
+            ...(slotMetaByAssistant[a.id] || {}),
+            ...(draftDayMeta?.[a.id] || {}),
+          };
+        });
+
+        const { ruleEvaluations: savedEvals } = evaluateDaySchedule(
+          offset,
+          matrix,
+          mergedMeta
+        );
+
+        savedEvals.forEach((ev) => {
+          if (!ev.isFallback && !ev.isMet && ev.type === "mandatory") {
+            updatedConflictsForSavedDays.push({
+              date,
+              rule_id: String(ev.id),
+              activity_type_id: ev.activityTypeId ? String(ev.activityTypeId) : "",
+              activity_name: ev.title,
+              period_start: TIME_SLOTS[ev.startSlot] ?? "00:00",
+              period_end: TIME_SLOTS[ev.endSlot] ?? "24:00",
+              required: ev.min,
+              assigned: ev.assigned,
+              missing: Math.max(0, ev.min - ev.assigned),
+              skipped: [],
+              transfer_candidates: [],
+            });
+          }
+        });
+      });
+
+      onManualEditsSaved?.(savedDates, updatedConflictsForSavedDays);
 
       setSavedMatricesByDay((prev) => ({
         ...prev,

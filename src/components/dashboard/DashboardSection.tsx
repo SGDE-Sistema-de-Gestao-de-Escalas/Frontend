@@ -460,6 +460,28 @@ export default function DashboardSection({
             });
             setShowRecalcModal(true);
           }}
+          onManualEditsSaved={(savedDates, remainingConflicts) => {
+            const savedSet = new Set(savedDates);
+            setLastGenerationResult((prev) => {
+              if (!prev) {
+                if (remainingConflicts.length === 0) return prev;
+                return {
+                  message: "",
+                  schedules: [],
+                  conflicts: remainingConflicts,
+                  insights: [],
+                  lunch_blocks: {},
+                } as GenerateScheduleResponse;
+              }
+              const kept = (prev.conflicts ?? []).filter(
+                (c) => !savedSet.has(c.date)
+              );
+              return {
+                ...prev,
+                conflicts: [...kept, ...remainingConflicts],
+              };
+            });
+          }}
         />
       )}
       {viewMode === "week" && (
