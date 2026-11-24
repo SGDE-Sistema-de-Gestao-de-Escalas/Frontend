@@ -205,7 +205,7 @@ export default function WeekMatrixView({
           <div style={{ minWidth: 740 }}>
             {/* Day column headers */}
             <div className="flex border-b border-border bg-muted/10">
-              <div className="w-40 flex-shrink-0 border-r border-border px-3 py-2 text-xs text-muted-foreground font-medium">
+              <div className="w-40 flex-shrink-0 border-r border-border px-3 py-2 text-xs text-muted-foreground font-medium flex items-center">
                 Assistente
               </div>
               {weekOffsets.map((offset) => {
