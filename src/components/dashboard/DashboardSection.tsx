@@ -259,6 +259,7 @@ export default function DashboardSection({
   }
 
   const label = navLabel();
+  const todayInfo = getDateInfo(0);
 
   return (
     <div className="space-y-4">
@@ -288,9 +289,7 @@ export default function DashboardSection({
             )}
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {viewMode === "day" && `${label.dayName}, ${label.dateStr}`}
-            {viewMode === "week" && label.dayName}
-            {viewMode === "month" && label.dayName}
+            {`${todayInfo.dayName}, ${todayInfo.dateStr}`}
           </p>
         </div>
 
