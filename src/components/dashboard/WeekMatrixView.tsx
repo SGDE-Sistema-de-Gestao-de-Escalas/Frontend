@@ -8,7 +8,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../ui/tooltip";
-import ActionTooltip from "../common/ActionTooltip";
 import {
   BLOCK_STYLES,
   formatDurationSlots,
@@ -141,6 +140,64 @@ export default function WeekMatrixView({
     exceptionsByAssistant,
   ]);
 
+  const weekLegendItems = useMemo(() => {
+    const itemsMap = new Map<string, { key: string; name: string; color?: string; bgClass?: string; order: number }>();
+
+    weekOffsets.forEach((offset) => {
+      const dayData = dayDataByOffset[offset];
+      if (!dayData) return;
+
+      activeAssistants.forEach((assistant) => {
+        const slots = dayData.matrix[assistant.id] || [];
+        const meta = dayData.slotMetaByAssistant?.[assistant.id];
+        slotsToBlocks(slots, meta).forEach((b) => {
+          if (b.state === "off") return;
+
+          if (b.state === "lunch") {
+            if (!itemsMap.has("__lunch__")) {
+              itemsMap.set("__lunch__", {
+                key: "__lunch__",
+                name: BLOCK_STYLES.lunch.label,
+                bgClass: BLOCK_STYLES.lunch.bg,
+                order: 2,
+              });
+            }
+            return;
+          }
+
+          if (b.state === "absent") {
+            if (!itemsMap.has("__absent__")) {
+              itemsMap.set("__absent__", {
+                key: "__absent__",
+                name: BLOCK_STYLES.absent.label,
+                bgClass: BLOCK_STYLES.absent.bg,
+                order: 3,
+              });
+            }
+            return;
+          }
+
+          const name = b.activityName || BLOCK_STYLES[b.state]?.label || "Atividade";
+          const key = name.trim().toLowerCase();
+          if (!itemsMap.has(key)) {
+            itemsMap.set(key, {
+              key,
+              name,
+              color: b.activityColor,
+              bgClass: b.activityColor ? undefined : BLOCK_STYLES[b.state]?.bg,
+              order: 1,
+            });
+          }
+        });
+      });
+    });
+
+    return Array.from(itemsMap.values()).sort((a, b) => {
+      if (a.order !== b.order) return a.order - b.order;
+      return a.name.localeCompare(b.name, "pt");
+    });
+  }, [weekOffsets, dayDataByOffset, activeAssistants]);
+
   return (
     <TooltipProvider delayDuration={60}>
       <Card className="overflow-hidden border-border bg-card shadow-xs">
@@ -180,17 +237,16 @@ export default function WeekMatrixView({
                   ? `Horário de funcionamento: ${hoursLabel}`
                   : null;
 
-                return (
-                  <ActionTooltip key={offset} content={tooltipText}>
-                    <button
-                      type="button"
-                      onClick={() => onSelectDay(offset)}
-                      className={`w-full px-2 py-2 text-center border-r border-border/50 last:border-0 transition-colors cursor-pointer ${
-                        isClosed
-                          ? "bg-muted/15 hover:bg-muted/30"
-                          : "hover:bg-primary/5"
-                      } ${isToday ? "bg-primary/10" : ""}`}
-                    >
+                const headerButton = (
+                  <button
+                    type="button"
+                    onClick={() => onSelectDay(offset)}
+                    className={`w-full h-full px-2 py-2 text-center transition-colors cursor-pointer ${
+                      isClosed
+                        ? "bg-muted/15 hover:bg-muted/30"
+                        : "hover:bg-primary/5"
+                    } ${isToday ? "bg-primary/10" : ""}`}
+                  >
                     <p
                       className={`text-[10px] font-semibold uppercase tracking-wide ${
                         isToday
@@ -220,7 +276,7 @@ export default function WeekMatrixView({
                     )}
                     {isClosed ? (
                       <span
-                        className={`inline-block mt-0.5 text-[9px] font-semibold px-1 py-0.2 rounded truncate max-w-[95px] ${
+                        className={`inline-block mt-0.5 text-[9px] font-semibold px-1 py-0.2 rounded truncate max-w-full ${
                           status.reasonType === "exception"
                             ? "text-destructive bg-destructive/10 border border-destructive/20"
                             : status.reasonType === "holiday"
@@ -247,8 +303,29 @@ export default function WeekMatrixView({
                       )
                     ) : null}
                   </button>
-                </ActionTooltip>
-              );
+                );
+
+                return (
+                  <div
+                    key={offset}
+                    className="flex-1 min-w-0 border-r border-border/50 last:border-0 flex"
+                  >
+                    {tooltipText ? (
+                      <Tooltip delayDuration={100}>
+                        <TooltipTrigger asChild>{headerButton}</TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          sideOffset={6}
+                          className="max-w-xs px-2.5 py-1 text-xs font-normal leading-normal text-center shadow-lg pointer-events-none select-none"
+                        >
+                          {tooltipText}
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      headerButton
+                    )}
+                  </div>
+                );
               })}
             </div>
 
@@ -307,7 +384,7 @@ export default function WeekMatrixView({
                       <div
                         key={offset}
                         onClick={() => onSelectDay(offset)}
-                        className={`flex-1 h-10 border-r border-border/50 last:border-0 overflow-hidden transition-colors cursor-pointer ${
+                        className={`flex-1 min-w-0 h-10 border-r border-border/50 last:border-0 overflow-hidden transition-colors cursor-pointer ${
                           isClosed
                             ? "bg-muted/15 hover:bg-muted/30"
                             : "hover:bg-muted/20"
@@ -434,38 +511,31 @@ export default function WeekMatrixView({
         </div>
 
         {/* Legenda de Atividades (modo de visualização semanal no fundo) */}
-        <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between flex-wrap gap-4 text-xs animate-in fade-in-50 duration-200">
-          <div className="flex items-center gap-2 text-foreground font-semibold">
-            <Info size={14} className="text-primary" />
-            <span>Legenda de Atividades:</span>
-          </div>
-          <div className="flex items-center gap-4 flex-wrap text-xs">
-            {(
-              [
-                "collection",
-                "work",
-                "surveillance",
-                "cleaning",
-                "delivery",
-                "lunch",
-                "absent",
-              ] as BlockState[]
-            ).map((s) => (
-              <div key={s} className="flex items-center gap-1.5">
-                <div
-                  className={`w-3.5 h-3.5 rounded-sm shadow-2xs flex items-center justify-center flex-shrink-0 ${BLOCK_STYLES[s].bg}`}
-                >
-                  {BLOCK_STYLES[s].locked && (
-                    <Lock size={7} className="text-white/80" />
-                  )}
+        {weekLegendItems.length > 0 && (
+          <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between flex-wrap gap-4 text-xs animate-in fade-in-50 duration-200">
+            <div className="flex items-center gap-2 text-foreground font-semibold">
+              <Info size={14} className="text-primary" />
+              <span>Legenda de Atividades:</span>
+            </div>
+            <div className="flex items-center gap-4 flex-wrap text-xs">
+              {weekLegendItems.map((item) => (
+                <div key={item.key} className="flex items-center gap-1.5">
+                  <div
+                    className={`w-3.5 h-3.5 rounded-sm shadow-2xs flex-shrink-0 ${
+                      item.color ? "" : item.bgClass || ""
+                    }`}
+                    style={
+                      item.color ? { backgroundColor: item.color } : undefined
+                    }
+                  />
+                  <span className="text-foreground/90 font-medium">
+                    {item.name}
+                  </span>
                 </div>
-                <span className="text-foreground/90 font-medium">
-                  {BLOCK_STYLES[s].label}
-                </span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </Card>
     </TooltipProvider>
   );
