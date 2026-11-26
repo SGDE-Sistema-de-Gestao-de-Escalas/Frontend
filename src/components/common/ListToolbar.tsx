@@ -32,7 +32,7 @@ export default function ListToolbar({
 }: ListToolbarProps) {
   return (
     <div
-      className={`flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 ${className}`}
+      className={`flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 ${className}`}
     >
       {/* Campo de Pesquisa */}
       <div className="relative flex-1 sm:max-w-xs">
@@ -66,11 +66,11 @@ export default function ListToolbar({
       </div>
 
       {/* Controles da Direita: Filtros extras + Ordenação */}
-      <div className="flex items-center gap-2 flex-wrap justify-end">
+      <div className="flex items-center gap-2 justify-between sm:justify-end flex-wrap sm:flex-nowrap">
         {extraFilters}
 
         {sortOptions && sortOptions.length > 0 && onSortChange && (
-          <div className="flex items-center gap-1.5 min-w-[160px]">
+          <div className="flex items-center gap-1.5 flex-1 sm:flex-initial sm:min-w-[160px]">
             <ArrowDownUp size={13} className="text-muted-foreground flex-shrink-0" />
             <CustomSelect
               value={sortValue}

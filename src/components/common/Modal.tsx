@@ -61,7 +61,7 @@ export default function Modal({
           {children}
         </div>
         {footer && (
-          <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-border bg-muted/10 rounded-b-xl sticky bottom-0 z-10 shrink-0">
+          <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-border bg-muted/10 rounded-b-xl sticky bottom-0 z-10 shrink-0 flex items-center justify-end gap-2.5">
             {footer}
           </div>
         )}

@@ -3,10 +3,8 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
-  Download,
   Inbox,
   Loader2,
-  Printer,
   Users,
   UserX,
 } from "lucide-react";
@@ -424,7 +422,7 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho com Título, Seletor de Período e Botão de Exportar */}
+      {/* Cabeçalho com Título e Seletor de Período */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2">
@@ -452,15 +450,6 @@ export default function ReportsPage() {
             }}
             className="w-[280px]"
           />
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-card hover:bg-muted shadow-2xs"
-            title="Imprimir ou exportar relatório em PDF"
-          >
-            <Printer size={13} />
-            Exportar PDF
-          </button>
         </div>
       </div>
 
@@ -511,11 +500,11 @@ export default function ReportsPage() {
           </div>
 
           {/* Abas de Navegação entre Visão Geral e Carga Horária */}
-          <div className="flex items-center gap-2 border-b border-border pb-1">
+          <div className="flex items-center gap-2 border-b border-border pb-1 overflow-x-auto no-scrollbar flex-nowrap -mx-4 px-4 sm:mx-0 sm:px-0">
             <button
               type="button"
               onClick={() => setActiveTab("overview")}
-              className={`px-3.5 py-1.5 text-xs font-semibold rounded-t-lg transition-colors cursor-pointer border-b-2 ${
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-t-lg transition-colors cursor-pointer border-b-2 shrink-0 whitespace-nowrap ${
                 activeTab === "overview"
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -526,7 +515,7 @@ export default function ReportsPage() {
             <button
               type="button"
               onClick={() => setActiveTab("workload")}
-              className={`px-3.5 py-1.5 text-xs font-semibold rounded-t-lg transition-colors cursor-pointer border-b-2 ${
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-t-lg transition-colors cursor-pointer border-b-2 shrink-0 whitespace-nowrap ${
                 activeTab === "workload"
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"

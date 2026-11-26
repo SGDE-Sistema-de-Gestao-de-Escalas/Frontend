@@ -102,8 +102,8 @@ export default function AppRouter() {
         <Route path="/config" element={<AdminRoute><Config /></AdminRoute>} />
         <Route path="/notifications" element={<AdminRoute><Notifications /></AdminRoute>} />
 
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/profile/:id" element={<Profile />} />
+        <Route path="/profile" element={<AdminRoute><Profile /></AdminRoute>} />
+        <Route path="/profile/:id" element={<AdminRoute><Profile /></AdminRoute>} />
         <Route path="/platform-settings" element={<AdminRoute><PlatformSettings /></AdminRoute>} />
         <Route path="/account" element={<Account />} />
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   AlertTriangle,
   CheckCircle,
@@ -81,8 +81,8 @@ export default function ScheduleRulesTab() {
   ]);
   const [formPeriodStart, setFormPeriodStart] = useState("07:30");
   const [formPeriodEnd, setFormPeriodEnd] = useState("13:00");
-  const [formMinStaff, setFormMinStaff] = useState("2");
-  const [formRuleType, setFormRuleType] = useState<"mandatory" | "optional">("mandatory");
+  const [formMinStaff, setFormMinStaff] = useState("1");
+  const [formRuleType, setFormRuleType] = useState<"mandatory" | "optional">("optional");
   const [formValidityStart, setFormValidityStart] = useState(todayStr);
   const [formValidityEnd, setFormValidityEnd] = useState("");
   const [formAssistantIds, setFormAssistantIds] = useState<EntityId[]>([]);
@@ -103,21 +103,31 @@ export default function ScheduleRulesTab() {
     });
   }
 
+  // Se abrir nova regra e a lista de assistentes ainda não estiver ordenada ou carregada
+  useEffect(() => {
+    if (showAdd && !editingRuleId && orderedAssistantIds.length === 0 && assistants.length > 0) {
+      const sorted = [...assistants].sort((a, b) =>
+        (a.name || "").localeCompare(b.name || "", "pt", { sensitivity: "base" })
+      );
+      setOrderedAssistantIds(sorted.map((a) => a.id));
+    }
+  }, [showAdd, editingRuleId, orderedAssistantIds.length, assistants]);
+
   function openAdd() {
     setEditingRuleId(null);
     setFormActivityId(ruleEligibleActivityTypes[0]?.id || "");
     setFormDays([true, true, true, true, true, false, false]);
     setFormPeriodStart("07:30");
     setFormPeriodEnd("13:00");
-    setFormMinStaff("2");
-    setFormRuleType("mandatory");
+    setFormMinStaff("1");
+    setFormRuleType("optional");
     setFormValidityStart(todayStr);
     setFormValidityEnd("");
-    const initialAssistants = assistants.map((a) => a.id);
-    setOrderedAssistantIds(initialAssistants);
-    // Selecionamos os primeiros N correspondentes à dotação mínima
-    const initialSelected = initialAssistants.slice(0, 2);
-    setFormAssistantIds(initialSelected);
+    const sortedAssistants = [...assistants].sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "", "pt", { sensitivity: "base" })
+    );
+    setOrderedAssistantIds(sortedAssistants.map((a) => a.id));
+    setFormAssistantIds([]);
     setFormError(null);
     setShowMissingSubstitutesWarning(false);
     setShowAdd(true);
@@ -147,7 +157,10 @@ export default function ScheduleRulesTab() {
         ? sortedAssistants.map((a) => String(a.id))
         : (rule.assistant_ids || []).map(String);
     setFormAssistantIds(selected);
-    const allIds = assistants.map((a) => String(a.id));
+    const sortedAll = [...assistants].sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "", "pt", { sensitivity: "base" })
+    );
+    const allIds = sortedAll.map((a) => String(a.id));
     const unselected = allIds.filter((id) => !selected.includes(id));
     setOrderedAssistantIds([...selected, ...unselected]);
     setFormError(null);
@@ -296,8 +309,8 @@ export default function ScheduleRulesTab() {
             Regras de Horário
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Define que atividade é obrigatória, em que período e com quantas
-            pessoas
+            Define que atividade é realizada, em que período e com quantos
+            assistentes
           </p>
         </div>
         <button
@@ -319,7 +332,7 @@ export default function ScheduleRulesTab() {
                   "Atividade",
                   "Dias",
                   "Período",
-                  "Mín. pessoas",
+                  "Mín. assistentes",
                   "Funcionários (Prioridade)",
                   "Obrigatoriedade",
                   "Vigência Início",
@@ -476,11 +489,11 @@ export default function ScheduleRulesTab() {
                       <td className="px-4 py-3">
                         {rule.type === "mandatory" ? (
                           <span className="inline-flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
-                            Obrigatório
+                            Obrigatória
                           </span>
                         ) : (
                           <Badge variant="secondary" className="text-[10px]">
-                            Facultativo
+                            Facultativa
                           </Badge>
                         )}
                       </td>
@@ -616,7 +629,7 @@ export default function ScheduleRulesTab() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
-                    Mínimo de Pessoas *
+                    Mínimo de Assistentes *
                   </label>
                   <input
                     type="number"
@@ -641,8 +654,8 @@ export default function ScheduleRulesTab() {
                       setFormError(null);
                     }}
                     options={[
-                      { value: "mandatory", label: "Obrigatório" },
-                      { value: "optional", label: "Facultativo" },
+                      { value: "optional", label: "Facultativa" },
+                      { value: "mandatory", label: "Obrigatória" },
                     ]}
                   />
                 </div>
@@ -1044,7 +1057,7 @@ export default function ScheduleRulesTab() {
             <br />
             No caso de um assistente não estar disponível (por motivo de falta, sobreposição ou exceção), a regra{" "}
             <strong className="text-foreground">não vai cumprir os requisitos de dotação mínima</strong> ({formMinStaff}{" "}
-            {parseInt(formMinStaff, 10) === 1 ? "pessoa" : "pessoas"}).
+            {parseInt(formMinStaff, 10) === 1 ? "assistente" : "assistentes"}).
             <br />
             <br />
             Deseja voltar atrás para adicionar mais assistentes por ordem de prioridade ou prefere prosseguir mesmo assim?

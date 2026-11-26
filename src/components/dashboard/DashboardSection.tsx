@@ -114,6 +114,7 @@ export default function DashboardSection({
   const [recalcDates, setRecalcDates] = useState<{ start?: string; end?: string }>({});
   const [lastGenerationResult, setLastGenerationResult] =
     useState<GenerateScheduleResponse | null>(null);
+  const [editModeTrigger, setEditModeTrigger] = useState<number>(0);
 
   const [searchParams] = useSearchParams();
   const dateParam = searchParams.get("date");
@@ -258,11 +259,12 @@ export default function DashboardSection({
   }
 
   const label = navLabel();
+  const todayInfo = getDateInfo(0);
 
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-2xl font-semibold text-foreground tracking-tight">
@@ -287,109 +289,117 @@ export default function DashboardSection({
             )}
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {viewMode === "day" && `${label.dayName}, ${label.dateStr}`}
-            {viewMode === "week" && label.dayName}
-            {viewMode === "month" && label.dayName}
+            {`${todayInfo.dayName}, ${todayInfo.dateStr}`}
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Indicador discreto de Sincronização em segundo plano */}
-          <SyncIndicator
-            isFetching={isSyncing}
-            dataUpdatedAt={dataUpdatedAt}
-            onRefresh={() => refetchBootstrap()}
-          />
 
-          {/* Date Range Filter (Pedir ao Backend Entre Datas) */}
-          <ActionTooltip content="Definir intervalo de datas a consultar no servidor (padrão: ±1 mês)">
-            <DateRangePicker
-              value={{ startDate: queryStartDate, endDate: queryEndDate }}
-              onChange={handleDateRangeChange}
-              customTriggerLabel={
-                isCustomDateRange
-                  ? `${queryStartDate} → ${queryEndDate}`
-                  : "Intervalo: Mês Atual"
-              }
-              customPresets={dashboardPresets}
-              onResetDefault={handleResetDateRange}
-              resetDefaultLabel="Repor Mês Atual"
-              allowClear={false}
-              align="end"
-              triggerIcon={
-                <CalendarRange
-                  size={13}
-                  className={isCustomDateRange ? "text-primary" : "text-muted-foreground"}
-                />
-              }
-              className={
-                isCustomDateRange
-                  ? "border-primary/40 bg-primary/8 text-primary font-medium"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground font-medium"
-              }
-            />
-          </ActionTooltip>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Grupo 1: Controlo de Vistas e Navegação Temporal */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* View mode toggle */}
+            <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">
+              {(["day", "week", "month"] as DashViewMode[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => switchView(m)}
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    viewMode === m
+                      ? "bg-card shadow-xs text-foreground font-semibold"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {m === "day" ? "Dia" : m === "week" ? "Semana" : "Mês"}
+                </button>
+              ))}
+            </div>
 
-          {/* View mode toggle */}
-          <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">
-            {(["day", "week", "month"] as DashViewMode[]).map((m) => (
+            {/* Date navigation */}
+            <div className="flex items-center border border-border rounded-lg overflow-hidden bg-card">
               <button
-                key={m}
                 type="button"
-                onClick={() => switchView(m)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  viewMode === m
-                    ? "bg-card shadow-xs text-foreground font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                onClick={prevNav}
+                className="px-2 sm:px-2.5 py-1.5 hover:bg-muted transition-colors border-r border-border text-muted-foreground hover:text-foreground cursor-pointer"
+                title="Período anterior"
               >
-                {m === "day" ? "Dia" : m === "week" ? "Semana" : "Mês"}
+                <ChevronLeft size={14} />
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setDayOffset(0);
+                  setWeekStart(0);
+                  setMonthOffset(3);
+                }}
+                className="px-2.5 sm:px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors font-mono cursor-pointer"
+              >
+                Hoje
+              </button>
+              <button
+                type="button"
+                onClick={nextNav}
+                className="px-2 sm:px-2.5 py-1.5 hover:bg-muted transition-colors border-l border-border text-muted-foreground hover:text-foreground cursor-pointer"
+                title="Período seguinte"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
           </div>
 
-          {/* Date navigation */}
-          <div className="flex items-center border border-border rounded-lg overflow-hidden bg-card">
-            <button
-              type="button"
-              onClick={prevNav}
-              className="px-2.5 py-1.5 hover:bg-muted transition-colors border-r border-border text-muted-foreground hover:text-foreground"
-            >
-              <ChevronLeft size={14} />
-            </button>
+          {/* Grupo 2: Sincronização, Intervalo de Consulta e Ação de Recálculo */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Indicador discreto de Sincronização em segundo plano */}
+            <SyncIndicator
+              isFetching={isSyncing}
+              dataUpdatedAt={dataUpdatedAt}
+              onRefresh={() => refetchBootstrap()}
+            />
+
+            {/* Date Range Filter (Pedir ao Backend Entre Datas) */}
+            <ActionTooltip content="Definir intervalo de datas a consultar no servidor (padrão: ±1 mês)">
+              <DateRangePicker
+                value={{ startDate: queryStartDate, endDate: queryEndDate }}
+                onChange={handleDateRangeChange}
+                customTriggerLabel={
+                  isCustomDateRange
+                    ? `${queryStartDate} → ${queryEndDate}`
+                    : "Intervalo: Mês Atual"
+                }
+                customPresets={dashboardPresets}
+                onResetDefault={handleResetDateRange}
+                resetDefaultLabel="Repor Mês Atual"
+                allowClear={false}
+                align="end"
+                triggerIcon={
+                  <CalendarRange
+                    size={13}
+                    className={isCustomDateRange ? "text-primary" : "text-muted-foreground"}
+                  />
+                }
+                className={
+                  isCustomDateRange
+                    ? "border-primary/40 bg-primary/8 text-primary font-medium"
+                    : "border-border bg-card text-muted-foreground hover:text-foreground font-medium"
+                }
+              />
+            </ActionTooltip>
+
+            {/* Botão Recalcular */}
             <button
               type="button"
               onClick={() => {
-                setDayOffset(0);
-                setWeekStart(0);
-                setMonthOffset(3);
+                setRecalcDates({
+                  start: activeDashboardDate,
+                  end: activeDashboardDate,
+                });
+                setShowRecalcModal(true);
               }}
-              className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors shadow-xs cursor-pointer"
             >
-              Hoje
-            </button>
-            <button
-              type="button"
-              onClick={nextNav}
-              className="px-2.5 py-1.5 hover:bg-muted transition-colors border-l border-border text-muted-foreground hover:text-foreground"
-            >
-              <ChevronRight size={14} />
+              <RefreshCw size={13} />
+              <span>Recalcular</span>
             </button>
           </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setRecalcDates({
-                start: activeDashboardDate,
-                end: activeDashboardDate,
-              });
-              setShowRecalcModal(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs sm:text-sm font-medium hover:bg-primary/90 transition-colors shadow-xs"
-          >
-            <RefreshCw size={14} />
-            Recalcular
-          </button>
         </div>
       </div>
 
@@ -408,6 +418,18 @@ export default function DashboardSection({
             });
           }
           setShowRecalcModal(true);
+        }}
+        onSelectDate={(isoDate) => {
+          const targetOffset = getOffsetFromIsoDate(isoDate);
+          setDayOffset(targetOffset);
+          setViewMode("day");
+          setEditModeTrigger(Date.now());
+          setTimeout(() => {
+            const el = document.getElementById("interactive-matrix-card");
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+          }, 80);
         }}
         conflicts={lastGenerationResult?.conflicts}
         pendingRecalculations={pendingRecalculations}
@@ -429,12 +451,35 @@ export default function DashboardSection({
           lunchBlocksByDate={lastGenerationResult?.lunch_blocks}
           queryStartDate={queryStartDate}
           queryEndDate={queryEndDate}
+          editModeTrigger={editModeTrigger}
           onRequestRecalculate={() => {
             setRecalcDates({
               start: activeDashboardDate,
               end: activeDashboardDate,
             });
             setShowRecalcModal(true);
+          }}
+          onManualEditsSaved={(savedDates, remainingConflicts) => {
+            const savedSet = new Set(savedDates);
+            setLastGenerationResult((prev) => {
+              if (!prev) {
+                if (remainingConflicts.length === 0) return prev;
+                return {
+                  message: "",
+                  schedules: [],
+                  conflicts: remainingConflicts,
+                  insights: [],
+                  lunch_blocks: {},
+                } as GenerateScheduleResponse;
+              }
+              const kept = (prev.conflicts ?? []).filter(
+                (c) => !savedSet.has(c.date)
+              );
+              return {
+                ...prev,
+                conflicts: [...kept, ...remainingConflicts],
+              };
+            });
           }}
         />
       )}

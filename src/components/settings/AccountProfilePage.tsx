@@ -9,6 +9,8 @@ import {
   XCircle,
   Eye,
   EyeOff,
+  Clock,
+  CheckCircle,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { Role } from "../../types";
@@ -152,8 +154,12 @@ export default function AccountProfilePage({
       const res = await authService.requestDeactivation(deactivationReason.trim() || undefined);
       setShowRgpdConfirm(false);
       setDeactivationReason("");
+      updateUserLocal({
+        deactivation_requested: true,
+        deactivation_requested_at: (res as any)?.deactivation_requested_at || new Date().toISOString(),
+      });
       notify.success(
-        res?.message || "Pedido de desativação submetido com sucesso. Os administradores foram notificados por email."
+        res?.message || "Pedido de anonimização submetido com sucesso. Enviámos um comprovativo para o seu email e notificámos os administradores."
       );
     } catch (err: any) {
       setShowRgpdConfirm(false);
@@ -389,7 +395,7 @@ export default function AccountProfilePage({
         </p>
       </div>
 
-      <div className="flex gap-1 border-b border-border mb-6">
+      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto no-scrollbar flex-nowrap -mx-4 px-4 sm:mx-0 sm:px-0">
         {[
           { id: "profile", label: "Perfil" },
           { id: "security", label: "Segurança" },
@@ -401,7 +407,7 @@ export default function AccountProfilePage({
             onClick={() =>
               setActiveTab(t.id as "profile" | "security" | "privacy")
             }
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            className={`px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 -mb-px shrink-0 whitespace-nowrap transition-colors cursor-pointer ${
               activeTab === t.id
                 ? "border-accent text-accent"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -415,160 +421,248 @@ export default function AccountProfilePage({
       {activeTab === "profile" && (
         <div className="space-y-4">
           <Card className="p-5">
-            <h3 className="text-sm font-semibold text-foreground mb-4">
-              Dados Pessoais
-            </h3>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-foreground block mb-1.5">
-                    Primeiro Nome <span className="text-destructive">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={firstName}
-                    onChange={(e) => {
-                      setFirstName(e.target.value);
-                      if (profileErrors.first_name) {
-                        setProfileErrors((prev) => ({ ...prev, first_name: undefined }));
-                      }
-                    }}
-                    placeholder="Ex: Miguel"
-                    className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
-                      profileErrors.first_name
-                        ? "border-destructive focus:ring-destructive"
-                        : "border-border focus:ring-ring"
-                    }`}
-                  />
-                  {profileErrors.first_name && (
-                    <p className="text-[11px] text-destructive mt-1 font-medium">
-                      {profileErrors.first_name}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-foreground">
+                Dados Pessoais
+              </h3>
+              {role === "staff" && (
+                <span className="text-[11px] font-medium text-muted-foreground bg-muted/60 px-2.5 py-0.5 rounded-full border border-border">
+                  Apenas Leitura
+                </span>
+              )}
+            </div>
+
+            {role === "staff" ? (
+              <div className="space-y-4">
+                {/* Banner Informativo */}
+                <div className="p-3.5 rounded-xl bg-muted/30 border border-border flex items-start gap-3">
+                  <Shield className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <div className="text-xs text-muted-foreground leading-relaxed">
+                    <p className="font-semibold text-foreground mb-0.5">
+                      Identificação Gerida Institucionalmente
                     </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-foreground block mb-1.5">
-                    Último Nome <span className="text-destructive">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={lastName}
-                    onChange={(e) => {
-                      setLastName(e.target.value);
-                      if (profileErrors.last_name) {
-                        setProfileErrors((prev) => ({ ...prev, last_name: undefined }));
-                      }
-                    }}
-                    placeholder="Ex: Silva"
-                    className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
-                      profileErrors.last_name
-                        ? "border-destructive focus:ring-destructive"
-                        : "border-border focus:ring-ring"
-                    }`}
-                  />
-                  {profileErrors.last_name && (
-                    <p className="text-[11px] text-destructive mt-1 font-medium">
-                      {profileErrors.last_name}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-foreground block mb-1.5">
-                  Email Institucional <span className="text-destructive">*</span>
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (profileErrors.email) {
-                      setProfileErrors((prev) => ({ ...prev, email: undefined }));
-                    }
-                  }}
-                  placeholder="utilizador@sgde.pt"
-                  className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
-                    profileErrors.email
-                      ? "border-destructive focus:ring-destructive"
-                      : "border-border focus:ring-ring"
-                  }`}
-                />
-                {profileErrors.email && (
-                  <p className="text-[11px] text-destructive mt-1 font-medium">
-                    {profileErrors.email}
-                  </p>
-                )}
-              </div>
-
-              {emailChanged && (
-                !hasPassword ? (
-                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
-                    <p className="font-medium">Definição de palavra-passe necessária</p>
-                    <p className="mt-1">
-                      A sua conta ainda não tem uma palavra-passe definida. Para alterar o seu email, defina primeiro uma palavra-passe no separador <strong>Segurança</strong>.
+                    <p>
+                      Os seus dados de identificação e email institucional são geridos exclusivamente pela administração escolar para assegurar a consistência dos registos em toda a plataforma. Se necessitar de atualizar o seu nome ou email, por favor solicite a retificação junto da direção ou dos administradores escolares.
                     </p>
                   </div>
-                ) : (
+                </div>
+
+                {/* Dados Informativos em Cartões de Leitura */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
+                      Primeiro Nome
+                    </span>
+                    <span className="text-sm font-semibold text-foreground">
+                      {firstName || user.first_name || "—"}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
+                      Último Nome
+                    </span>
+                    <span className="text-sm font-semibold text-foreground">
+                      {lastName || user.last_name || "—"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
+                      Email Institucional
+                    </span>
+                    <span className="text-sm font-mono font-medium text-foreground">
+                      {email || user.email || "—"}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-card">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
+                      N.º Mecanográfico
+                    </span>
+                    <span className="text-sm font-mono font-semibold text-foreground">
+                      {user.mecanografico || user.internal_number || "—"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="p-3 rounded-lg border border-border/40 bg-muted/10">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-0.5">
+                      Perfil de Acesso
+                    </span>
+                    <span className="text-xs font-semibold text-foreground">
+                      Assistente Operacional
+                    </span>
+                  </div>
+
+                  {user.school_name && (
+                    <div className="p-3 rounded-lg border border-border/40 bg-muted/10">
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-0.5">
+                        Escola Principal
+                      </span>
+                      <span className="text-xs font-semibold text-foreground">
+                        {user.school_name}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-medium text-foreground block mb-1.5">
-                      Password atual <span className="text-destructive">*</span>
+                      Primeiro Nome <span className="text-destructive">*</span>
                     </label>
                     <input
-                      type="password"
-                      autoComplete="current-password"
-                      value={emailChangePassword}
+                      type="text"
+                      value={firstName}
                       onChange={(e) => {
-                        setEmailChangePassword(e.target.value);
-                        if (profileErrors.current_password) {
-                          setProfileErrors((prev) => ({ ...prev, current_password: undefined }));
+                        setFirstName(e.target.value);
+                        if (profileErrors.first_name) {
+                          setProfileErrors((prev) => ({ ...prev, first_name: undefined }));
                         }
                       }}
-                      placeholder="Confirme com a sua password atual"
+                      placeholder="Ex: Miguel"
                       className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
-                        profileErrors.current_password
+                        profileErrors.first_name
                           ? "border-destructive focus:ring-destructive"
                           : "border-border focus:ring-ring"
                       }`}
                     />
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Para mudar o email tem de confirmar a sua password.
-                    </p>
-                    {profileErrors.current_password && (
+                    {profileErrors.first_name && (
                       <p className="text-[11px] text-destructive mt-1 font-medium">
-                        {profileErrors.current_password}
+                        {profileErrors.first_name}
                       </p>
                     )}
                   </div>
-                )
-              )}
-            </div>
 
-            <button
-              type="button"
-              onClick={handleSaveProfile}
-              disabled={
-                savingProfile ||
-                !firstName.trim() ||
-                !lastName.trim() ||
-                !email.trim() ||
-                (emailChanged && (!hasPassword || !emailChangePassword))
-              }
-              className="mt-5 flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 disabled:opacity-40 transition-colors shadow-xs"
-            >
-              {savingProfile ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" />
-                  A guardar...
-                </>
-              ) : (
-                <>
-                  <Save size={14} />
-                  Guardar Alterações
-                </>
-              )}
-            </button>
+                  <div>
+                    <label className="text-xs font-medium text-foreground block mb-1.5">
+                      Último Nome <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => {
+                        setLastName(e.target.value);
+                        if (profileErrors.last_name) {
+                          setProfileErrors((prev) => ({ ...prev, last_name: undefined }));
+                        }
+                      }}
+                      placeholder="Ex: Silva"
+                      className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                        profileErrors.last_name
+                          ? "border-destructive focus:ring-destructive"
+                          : "border-border focus:ring-ring"
+                      }`}
+                    />
+                    {profileErrors.last_name && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {profileErrors.last_name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1.5">
+                    Email Institucional <span className="text-destructive">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (profileErrors.email) {
+                        setProfileErrors((prev) => ({ ...prev, email: undefined }));
+                      }
+                    }}
+                    placeholder="utilizador@sgde.pt"
+                    className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                      profileErrors.email
+                        ? "border-destructive focus:ring-destructive"
+                        : "border-border focus:ring-ring"
+                    }`}
+                  />
+                  {profileErrors.email && (
+                    <p className="text-[11px] text-destructive mt-1 font-medium">
+                      {profileErrors.email}
+                    </p>
+                  )}
+                </div>
+
+                {emailChanged && (
+                  !hasPassword ? (
+                    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
+                      <p className="font-medium">Definição de palavra-passe necessária</p>
+                      <p className="mt-1">
+                        A sua conta ainda não tem uma palavra-passe definida. Para alterar o seu email, defina primeiro uma palavra-passe no separador <strong>Segurança</strong>.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1.5">
+                        Password atual <span className="text-destructive">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        autoComplete="current-password"
+                        value={emailChangePassword}
+                        onChange={(e) => {
+                          setEmailChangePassword(e.target.value);
+                          if (profileErrors.current_password) {
+                            setProfileErrors((prev) => ({ ...prev, current_password: undefined }));
+                          }
+                        }}
+                        placeholder="Confirme com a sua password atual"
+                        className={`w-full px-3 py-2 text-sm rounded-lg border bg-input-background focus:outline-none focus:ring-1 ${
+                          profileErrors.current_password
+                            ? "border-destructive focus:ring-destructive"
+                            : "border-border focus:ring-ring"
+                        }`}
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Para mudar o email tem de confirmar a sua password.
+                      </p>
+                      {profileErrors.current_password && (
+                        <p className="text-[11px] text-destructive mt-1 font-medium">
+                          {profileErrors.current_password}
+                        </p>
+                      )}
+                    </div>
+                  )
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSaveProfile}
+                  disabled={
+                    savingProfile ||
+                    !firstName.trim() ||
+                    !lastName.trim() ||
+                    !email.trim() ||
+                    (emailChanged && (!hasPassword || !emailChangePassword))
+                  }
+                  className="mt-5 flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 disabled:opacity-40 transition-colors shadow-xs"
+                >
+                  {savingProfile ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      A guardar...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={14} />
+                      Guardar Alterações
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </Card>
         </div>
       )}
@@ -792,6 +886,40 @@ export default function AccountProfilePage({
                 )}
               </button>
             </Card>
+          ) : user.deactivation_requested || user.deactivation_requested_at ? (
+            <Card className="p-5 border-amber-500/30 bg-amber-500/5">
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="p-1.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <Clock size={16} />
+                </span>
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Pedido de Anonimização Pendente
+                  </h3>
+                  <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                    Em análise pela administração escolar
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+                Submeteu um pedido formal de anonimização e desativação dos seus dados cadastrais
+                {user.deactivation_requested_at && (
+                  <> em <strong className="text-foreground">{new Date(user.deactivation_requested_at).toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</strong></>
+                )}. A administração da sua instituição foi notificada diretamente por email e através da plataforma para validar o processo.
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border bg-muted/40 text-muted-foreground text-xs font-medium cursor-not-allowed"
+                >
+                  <CheckCircle size={14} className="text-amber-500" />
+                  Pedido Submetido (Não é possível reenviar)
+                </button>
+              </div>
+            </Card>
           ) : (
             <Card className="p-5">
               <h3 className="text-sm font-semibold text-foreground mb-2">
@@ -807,7 +935,7 @@ export default function AccountProfilePage({
                   setShowRgpdConfirm(true);
                 }}
                 disabled={requestingDeactivation}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#C8291A]/30 text-[#C8291A] text-sm font-medium hover:bg-[#FEF2F2] disabled:opacity-50 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#C8291A]/30 text-[#C8291A] text-sm font-medium hover:bg-[#FEF2F2] dark:hover:bg-[#C8291A]/10 disabled:opacity-50 transition-colors"
               >
                 {requestingDeactivation ? (
                   <>
@@ -831,14 +959,14 @@ export default function AccountProfilePage({
         open={showRgpdConfirm}
         onClose={() => setShowRgpdConfirm(false)}
         onConfirm={handleRequestDeactivation}
-        title="Solicitar Desativação e Eliminação de Dados (RGPD)"
+        title="Solicitar Anonimização e Desativação de Dados (RGPD)"
         description={
           <div className="space-y-3">
             <p>
               Tem a certeza que pretende solicitar a desativação da sua conta e a anonimização dos seus dados pessoais?
             </p>
             <p className="text-xs text-muted-foreground">
-              Os administradores da sua instituição serão notificados por email com o seu pedido para dar seguimento ao processo legal e operacional de desativação.
+              Receberá um email de comprovativo do pedido e os administradores da sua instituição serão notificados de imediato na plataforma e por email para dar seguimento ao processo.
             </p>
             <div>
               <label className="text-xs font-medium text-foreground block mb-1">

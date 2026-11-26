@@ -81,7 +81,7 @@ export default function CustomSelect({
         </SelectTrigger>
         <SelectContent
           className={cn(
-            "w-[var(--radix-select-trigger-width)] max-w-[var(--radix-select-trigger-width)]",
+            "w-[var(--radix-select-trigger-width)] max-w-[var(--radix-select-trigger-width)] z-[150]",
             contentClassName
           )}
         >

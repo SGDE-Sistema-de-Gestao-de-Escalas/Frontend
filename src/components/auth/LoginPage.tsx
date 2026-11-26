@@ -3,14 +3,16 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import { notify } from "../common/FeedbackNotification";
 import {
   AlertCircle,
-  BarChart2,
+  ArrowRightLeft,
+  CalendarClock,
   CheckCircle,
   ChevronLeft,
   Eye,
+  FileCheck2,
   Mail,
   RefreshCw,
-  Shield,
-  Users,
+  ShieldCheck,
+  Smartphone,
   Loader2,
 } from "lucide-react";
 import type { Role } from "../../types";
@@ -285,10 +287,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             {view === "login" && (
               <>
                 <h1 className="text-2xl font-bold text-foreground leading-tight mb-1">
-                  Bem-vindo de volta
+                  Iniciar sessão
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  Hoje é um novo dia. Inicie sessão para gerir as escalas.
+                  Aceda à sua conta SGDE.
                 </p>
               </>
             )}
@@ -751,62 +753,62 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       >
         <PinxPattern />
 
-        {/* Top badge */}
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/15">
-            <span
-              className="w-2 h-2 rounded-full animate-pulse"
-              style={{ backgroundColor: "#2baf82" }}
-            />
-            <Shield size={14} className="text-white" />
-            <span className="text-xs font-semibold text-white tracking-wide">
-              SGDE · Gestão de Escalas
-            </span>
-          </div>
-          <span className="text-xs text-white/70 font-mono bg-black/15 px-2 py-0.5 rounded-md">
-            v0.0.1
-          </span>
-        </div>
+        {/* Espaçador superior para equilibrar o bloco central */}
+        <div className="relative z-10 h-6" />
 
-        {/* Middle illustration / testimonial */}
-        <div className="relative z-10 max-w-md my-auto">
-          <div className="w-14 h-14 rounded-2xl bg-white/95 backdrop-blur-md flex items-center justify-center mb-6 border border-white/40 shadow-xl p-2.5">
-            <img
-              src={appIcon}
-              alt="SGDE"
-              className="w-full h-full object-contain"
-            />
-          </div>
-          <blockquote className="text-2xl font-semibold leading-snug mb-4 text-white">
-            "Organização inteligente de horários e equipas para estabelecimentos escolares."
-          </blockquote>
-          <p className="text-sm text-white/80 leading-relaxed">
-            Plataforma centralizada para gestão de matrizes semanais,
-            ausências, reforços e horários de assistentes operacionais.
+        {/* Conteúdo central da marca */}
+        <div className="relative z-10 w-full max-w-2xl my-auto">
+          <h2 className="text-3xl xl:text-[2.15rem] font-semibold leading-tight mb-4 text-white tracking-tight">
+            Gestão inteligente de escalas para equipas escolares.
+          </h2>
+          <p className="text-sm xl:text-base text-white/80 leading-relaxed max-w-xl">
+            Planeie turnos com validação automática de regras, responda a
+            ausências com transferências inter-escolas e disponibilize a escala
+            em tempo real no computador ou telemóvel.
           </p>
 
-          {/* Feature pills */}
-          <div className="flex flex-wrap gap-2 mt-6">
+          {/* Grelha 2x2 simétrica de funcionalidades */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-8">
             {[
-              { icon: <BarChart2 size={12} />, label: "Matriz Dinâmica" },
-              { icon: <Users size={12} />, label: "Controlo de Lotação" },
-              { icon: <Shield size={12} />, label: "Motor de Regras" },
-            ].map((p, i) => (
+              {
+                icon: <CalendarClock size={15} />,
+                title: "Escalas Automáticas",
+              },
+              {
+                icon: <ArrowRightLeft size={15} />,
+                title: "Transferências Inter-Escolas",
+              },
+              {
+                icon: <FileCheck2 size={15} />,
+                title: "Ausências & Justificações",
+              },
+              {
+                icon: <Smartphone size={15} />,
+                title: "Portal Mobile & RGPD",
+              },
+            ].map((item, i) => (
               <div
                 key={i}
-                className="flex items-center gap-1.5 bg-white/10 hover:bg-white/15 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-medium border border-white/15 text-white shadow-xs transition-colors"
+                className="flex items-center gap-3 bg-white/10 hover:bg-white/15 backdrop-blur-md px-4 py-3 rounded-xl border border-white/15 text-white shadow-xs transition-colors"
               >
-                <span style={{ color: "#2baf82" }}>{p.icon}</span>
-                {p.label}
+                <div className="w-8 h-8 rounded-lg bg-white/12 border border-white/15 flex items-center justify-center shrink-0 text-[#5eead4]">
+                  {item.icon}
+                </div>
+                <span className="text-xs font-semibold text-white truncate">
+                  {item.title}
+                </span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Bottom footer */}
-        <div className="relative z-10 flex items-center justify-between text-xs text-white/70 border-t border-white/15 pt-4">
-          <span>Gestão de Escolas</span>
-          <span>Ano Letivo 2026/2027</span>
+        {/* Rodapé institucional limpo */}
+        <div className="relative z-10 flex items-center justify-between text-xs text-white/75 border-t border-white/15 pt-4">
+          <span className="font-medium">SGDE · Sistema de Gestão de Escalas</span>
+          <span className="inline-flex items-center gap-1.5">
+            <ShieldCheck size={13} className="text-[#5eead4]" />
+            Conformidade RGPD
+          </span>
         </div>
       </div>
     </div>

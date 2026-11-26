@@ -14,6 +14,10 @@ export interface UserProfile {
   assistant_id?: number | string | null;
   school_id?: number | string | null;
   school_name?: string | null;
+  internal_number?: string | null;
+  mecanografico?: string | null;
+  deactivation_requested?: boolean;
+  deactivation_requested_at?: string | null;
   has_password?: boolean;
   provider?: string | null;
 }
@@ -41,6 +45,10 @@ const EMPTY_USER: UserProfile = {
   role: "admin",
   roleLabel: "",
   email: "",
+  internal_number: null,
+  mecanografico: null,
+  deactivation_requested: false,
+  deactivation_requested_at: null,
   has_password: true,
   provider: null,
 };
@@ -78,6 +86,10 @@ function mapAuthUserToProfile(authUser: AuthUser): UserProfile {
     assistant_id: authUser.assistant_id,
     school_id: authUser.school_id,
     school_name: authUser.school_name,
+    internal_number: authUser.internal_number || authUser.mecanografico || null,
+    mecanografico: authUser.mecanografico || authUser.internal_number || null,
+    deactivation_requested: Boolean(authUser.deactivation_requested || authUser.deactivation_requested_at),
+    deactivation_requested_at: authUser.deactivation_requested_at || null,
     has_password: authUser.has_password ?? true,
     provider: authUser.provider || null,
   };

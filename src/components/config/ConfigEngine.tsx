@@ -46,13 +46,13 @@ export default function ConfigEngine() {
         </p>
       </div>
 
-      <div className="flex gap-1 border-b border-border">
+      <div className="flex gap-1 border-b border-border overflow-x-auto no-scrollbar flex-nowrap -mx-4 px-4 sm:mx-0 sm:px-0">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-medium transition-colors border-b-2 -mb-px shrink-0 whitespace-nowrap cursor-pointer ${
               activeTab === tab.id
                 ? "border-primary text-primary bg-primary/5 font-semibold"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30"
