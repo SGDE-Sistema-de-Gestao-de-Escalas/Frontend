@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
   AlertTriangle,
-  Camera,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
@@ -474,46 +473,27 @@ export default function StaffAbsenceDetail() {
                         </button>
                       </div>
                     ) : (
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                        {/* Opção 1: Escolher ficheiro */}
-                        <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-dashed border-border hover:border-primary cursor-pointer transition-colors bg-muted/10 flex-1 truncate">
-                          <Upload
-                            size={14}
-                            className="text-muted-foreground flex-shrink-0"
-                          />
-                          <span className="text-xs text-muted-foreground flex-1 truncate">
-                            Escolher ficheiro (PDF, JPG, PNG)...
-                          </span>
-                          <input
-                            type="file"
-                            className="hidden"
-                            accept=".pdf,.jpg,.jpeg,.png"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) setDetailFile(f);
-                            }}
-                          />
-                        </label>
-
-                        {/* Opção 2: Tirar foto na hora (abre diretamente a app da câmara) */}
-                        <label className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium border border-dashed border-border hover:border-primary rounded-lg cursor-pointer bg-background hover:bg-muted/30 transition-colors shrink-0 h-10">
-                          <Camera size={14} className="text-primary" />
-                          <span>Tirar Foto</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            className="hidden"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) {
-                                setDetailFile(f);
-                                e.target.value = "";
-                              }
-                            }}
-                          />
-                        </label>
-                      </div>
+                      <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-dashed border-border hover:border-primary cursor-pointer transition-colors bg-muted/10 w-full truncate">
+                        <Upload
+                          size={14}
+                          className="text-muted-foreground flex-shrink-0"
+                        />
+                        <span className="text-xs text-muted-foreground flex-1 truncate">
+                          Escolher ficheiro (PDF, JPG, PNG)...
+                        </span>
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) {
+                              setDetailFile(f);
+                              e.target.value = "";
+                            }
+                          }}
+                        />
+                      </label>
                     )}
                   </div>
                 )}

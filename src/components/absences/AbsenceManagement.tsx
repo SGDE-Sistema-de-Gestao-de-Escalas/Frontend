@@ -1,7 +1,6 @@
 import { useSearchParams } from "react-router-dom";
 import { useState, useMemo, useEffect } from "react";
 import {
-  Camera,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -1049,45 +1048,25 @@ export default function AbsenceManagement() {
                     <div className="text-xs text-muted-foreground">
                       Nenhum documento comprovativo anexado até ao momento.
                     </div>
-                    <div className="flex items-center gap-3">
-                      <label className="text-[11px] text-primary font-medium hover:underline cursor-pointer flex items-center gap-1 flex-shrink-0">
-                        <Paperclip size={12} />
-                        <span>Anexar ficheiro</span>
-                        <input
-                          type="file"
-                          className="hidden"
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              await uploadDocMutation.mutateAsync({
-                                id: selectedAbsence.id,
-                                file,
-                              });
-                            }
-                          }}
-                        />
-                      </label>
-                      <label className="text-[11px] text-primary font-medium hover:underline cursor-pointer flex items-center gap-1 flex-shrink-0">
-                        <Camera size={12} />
-                        <span>Tirar foto</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          className="hidden"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (file && selectedAbsence) {
-                              await uploadDocMutation.mutateAsync({
-                                id: selectedAbsence.id,
-                                file,
-                              });
-                            }
-                          }}
-                        />
-                      </label>
-                    </div>
+                    <label className="text-[11px] text-primary font-medium hover:underline cursor-pointer flex items-center gap-1 flex-shrink-0">
+                      <Paperclip size={12} />
+                      <span>Anexar ficheiro</span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            await uploadDocMutation.mutateAsync({
+                              id: selectedAbsence.id,
+                              file,
+                            });
+                            e.target.value = "";
+                          }
+                        }}
+                      />
+                    </label>
                   </div>
                 )}
 
@@ -1360,30 +1339,10 @@ export default function AbsenceManagement() {
                         setFormDocumentFile(file);
                         setFormDocumentName(file.name);
                         setFormRemoveDocument(false);
+                        e.target.value = "";
                       }
                     }}
                     accept=".pdf,.jpg,.jpeg,.png"
-                  />
-                </label>
-                <label
-                  className="px-2.5 py-2 rounded-lg border border-border bg-input-background text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors"
-                  title="Tirar foto com a câmara"
-                >
-                  <Camera size={13} className="text-primary" />
-                  <span className="hidden sm:inline">Tirar Foto</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        setFormDocumentFile(file);
-                        setFormDocumentName(file.name);
-                        setFormRemoveDocument(false);
-                      }
-                    }}
                   />
                 </label>
                 {formDocumentName && (

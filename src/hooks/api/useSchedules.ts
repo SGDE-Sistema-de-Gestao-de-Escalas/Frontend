@@ -84,6 +84,7 @@ export function useGenerateSchedules() {
       }
     },
     onError: (error: any) => {
+      if (error?.__alreadyNotified) return;
       const errors = error?.response?.data?.errors;
       const preValidationMsg = Array.isArray(errors?.pre_validation)
         ? errors.pre_validation.join(" ")
@@ -95,7 +96,7 @@ export function useGenerateSchedules() {
         errors?.concurrency?.[0] ||
         error?.response?.data?.message ||
         "Não foi possível gerar a escala para o intervalo selecionado.";
-      notify.error(message, "Erro ao Recalcular Escala");
+      notify.error(message, undefined, "Erro ao Recalcular Escala");
     },
   });
 }
@@ -121,10 +122,11 @@ export function usePublishSchedules() {
       );
     },
     onError: (error: any) => {
+      if (error?.__alreadyNotified) return;
       const message =
         error?.response?.data?.message ||
         "Não foi possível publicar as escalas selecionadas.";
-      notify.error(message, "Erro ao Publicar Escalas");
+      notify.error(message, undefined, "Erro ao Publicar Escalas");
     },
   });
 }

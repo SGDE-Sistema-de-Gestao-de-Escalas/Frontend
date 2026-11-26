@@ -1826,8 +1826,8 @@ export default function StaffScheduleSection({
 
   return (
     <div>
-      {/* Top Bar Fixa com Navegação Unificada via DatePicker */}
-      <div className="sticky top-0 bg-background/95 backdrop-blur-sm z-10 pt-1 pb-3 border-b border-border mb-4">
+      {/* Cabeçalho com Navegação Unificada via DatePicker */}
+      <div className="pt-1 pb-3 border-b border-border mb-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           {/* Título contextual da visão atual */}
           <div>

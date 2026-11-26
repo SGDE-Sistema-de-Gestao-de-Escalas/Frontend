@@ -148,7 +148,7 @@ export default function SearchableSelect({
           </div>
 
           {/* Lista de Opções */}
-          <div className="max-h-64 overflow-y-auto py-1 divide-y divide-border/20">
+          <div className="max-h-64 overflow-y-auto overscroll-contain py-1 divide-y divide-border/20">
             {filteredOptions.length === 0 ? (
               <div className="py-6 px-3 text-center text-xs text-muted-foreground">
                 {emptyMessage}

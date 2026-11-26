@@ -121,6 +121,7 @@ interface DayRuleConfig {
   priorityNames: string[];
   isFallback?: boolean;
   activityTypeId?: string | null;
+  color?: string | null;
 }
 
 function isSlotMatchingRule(
@@ -534,6 +535,13 @@ const [publishModalState, setPublishModalState] = useState<{
         (at) => String(at.id) === String(rule.activity_type_id)
       );
       const actName = actType?.name || "Regra de Cobertura";
+      const isLunchSurveillance =
+        actName.toLowerCase().includes("vigilância almoço") ||
+        actName.toLowerCase().includes("vigilancia almoco");
+      const actColor =
+        isLunchSurveillance && (actType?.color === "#EF4444" || !actType?.color)
+          ? "#A855F7"
+          : actType?.color || null;
       return {
         id: String(rule.id),
         title: actName,
@@ -548,8 +556,16 @@ const [publishModalState, setPublishModalState] = useState<{
           .map((a) => `${a.priority}º ${a.name.split(" ")[0]}`),
         isFallback: false,
         activityTypeId: rule.activity_type_id ? String(rule.activity_type_id) : (actType?.id ? String(actType.id) : null),
+        color: actColor,
       };
     });
+
+    rules.sort(
+      (a, b) =>
+        a.startSlot - b.startSlot ||
+        a.endSlot - b.endSlot ||
+        a.title.localeCompare(b.title, "pt")
+    );
 
     // Adiciona exatamente UMA atividade de Fallback (ex: Apoio Escola) para estar disponível na lista de regras para pintar
     const fallbackActivities = activityTypes.filter(
@@ -581,6 +597,7 @@ const [publishModalState, setPublishModalState] = useState<{
       priorityNames: ["Todos os Assistentes"],
       isFallback: true,
       activityTypeId: primaryFallback ? String(primaryFallback.id) : null,
+      color: primaryFallback?.color || null,
     });
 
     return rules;
@@ -3411,8 +3428,13 @@ function paintSlot(aid: EntityId, slot: number) {
                               <div className="flex items-center gap-1.5 min-w-0 flex-1">
                                 <span
                                   className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                                    BLOCK_STYLES[rule.state].bg
+                                    rule.color ? "" : BLOCK_STYLES[rule.state].bg
                                   }`}
+                                  style={
+                                    rule.color
+                                      ? { backgroundColor: rule.color }
+                                      : undefined
+                                  }
                                 />
                                 <span className="text-xs font-semibold text-foreground truncate">
                                   {rule.title}
@@ -3582,8 +3604,15 @@ function paintSlot(aid: EntityId, slot: number) {
                       <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-xs font-semibold text-primary shadow-2xs">
                         <span
                           className={`w-2.5 h-2.5 rounded-full ${
-                            BLOCK_STYLES[selectedRuleEval.state]?.bg || "bg-primary"
+                            selectedRuleEval.color
+                              ? ""
+                              : BLOCK_STYLES[selectedRuleEval.state]?.bg || "bg-primary"
                           }`}
+                          style={
+                            selectedRuleEval.color
+                              ? { backgroundColor: selectedRuleEval.color }
+                              : undefined
+                          }
                         />
                         <span className="truncate max-w-[200px] sm:max-w-[280px]">
                           Pintar: {selectedRuleEval.title}

@@ -21,11 +21,41 @@ function PopoverContent({
   className,
   align = "center",
   sideOffset = 4,
+  ref,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+  const [contentEl, setContentEl] = React.useState<HTMLDivElement | null>(null);
+
+  // Quando um Popover abre dentro de um Radix Dialog, o react-remove-scroll
+  // bloqueia eventos `wheel`/`touchmove` no `document` para portais fora do modal.
+  // Parar a propagação nativa aqui permite fazer scroll com a roda do rato.
+  React.useEffect(() => {
+    if (!contentEl) return;
+    const stop = (e: Event) => e.stopPropagation();
+    contentEl.addEventListener("wheel", stop, { passive: true });
+    contentEl.addEventListener("touchmove", stop, { passive: true });
+    return () => {
+      contentEl.removeEventListener("wheel", stop);
+      contentEl.removeEventListener("touchmove", stop);
+    };
+  }, [contentEl]);
+
+  const mergedRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      setContentEl(node);
+      if (typeof ref === "function") {
+        ref(node);
+      } else if (ref) {
+        (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+      }
+    },
+    [ref],
+  );
+
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
+        ref={mergedRef}
         data-slot="popover-content"
         align={align}
         sideOffset={sideOffset}
