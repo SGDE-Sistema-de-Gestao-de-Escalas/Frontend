@@ -273,7 +273,7 @@ export default function StaffAbsenceDetail() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* Coluna 1: Informações Gerais da Ausência */}
-          <div className="lg:col-span-2 space-y-4">
+          <div className="lg:col-span-2 space-y-4 min-w-0">
             <Card className="p-4 sm:p-5 shadow-xs">
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div>
@@ -353,7 +353,7 @@ export default function StaffAbsenceDetail() {
 
             {/* Coluna 1.B: Gestão de Justificação e Ficheiro */}
             {isPending ? (
-              <Card className="p-4 sm:p-5 space-y-4 shadow-xs">
+              <Card className="p-4 sm:p-5 space-y-4 shadow-xs min-w-0 overflow-hidden">
                 <div>
                   <h3 className="text-sm font-semibold text-foreground">
                     Submeter ou Substituir Comprovativo
@@ -381,15 +381,18 @@ export default function StaffAbsenceDetail() {
 
                 {/* Ficheiro: se já tem ficheiro e não clicou em substituir */}
                 {hasExistingDoc && !isReplacingFile ? (
-                  <div className="p-3 rounded-lg border border-border bg-muted/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 truncate">
+                  <div className="p-3 rounded-lg border border-border bg-muted/20 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 min-w-0 overflow-hidden">
+                    <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                       <Paperclip size={14} className="text-primary flex-shrink-0" />
-                      <span className="text-xs font-mono text-foreground truncate max-w-xs">
+                      <span
+                        className="text-xs font-mono text-foreground truncate min-w-0 flex-1"
+                        title={docFilename || undefined}
+                      >
                         {docFilename}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
                       <Button
                         type="button"
                         variant="outline"
@@ -436,7 +439,7 @@ export default function StaffAbsenceDetail() {
                     </div>
 
                     {detailFile ? (
-                      <div className="flex items-center gap-2.5 p-2.5 rounded-lg border border-border bg-card">
+                      <div className="flex items-center gap-2.5 p-2.5 rounded-lg border border-border bg-card min-w-0 overflow-hidden">
                         {detailFile.type.startsWith("image/") ? (
                           <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden border border-border/60">
                             <img
@@ -450,18 +453,21 @@ export default function StaffAbsenceDetail() {
                             <FileText size={18} />
                           </div>
                         )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-foreground truncate">
+                        <div className="flex-1 min-w-0 overflow-hidden">
+                          <p
+                            className="text-xs font-medium text-foreground truncate"
+                            title={detailFile.name}
+                          >
                             {detailFile.name}
                           </p>
-                          <p className="text-[11px] text-muted-foreground">
+                          <p className="text-[11px] text-muted-foreground truncate">
                             {Math.round(detailFile.size / 1024)} KB · Pronto para submeter
                           </p>
                         </div>
                         <button
                           type="button"
                           onClick={() => setDetailFile(null)}
-                          className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-destructive transition-colors cursor-pointer shrink-0"
                           title="Remover ficheiro"
                         >
                           <X size={14} />
@@ -578,17 +584,17 @@ export default function StaffAbsenceDetail() {
           </div>
 
           {/* Coluna 2: Anexo e Ajuda */}
-          <div className="space-y-4">
-            <Card className="p-4 shadow-xs">
+          <div className="space-y-4 min-w-0">
+            <Card className="p-4 shadow-xs min-w-0 overflow-hidden">
               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                 Comprovativo Atual
               </h4>
               {hasExistingDoc ? (
-                <div className="space-y-2.5">
-                  <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/40 border border-border/60">
+                <div className="space-y-2.5 min-w-0">
+                  <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/40 border border-border/60 min-w-0 overflow-hidden">
                     <Paperclip size={14} className="text-primary flex-shrink-0" />
                     <span
-                      className="text-xs font-mono text-foreground truncate flex-1"
+                      className="text-xs font-mono text-foreground truncate flex-1 min-w-0"
                       title={docFilename || undefined}
                     >
                       {docFilename}

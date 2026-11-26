@@ -1020,10 +1020,13 @@ export default function AbsenceManagement() {
 
                 {/* Documento Comprovativo */}
                 {selectedAbsence.document_path ? (
-                  <div className="p-3 rounded-lg border border-border bg-muted/10 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 min-w-0">
+                  <div className="p-3 rounded-lg border border-border bg-muted/10 flex items-center justify-between gap-3 min-w-0 overflow-hidden">
+                    <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                       <Paperclip size={14} className="text-primary flex-shrink-0" />
-                      <span className="text-xs font-mono text-foreground truncate" title={selectedAbsence.document_name || selectedAbsence.document_path}>
+                      <span
+                        className="text-xs font-mono text-foreground truncate min-w-0 flex-1"
+                        title={selectedAbsence.document_name || selectedAbsence.document_path}
+                      >
                         {selectedAbsence.document_name || selectedAbsence.document_path.split("/").pop()}
                       </span>
                     </div>
@@ -1342,10 +1345,10 @@ export default function AbsenceManagement() {
               <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
                 Documento de Justificação (Opcional)
               </label>
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-input-background text-xs text-muted-foreground hover:text-foreground cursor-pointer transition-colors flex-1 truncate">
-                  <Paperclip size={13} />
-                  <span className="truncate">
+              <div className="flex items-center gap-2 min-w-0">
+                <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-input-background text-xs text-muted-foreground hover:text-foreground cursor-pointer transition-colors flex-1 min-w-0 overflow-hidden">
+                  <Paperclip size={13} className="shrink-0" />
+                  <span className="truncate min-w-0 flex-1" title={formDocumentName || undefined}>
                     {formDocumentName || "Anexar ficheiro..."}
                   </span>
                   <input
@@ -1391,7 +1394,7 @@ export default function AbsenceManagement() {
                       setFormDocumentName("");
                       setFormRemoveDocument(true);
                     }}
-                    className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-destructive transition-colors"
+                    className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-destructive transition-colors shrink-0"
                     title="Remover anexo"
                   >
                     <X size={13} />
