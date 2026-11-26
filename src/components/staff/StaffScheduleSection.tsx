@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   ArrowRightLeft,
@@ -34,6 +35,7 @@ import DateRangePicker, { type DateRange } from "../common/DateRangePicker";
 import { useAuth } from "../../context/AuthContext";
 import { useSchedulesList } from "../../hooks/api/useSchedules";
 import { useAbsencesList } from "../../hooks/api/useAbsences";
+import type { BackendAbsenceResource } from "../../api/services/absences.service";
 import {
   useOperatingCalendar,
   useOperatingExceptions,
@@ -93,6 +95,67 @@ export function getBlockDisplayColor(block: {
     default:
       return "transparent";
   }
+}
+
+/**
+ * Encontra a ausência registada para o assistente numa determinada data (ISO YYYY-MM-DD).
+ * Quando targetAssistantId não é fornecido (vista do próprio assistente), a API já devolve
+ * apenas as ausências do utilizador autenticado.
+ */
+function findAbsenceOnDate(
+  absences: BackendAbsenceResource[] | undefined,
+  isoDate: string,
+  targetAssistantId?: EntityId
+): {
+  absence: BackendAbsenceResource;
+  reason: string;
+  isFullDay: boolean;
+  statusLabel: string;
+  statusVariant: "pending" | "justified" | "unjustified";
+} | null {
+  if (!absences || absences.length === 0) return null;
+
+  const matching = absences.find((abs) => {
+    if (
+      targetAssistantId !== undefined &&
+      targetAssistantId !== "staff" &&
+      String(abs.assistant_id) !== String(targetAssistantId)
+    ) {
+      return false;
+    }
+    const from = (abs.valid_from || abs.start_date || "").slice(0, 10);
+    const until = (abs.valid_until || abs.end_date || from).slice(0, 10);
+    return Boolean(from) && from <= isoDate && isoDate <= until;
+  });
+
+  if (!matching) return null;
+
+  const reason =
+    matching.absence_type?.name ||
+    matching.absence_type_name ||
+    "Ausência Registada";
+
+  const hasTimeBounds = Boolean(matching.start_time || matching.end_time);
+  const isFullDay = !hasTimeBounds;
+
+  const st = String(matching.status || "pending").toLowerCase();
+  let statusVariant: "pending" | "justified" | "unjustified" = "pending";
+  let statusLabel = "Pendente de Justificação";
+  if (st === "justified" || st === "justificada") {
+    statusVariant = "justified";
+    statusLabel = "Justificada";
+  } else if (st === "unjustified" || st === "injustificada") {
+    statusVariant = "unjustified";
+    statusLabel = "Injustificada";
+  }
+
+  return {
+    absence: matching,
+    reason,
+    isFullDay,
+    statusLabel,
+    statusVariant,
+  };
 }
 
 /**
@@ -285,14 +348,28 @@ export function StaffDayView({
   targetAssistantName?: string;
   targetSchoolId?: EntityId;
 }) {
+  const navigate = useNavigate();
   const info = getDateInfo(dayOffset);
-  const { slots, blocks, shiftBounds, dayStatus, schedules, isLoading } =
+  const { slots, blocks, shiftBounds, dayStatus, schedules, absencesRes, isLoading } =
     useStaffScheduleData(dayOffset, targetAssistantId, targetAssistantName, targetSchoolId);
 
   const activeBlocks = blocks.filter((b) => b.state !== "off");
 
   // 1. Verificar se a escola está encerrada (Fim de semana, feriado, férias, tolerância)
   const isSchoolClosed = !dayStatus.isOpen;
+
+  // 1.5. Verificar se existe ausência registada para este dia
+  const dayAbsence = findAbsenceOnDate(
+    absencesRes?.data,
+    info.isoDate,
+    targetAssistantId
+  );
+  const hasActiveWorkBlocks = activeBlocks.some(
+    (b) => b.state !== "absent" && b.state !== "lunch"
+  );
+  const isFullDayAbsence = Boolean(
+    dayAbsence && (dayAbsence.isFullDay || !hasActiveWorkBlocks)
+  );
 
   // 2. Verificar se o horário já foi gerado e publicado para esta data
   const publishInfo = getSchedulePublishStatusForDate(info.isoDate, schedules);
@@ -374,6 +451,66 @@ export function StaffDayView({
           <p className="text-sm text-muted-foreground mt-3 leading-relaxed">
             {detail}
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  // CASO A2: O assistente tem uma ausência/falta de dia inteiro registada para esta data
+  if (!isSchoolClosed && isFullDayAbsence && dayAbsence) {
+    const badgeClasses =
+      dayAbsence.statusVariant === "justified"
+        ? "border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10"
+        : dayAbsence.statusVariant === "unjustified"
+        ? "border-destructive/30 text-destructive bg-destructive/10"
+        : "border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/10";
+
+    const periodNote =
+      !dayAbsence.isFullDay &&
+      (dayAbsence.absence.start_time || dayAbsence.absence.end_time)
+        ? ` (${dayAbsence.absence.start_time?.slice(0, 5) || ""}–${
+            dayAbsence.absence.end_time?.slice(0, 5) || ""
+          })`
+        : "";
+
+    return (
+      <div className="pt-2 pb-12">
+        <div className="bg-card border border-destructive/25 rounded-2xl p-6 sm:p-8 text-center max-w-lg mx-auto shadow-xs my-6 flex flex-col items-center">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-3 bg-destructive/10 text-destructive border border-destructive/20">
+            <CalendarOff size={22} className="text-destructive" />
+          </div>
+          <Badge
+            variant="outline"
+            className={`mb-2 text-[11px] py-0.5 px-2.5 font-semibold ${badgeClasses}`}
+          >
+            Ausência · {dayAbsence.statusLabel}
+          </Badge>
+          <h3 className="text-lg font-semibold text-foreground">
+            {dayAbsence.reason}
+          </h3>
+          <p className="text-xs font-mono text-muted-foreground mt-0.5">
+            {info.dayName}, {info.dateStr}
+            {periodNote}
+          </p>
+          <p className="text-sm text-muted-foreground mt-3 leading-relaxed max-w-md">
+            Tem uma ausência registada para este dia, pelo que não tem tarefas
+            agendadas na escala.
+            {dayAbsence.statusVariant === "pending" &&
+              !dayAbsence.absence.has_document &&
+              " Pode consultar os detalhes ou submeter o documento comprovativo na secção de Ausências."}
+          </p>
+          {!targetAssistantId && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-4 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10"
+              onClick={() => navigate("/staff/absences")}
+            >
+              <span>Ver em Ausências</span>
+              <ArrowRight size={14} />
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -823,7 +960,13 @@ export function StaffWeekView({
           (s) => s !== "off" && s !== "lunch" && s !== "absent"
         ).length;
         const hasWork = activeSlots > 0;
-        const hasAbsent = slots.some((s) => s === "absent");
+        const weekDayAbsence = !isClosed
+          ? findAbsenceOnDate(absencesRes?.data, info.isoDate, targetAssistantId)
+          : null;
+        const hasAbsent = slots.some((s) => s === "absent") || Boolean(weekDayAbsence);
+        const isFullDayAbsent = Boolean(
+          weekDayAbsence && (weekDayAbsence.isFullDay || !hasWork)
+        );
 
         const entryBlock = activeBlocks.find((b) => b.state !== "absent");
         const lastBlock = [...activeBlocks]
@@ -951,6 +1094,10 @@ export function StaffWeekView({
                   <span className="text-[11px] font-medium text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md flex items-center gap-1">
                     <Loader2 size={11} className="animate-spin text-primary" />
                     <span>A verificar...</span>
+                  </span>
+                ) : isFullDayAbsent && weekDayAbsence ? (
+                  <span className="text-[11px] font-medium text-destructive bg-destructive/10 px-2 py-0.5 rounded-md border border-destructive/20">
+                    {weekDayAbsence.reason}
                   </span>
                 ) : !pubInfo.hasSchedule ? (
                   <span className="text-[11px] font-medium text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md border border-border">
@@ -1232,7 +1379,11 @@ export function StaffMonthView({
       ).length;
 
       const hasWork = !isClosed && activeSlots > 0;
-      const hasAbsent = !isClosed && slots.some((s) => s === "absent");
+      const monthDayAbsence = !isClosed
+        ? findAbsenceOnDate(absencesRes?.data, info.isoDate, targetAssistantId)
+        : null;
+      const hasAbsent =
+        !isClosed && (slots.some((s) => s === "absent") || Boolean(monthDayAbsence));
 
       // Transferência temporária
       const daySchedule = schedules.find((sc) => {
@@ -1261,6 +1412,7 @@ export function StaffMonthView({
         blocks: activeBlocks,
         hasWork,
         hasAbsent,
+        dayAbsence: monthDayAbsence,
         isTransfer,
         schoolName: daySchedule?.school_name,
         entryTime: entryBlock ? TIME_SLOTS[entryBlock.start] : null,
@@ -1365,6 +1517,14 @@ export function StaffMonthView({
           />
           <p className="text-xs font-medium text-foreground">
             {dayItem.dayStatus?.title || "Estabelecimento encerrado."}
+          </p>
+        </div>
+      ) : dayItem.hasAbsent && !dayItem.hasWork ? (
+        <div className="flex items-center gap-2 py-1">
+          <span className="inline-block w-2 h-2 rounded-full flex-shrink-0 bg-destructive" />
+          <p className="text-xs text-destructive font-medium">
+            Ausência registada: {dayItem.dayAbsence?.reason || "Falta / Ausência"}
+            {dayItem.dayAbsence?.statusLabel ? ` (${dayItem.dayAbsence.statusLabel})` : ""}.
           </p>
         </div>
       ) : !dayItem.pubInfo.isPublished ? (
