@@ -131,6 +131,10 @@ export function getBackendErrorMessage(
   if (!error) return fallback ?? null;
   if (typeof error === "string") return error;
 
+  if (error.isAxiosError && (!error.response || error.response.status >= 500)) {
+    return "Erro interno de servidor.";
+  }
+
   // Resposta estruturada do Laravel:
   if (error.response?.data?.message && typeof error.response.data.message === "string") {
     return error.response.data.message;
@@ -229,6 +233,9 @@ export const notify = {
     title?: string,
     options?: { duration?: number; description?: React.ReactNode }
   ) => {
+    if (errOrMessage && typeof errOrMessage === "object" && (errOrMessage as any).__alreadyNotified) {
+      return null;
+    }
     const message =
       typeof errOrMessage === "string"
         ? errOrMessage

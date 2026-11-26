@@ -65,11 +65,9 @@ apiClient.interceptors.response.use(
       // Notificamos apenas quando o utilizador tenta ativamente uma mutação (POST, PUT, PATCH, DELETE) ou login
       if (!isSilent && method && method !== "get") {
         notify.error(
-          "Não foi possível contactar o servidor em " +
-            API_BASE_URL +
-            ". Verifique se o backend está ativo.",
+          "Erro interno de servidor.",
           undefined,
-          "Erro de Ligação"
+          "Erro no Servidor"
         );
       }
       (error as any).__alreadyNotified = true;
@@ -78,6 +76,18 @@ apiClient.interceptors.response.use(
 
     const { status, data } = error.response;
     const backendMessage = data?.message || (data as any)?.error;
+
+    // Erros 5xx (incluindo 500 do proxy quando o servidor está offline): nunca expor detalhes internos
+    if (status >= 500) {
+      if (error.response.data && typeof error.response.data === "object") {
+        (error.response.data as any).message = "Erro interno de servidor.";
+      }
+      if (!isSilent && method && method !== "get") {
+        notify.error("Erro interno de servidor.", undefined, "Erro no Servidor");
+      }
+      (error as any).__alreadyNotified = true;
+      return Promise.reject(error);
+    }
 
     // Se o backend responder que a escola selecionada é inválida/sem acesso, limpamos a cache
     if (status === 403 && typeof backendMessage === "string" && backendMessage.includes("Não tem acesso a esta escola")) {

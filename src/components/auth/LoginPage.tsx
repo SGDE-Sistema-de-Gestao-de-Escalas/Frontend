@@ -93,7 +93,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       );
       handleAuthSuccess(resolvedRole);
     } catch (err: any) {
-      if (err?.response?.data) {
+      const status = err?.response?.status;
+      if (!err?.response || status >= 500) {
+        setError("Erro interno de servidor.");
+      } else if (err?.response?.data) {
         const data = err.response.data;
         const apiErrorMessage =
           data?.errors?.email?.[0] ||
@@ -103,10 +106,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           "Email ou password incorretos.";
         setError(apiErrorMessage);
       } else {
-        const fallback =
-          err?.message ||
-          "Não foi possível contactar o servidor em http://localhost:8000/api.";
-        setError(fallback);
+        setError("Erro interno de servidor.");
       }
       setLoading(false);
     }
@@ -139,12 +139,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       setNewPasswordConfirmation("");
       setView("reset-done");
     } catch (err: any) {
+      const status = err?.response?.status;
       const errors = err?.response?.data?.errors;
-      if (errors?.password?.[0]) {
+      if (!err?.response || status >= 500) {
+        setResetError("Erro interno de servidor.");
+      } else if (errors?.password?.[0]) {
         setResetError(errors.password[0]);
       } else if (errors?.email?.[0] || errors?.token?.[0]) {
         setView("reset-invalid");
-      } else if (err?.response?.status === 429) {
+      } else if (status === 429) {
         setResetError("Demasiadas tentativas. Aguarde um minuto e tente novamente.");
       } else {
         setResetError(
@@ -172,12 +175,17 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       }
     } catch (err: any) {
       console.error(`[OAuth] Falha ao iniciar com ${provider}:`, err);
+      const status = err?.response?.status;
       const apiMsg =
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        `Não foi possível iniciar a autenticação com ${provider === "google" ? "Google" : "Microsoft"}.`;
+        !err?.response || status >= 500
+          ? "Erro interno de servidor."
+          : err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            `Não foi possível iniciar a autenticação com ${provider === "google" ? "Google" : "Microsoft"}.`;
       setError(apiMsg);
-      notify.error(apiMsg);
+      if (!(err as any)?.__alreadyNotified) {
+        notify.error(apiMsg);
+      }
       setSocialLoading(null);
     }
   }
