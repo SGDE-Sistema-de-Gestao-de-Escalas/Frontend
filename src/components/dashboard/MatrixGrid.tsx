@@ -1850,16 +1850,23 @@ function paintSlot(aid: EntityId, slot: number) {
           }
         }
 
-        const absTimeStr = `${TIME_SLOTS[absInfo.startSlot ?? 0]}–${
-          TIME_SLOTS[absInfo.endSlot ?? 96]
-        }`;
+        const absStartSlot = absInfo.startSlot ?? 0;
+        const absEndSlot = absInfo.endSlot ?? 96;
+        const isFullDayAbs =
+          Boolean(absInfo.isFullDay) || (absStartSlot <= 0 && absEndSlot >= 96);
+        const absTimeStr = isFullDayAbs
+          ? "dia inteiro"
+          : `${TIME_SLOTS[absStartSlot] ?? "00:00"}–${TIME_SLOTS[absEndSlot] ?? "24:00"}`;
+        const absPeriodPhrase = isFullDayAbs
+          ? "de dia inteiro"
+          : `das ${absTimeStr}`;
 
         if (conflictSlots > 0) {
           warnings.push({
             id: `absence-conflict-${a.id}`,
             severity: "warning",
             title: `Atividade atribuída durante falta prevista: ${a.name}`,
-            detail: `Tem ausência registada (${absInfo.reason}) das ${absTimeStr}, mas tem ${formatDurationSlots(
+            detail: `Tem ausência registada (${absInfo.reason}) ${absPeriodPhrase}, mas tem ${formatDurationSlots(
               conflictSlots
             )} com atividades atribuídas.`,
           });
@@ -1868,7 +1875,7 @@ function paintSlot(aid: EntityId, slot: number) {
             id: `absence-info-${a.id}`,
             severity: "info",
             title: `Ausência registada: ${a.name}`,
-            detail: `Tem ausência prevista das ${absTimeStr} (${absInfo.reason}).`,
+            detail: `Tem ausência prevista ${absPeriodPhrase} (${absInfo.reason}).`,
           });
         }
       }
@@ -2287,9 +2294,11 @@ function paintSlot(aid: EntityId, slot: number) {
                     shiftBounds.absenceEndSlot > shiftBounds.absenceStartSlot &&
                     clampedAbsenceEnd > clampedAbsenceStart;
                   const absenceRangeStr = hasAbsenceBounds
-                    ? `${TIME_SLOTS[shiftBounds.absenceStartSlot!]}-${
-                        TIME_SLOTS[shiftBounds.absenceEndSlot!]
-                      }`
+                    ? shiftBounds.absenceStartSlot! <= 0 && shiftBounds.absenceEndSlot! >= 96
+                      ? "Dia inteiro"
+                      : `${TIME_SLOTS[shiftBounds.absenceStartSlot!] ?? "00:00"}-${
+                          TIME_SLOTS[shiftBounds.absenceEndSlot!] ?? "24:00"
+                        }`
                     : "";
 
                   const partialTransfer = (() => {
